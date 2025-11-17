@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Radarr Indian Helper</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="bg-gray-800 text-white">
+    <div class="container mx-auto px-4 py-3">
+      <div class="flex justify-between items-center">
+        <h1 class="text-xl font-bold">Radarr Indian Helper</h1>
+        <div class="space-x-4">
+          <a href="/" class="hover:text-gray-300">Dashboard</a>
+          <a href="/settings" class="hover:text-gray-300">Settings</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 py-8">
+    <div class="mb-6 flex justify-between items-center">
+      <h2 class="text-2xl font-bold">Dashboard</h2>
+      <button onclick="refreshFeeds()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+        Refresh Feeds
+      </button>
+    </div>
+
+    <div class="mb-8">
+      <h3 class="text-xl font-semibold mb-4">New Movies (<%= newReleases.length %>)</h3>
+      <% if (newReleases.length === 0) { %>
+        <p class="text-gray-600">No new movies found.</p>
+      <% } else { %>
+        <div class="grid gap-4">
+          <% newReleases.forEach(release => { %>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="flex justify-between items-start">
+                <div class="flex-1">
+                  <h4 class="text-lg font-semibold"><%= release.title %></h4>
+                  <div class="mt-2 text-sm text-gray-600">
+                    <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
+                    <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                    <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                    <% if (release.rss_size_mb) { %>
+                      <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                    <% } %>
+                  </div>
+                  <% if (release.tmdb_title) { %>
+                    <p class="mt-2 text-sm">TMDB: <%= release.tmdb_title %> (<%= release.tmdb_id %>)</p>
+                  <% } %>
+                  <p class="mt-1 text-xs text-gray-500">Source: <%= release.source_site %> | Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
+                </div>
+                <div class="ml-4 space-x-2">
+                  <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm">
+                    Add to Radarr
+                  </button>
+                  <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                    Ignore
+                  </button>
+                </div>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+
+    <div>
+      <h3 class="text-xl font-semibold mb-4">Upgrade Candidates (<%= upgradeCandidates.length %>)</h3>
+      <% if (upgradeCandidates.length === 0) { %>
+        <p class="text-gray-600">No upgrade candidates found.</p>
+      <% } else { %>
+        <div class="grid gap-4">
+          <% upgradeCandidates.forEach(release => { %>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="flex justify-between items-start">
+                <div class="flex-1">
+                  <h4 class="text-lg font-semibold"><%= release.title %></h4>
+                  <div class="mt-2 text-sm text-gray-600">
+                    <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
+                    <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                    <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                    <% if (release.rss_size_mb) { %>
+                      <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                    <% } %>
+                  </div>
+                  <% if (release.radarr_movie_title) { %>
+                    <p class="mt-2 text-sm">Radarr: <%= release.radarr_movie_title %></p>
+                  <% } %>
+                  <div class="mt-2 text-sm">
+                    <% if (release.existing_size_mb) { %>
+                      <span class="text-gray-600">Existing: <%= release.existing_size_mb.toFixed(2) %> MB</span>
+                      <span class="mx-2">→</span>
+                    <% } %>
+                    <span class="text-green-600 font-semibold">New: <%= release.rss_size_mb ? release.rss_size_mb.toFixed(2) : 'N/A' %> MB</span>
+                  </div>
+                  <div class="mt-2 text-sm">
+                    <% if (release.radarr_existing_quality_score !== null && release.new_quality_score !== null) { %>
+                      <span class="text-gray-600">Score: <%= release.radarr_existing_quality_score.toFixed(2) %></span>
+                      <span class="mx-2">→</span>
+                      <span class="text-green-600 font-semibold"><%= release.new_quality_score.toFixed(2) %></span>
+                      <span class="text-blue-600 ml-2">(Δ<%= (release.new_quality_score - release.radarr_existing_quality_score).toFixed(2) %>)</span>
+                    <% } %>
+                  </div>
+                  <p class="mt-1 text-xs text-gray-500">Source: <%= release.source_site %> | Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
+                </div>
+                <div class="ml-4 space-x-2">
+                  <button onclick="upgradeMovie(<%= release.id %>)" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm">
+                    Upgrade
+                  </button>
+                  <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                    Ignore
+                  </button>
+                </div>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+    </div>
+  </main>
+
+  <script>
+    async function addMovie(id) {
+      if (!confirm('Add this movie to Radarr?')) return;
+      try {
+        const res = await fetch(`/actions/${id}/add`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert('Movie added to Radarr!');
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function upgradeMovie(id) {
+      if (!confirm('Trigger upgrade search in Radarr?')) return;
+      try {
+        const res = await fetch(`/actions/${id}/upgrade`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert('Upgrade search triggered!');
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function ignoreRelease(id) {
+      if (!confirm('Ignore this release?')) return;
+      try {
+        const res = await fetch(`/actions/${id}/ignore`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function refreshFeeds() {
+      if (!confirm('Refresh all RSS feeds? This may take a while.')) return;
+      try {
+        const res = await fetch('/settings/refresh', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert('Feed refresh started! The page will refresh in a few seconds.');
+          setTimeout(() => location.reload(), 5000);
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>
+

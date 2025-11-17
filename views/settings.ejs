@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Radarr Indian Helper</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="bg-gray-800 text-white">
+    <div class="container mx-auto px-4 py-3">
+      <div class="flex justify-between items-center">
+        <h1 class="text-xl font-bold">Radarr Indian Helper</h1>
+        <div class="space-x-4">
+          <a href="/" class="hover:text-gray-300">Dashboard</a>
+          <a href="/settings" class="hover:text-gray-300">Settings</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <main class="container mx-auto px-4 py-8">
+    <h2 class="text-2xl font-bold mb-6">Settings</h2>
+
+    <!-- RSS Feeds Section -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <h3 class="text-xl font-semibold mb-4">RSS Feeds</h3>
+      <div class="mb-4">
+        <button onclick="showAddFeedModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+          Add Feed
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enabled</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <% feeds.forEach(feed => { %>
+              <tr>
+                <td class="px-4 py-3 text-sm"><%= feed.name %></td>
+                <td class="px-4 py-3 text-sm text-gray-600"><%= feed.url %></td>
+                <td class="px-4 py-3 text-sm">
+                  <span class="<%= feed.enabled ? 'text-green-600' : 'text-red-600' %>">
+                    <%= feed.enabled ? 'Yes' : 'No' %>
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-sm space-x-2">
+                  <button onclick="editFeed(<%= feed.id %>)" class="text-blue-600 hover:text-blue-800">Edit</button>
+                  <button onclick="deleteFeed(<%= feed.id %>)" class="text-red-600 hover:text-red-800">Delete</button>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Quality Settings Section -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h3 class="text-xl font-semibold mb-4">Quality Settings</h3>
+      <form id="qualityForm" onsubmit="saveQualitySettings(event)">
+        <!-- Resolution Rules -->
+        <div class="mb-6">
+          <h4 class="text-lg font-medium mb-3">Resolution Rules</h4>
+          <div class="space-y-3">
+            <% qualitySettings.resolutions.forEach(rule => { %>
+              <div class="border rounded p-3">
+                <div class="flex items-center space-x-4">
+                  <label class="flex items-center">
+                    <input type="checkbox" name="resolution_<%= rule.resolution %>_allowed" 
+                           <%= rule.allowed ? 'checked' : '' %> 
+                           class="mr-2">
+                    <span class="font-medium"><%= rule.resolution %></span>
+                  </label>
+                  <div class="flex-1">
+                    <label class="text-sm text-gray-600">Preferred Codecs (comma-separated):</label>
+                    <input type="text" 
+                           name="resolution_<%= rule.resolution %>_preferred" 
+                           value="<%= rule.preferredCodecs ? rule.preferredCodecs.join(', ') : '' %>"
+                           class="w-full border rounded px-2 py-1 text-sm">
+                  </div>
+                  <div class="flex-1">
+                    <label class="text-sm text-gray-600">Discouraged Codecs (comma-separated):</label>
+                    <input type="text" 
+                           name="resolution_<%= rule.resolution %>_discouraged" 
+                           value="<%= rule.discouragedCodecs ? rule.discouragedCodecs.join(', ') : '' %>"
+                           class="w-full border rounded px-2 py-1 text-sm">
+                  </div>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        </div>
+
+        <!-- Weights -->
+        <div class="mb-6">
+          <h4 class="text-lg font-medium mb-3">Quality Weights</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Resolution Weights (JSON):</label>
+              <textarea name="resolutionWeights" rows="6" class="w-full border rounded px-2 py-1 font-mono text-sm"><%= JSON.stringify(qualitySettings.resolutionWeights, null, 2) %></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Source Tag Weights (JSON):</label>
+              <textarea name="sourceTagWeights" rows="6" class="w-full border rounded px-2 py-1 font-mono text-sm"><%= JSON.stringify(qualitySettings.sourceTagWeights, null, 2) %></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Codec Weights (JSON):</label>
+              <textarea name="codecWeights" rows="6" class="w-full border rounded px-2 py-1 font-mono text-sm"><%= JSON.stringify(qualitySettings.codecWeights, null, 2) %></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Audio Weights (JSON):</label>
+              <textarea name="audioWeights" rows="6" class="w-full border rounded px-2 py-1 font-mono text-sm"><%= JSON.stringify(qualitySettings.audioWeights, null, 2) %></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Language Settings -->
+        <div class="mb-6">
+          <h4 class="text-lg font-medium mb-3">Language Settings</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Preferred Audio Languages (comma-separated, e.g., hi,en):</label>
+              <input type="text" name="preferredAudioLanguages" 
+                     value="<%= qualitySettings.preferredAudioLanguages.join(',') %>"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Preferred Language Bonus:</label>
+              <input type="number" name="preferredLanguageBonus" 
+                     value="<%= qualitySettings.preferredLanguageBonus %>"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Dubbed Penalty:</label>
+              <input type="number" name="dubbedPenalty" 
+                     value="<%= qualitySettings.dubbedPenalty %>"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+          </div>
+        </div>
+
+        <!-- Upgrade Settings -->
+        <div class="mb-6">
+          <h4 class="text-lg font-medium mb-3">Upgrade Settings</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium mb-2">Minimum Size Increase % for Upgrade:</label>
+              <input type="number" name="minSizeIncreasePercentForUpgrade" 
+                     value="<%= qualitySettings.minSizeIncreasePercentForUpgrade %>"
+                     step="0.1"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Upgrade Threshold (score delta):</label>
+              <input type="number" name="upgradeThreshold" 
+                     value="<%= qualitySettings.upgradeThreshold %>"
+                     step="0.1"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+            <div>
+              <label class="flex items-center">
+                <input type="checkbox" name="sizeBonusEnabled" 
+                       <%= qualitySettings.sizeBonusEnabled ? 'checked' : '' %>
+                       class="mr-2">
+                <span>Enable Size Bonus</span>
+              </label>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-2">Poll Interval (minutes):</label>
+              <input type="number" name="pollIntervalMinutes" 
+                     value="<%= qualitySettings.pollIntervalMinutes %>"
+                     class="w-full border rounded px-2 py-1">
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded">
+          Save Quality Settings
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Add/Edit Feed Modal -->
+  <div id="feedModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full">
+      <h3 id="modalTitle" class="text-xl font-semibold mb-4">Add RSS Feed</h3>
+      <form id="feedForm" onsubmit="saveFeed(event)">
+        <input type="hidden" id="feedId" name="id">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Name:</label>
+          <input type="text" id="feedName" name="name" required class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">URL:</label>
+          <input type="url" id="feedUrl" name="url" required class="w-full border rounded px-2 py-1">
+        </div>
+        <div class="mb-4">
+          <label class="flex items-center">
+            <input type="checkbox" id="feedEnabled" name="enabled" checked class="mr-2">
+            <span>Enabled</span>
+          </label>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideFeedModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+            Cancel
+          </button>
+          <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let editingFeedId = null;
+
+    function showAddFeedModal() {
+      editingFeedId = null;
+      document.getElementById('modalTitle').textContent = 'Add RSS Feed';
+      document.getElementById('feedForm').reset();
+      document.getElementById('feedId').value = '';
+      document.getElementById('feedEnabled').checked = true;
+      document.getElementById('feedModal').classList.remove('hidden');
+    }
+
+    async function editFeed(id) {
+      try {
+        const res = await fetch(`/settings/feeds/${id}`);
+        const data = await res.json();
+        if (data.success && data.feed) {
+          editingFeedId = id;
+          document.getElementById('modalTitle').textContent = 'Edit RSS Feed';
+          document.getElementById('feedId').value = data.feed.id;
+          document.getElementById('feedName').value = data.feed.name;
+          document.getElementById('feedUrl').value = data.feed.url;
+          document.getElementById('feedEnabled').checked = data.feed.enabled;
+          document.getElementById('feedModal').classList.remove('hidden');
+        } else {
+          alert('Error loading feed');
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function saveFeedDirectly(feed) {
+      try {
+        const url = feed.id ? `/settings/feeds/${feed.id}` : '/settings/feeds';
+        const method = feed.id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(feed)
+        });
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function saveFeed(event) {
+      event.preventDefault();
+      const form = event.target;
+      const feed = {
+        name: form.name.value,
+        url: form.url.value,
+        enabled: form.enabled.checked
+      };
+      if (editingFeedId) {
+        feed.id = editingFeedId;
+      }
+      await saveFeedDirectly(feed);
+      hideFeedModal();
+    }
+
+    function hideFeedModal() {
+      document.getElementById('feedModal').classList.add('hidden');
+    }
+
+    async function deleteFeed(id) {
+      if (!confirm('Delete this feed?')) return;
+      try {
+        const res = await fetch(`/settings/feeds/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    async function saveQualitySettings(event) {
+      event.preventDefault();
+      const form = event.target;
+      
+      // Build resolution rules
+      const resolutions = ['2160p', '1080p', '720p', '480p', 'UNKNOWN'].map(res => ({
+        resolution: res,
+        allowed: form[`resolution_${res}_allowed`]?.checked || false,
+        preferredCodecs: form[`resolution_${res}_preferred`]?.value.split(',').map(s => s.trim()).filter(s => s) || [],
+        discouragedCodecs: form[`resolution_${res}_discouraged`]?.value.split(',').map(s => s.trim()).filter(s => s) || []
+      }));
+
+      const settings = {
+        resolutions,
+        resolutionWeights: JSON.parse(form.resolutionWeights.value),
+        sourceTagWeights: JSON.parse(form.sourceTagWeights.value),
+        codecWeights: JSON.parse(form.codecWeights.value),
+        audioWeights: JSON.parse(form.audioWeights.value),
+        preferredAudioLanguages: form.preferredAudioLanguages.value.split(',').map(s => s.trim()).filter(s => s),
+        preferredLanguageBonus: parseFloat(form.preferredLanguageBonus.value),
+        dubbedPenalty: parseFloat(form.dubbedPenalty.value),
+        sizeBonusEnabled: form.sizeBonusEnabled?.checked || false,
+        minSizeIncreasePercentForUpgrade: parseFloat(form.minSizeIncreasePercentForUpgrade.value),
+        upgradeThreshold: parseFloat(form.upgradeThreshold.value),
+        pollIntervalMinutes: parseInt(form.pollIntervalMinutes.value, 10)
+      };
+
+      try {
+        const res = await fetch('/settings/quality', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings)
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Quality settings saved!');
+          location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>
+
