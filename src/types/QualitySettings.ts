@@ -1,5 +1,8 @@
 import { Resolution, Codec } from './Release';
 
+// Re-export for convenience
+export type { Resolution, Codec };
+
 export interface ResolutionRule {
   resolution: Resolution;
   allowed: boolean;

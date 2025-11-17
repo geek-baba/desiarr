@@ -31,7 +31,10 @@ export async function fetchAndProcessFeeds(): Promise<void> {
 
       for (const item of feedData.items) {
         try {
-          const parsed = parseRSSItem(item, feed.id!, feed.name);
+          if (!item.title && !item.link) {
+            continue; // Skip items without title or link
+          }
+          const parsed = parseRSSItem(item as any, feed.id!, feed.name);
 
           // Check if release is allowed
           const allowed = isReleaseAllowed(parsed.parsed, settings);
@@ -88,7 +91,7 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           // Determine if dubbed
           const originalLang = lookupResult.originalLanguage?.name || radarrMovie.originalLanguage?.name;
           const audioLangs = parsed.audio_languages ? JSON.parse(parsed.audio_languages) : [];
-          const isDubbed = originalLang && audioLangs.length > 0 && !audioLangs.includes(originalLang.toLowerCase().substring(0, 2));
+          const isDubbed: boolean = Boolean(originalLang && audioLangs.length > 0 && !audioLangs.includes(originalLang.toLowerCase().substring(0, 2)));
 
           // Check preferred language
           const preferredLanguage = audioLangs.some((lang: string) => 

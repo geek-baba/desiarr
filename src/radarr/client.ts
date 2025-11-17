@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '../config';
-import { RadarrMovie, RadarrLookupResult } from './types';
+import { RadarrMovie, RadarrLookupResult, RadarrMovieFile } from './types';
 
 class RadarrClient {
   private client: AxiosInstance;

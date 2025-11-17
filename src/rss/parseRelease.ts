@@ -11,16 +11,17 @@ export interface RSSItem {
 }
 
 export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) {
-  const parsed = parseReleaseFromTitle(item.title);
-  const normalized = normalizeTitle(item.title);
+  const title = item.title || item.link || 'Unknown';
+  const parsed = parseReleaseFromTitle(title);
+  const normalized = normalizeTitle(title);
 
   // Try to extract year from title
-  const yearMatch = item.title.match(/\b(19|20)\d{2}\b/);
+  const yearMatch = title.match(/\b(19|20)\d{2}\b/);
   const year = yearMatch ? parseInt(yearMatch[0], 10) : undefined;
 
   return {
     guid: item.guid || item.link,
-    title: item.title,
+    title: title,
     normalized_title: normalized,
     year,
     source_site: sourceSite,
