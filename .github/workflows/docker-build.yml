@@ -20,12 +20,6 @@ jobs:
       contents: read
       packages: write
 
-    strategy:
-      matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -51,11 +45,11 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -72,4 +66,3 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             /user/packages/container/${{ env.IMAGE_NAME }}/visibility \
             -f visibility=public
-
