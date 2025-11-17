@@ -60,6 +60,7 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           gh auth setup-git
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
           gh api \
             --method PUT \
             -H "Accept: application/vnd.github+json" \
