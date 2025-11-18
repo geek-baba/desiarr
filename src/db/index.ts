@@ -59,6 +59,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_releases_guid ON releases(guid);
   CREATE INDEX IF NOT EXISTS idx_releases_tmdb_id ON releases(tmdb_id);
   CREATE INDEX IF NOT EXISTS idx_releases_radarr_movie_id ON releases(radarr_movie_id);
+`);
+
+// Migrate existing databases - add new columns if they don't exist
+try {
+  const columns = db.prepare("PRAGMA table_info(releases)").all() as any[];
+  const columnNames = columns.map((c: any) => c.name);
+  
+  if (!columnNames.includes('existing_file_path')) {
+    db.exec('ALTER TABLE releases ADD COLUMN existing_file_path TEXT');
+  }
+  if (!columnNames.includes('existing_file_attributes')) {
+    db.exec('ALTER TABLE releases ADD COLUMN existing_file_attributes TEXT');
+  }
+  if (!columnNames.includes('radarr_history')) {
+    db.exec('ALTER TABLE releases ADD COLUMN radarr_history TEXT');
+  }
+} catch (error) {
+  console.error('Migration error:', error);
+}
 
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
