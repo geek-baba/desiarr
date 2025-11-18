@@ -1,16 +1,56 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
+import { feedsModel } from '../models/feeds';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const newReleases = releasesModel.getByStatus('NEW');
-    const upgradeCandidates = releasesModel.getByStatus('UPGRADE_CANDIDATE');
+    // Get all releases, grouped by feed
+    const allReleases = releasesModel.getAll();
+    const feeds = feedsModel.getAll();
+    
+    // Group releases by feed_id
+    const releasesByFeed: { [key: number]: any[] } = {};
+    for (const release of allReleases) {
+      if (!releasesByFeed[release.feed_id]) {
+        releasesByFeed[release.feed_id] = [];
+      }
+      releasesByFeed[release.feed_id].push(release);
+    }
+
+    // Get feed names for display
+    const feedMap: { [key: number]: string } = {};
+    for (const feed of feeds) {
+      if (feed.id) {
+        feedMap[feed.id] = feed.name;
+      }
+    }
+
+    // Categorize releases by status
+    const categorized: {
+      feedId: number;
+      feedName: string;
+      add: any[];
+      existing: any[];
+      upgrade: any[];
+    }[] = [];
+
+    for (const feedId in releasesByFeed) {
+      const feedIdNum = parseInt(feedId, 10);
+      const releases = releasesByFeed[feedIdNum];
+      
+      categorized.push({
+        feedId: feedIdNum,
+        feedName: feedMap[feedIdNum] || 'Unknown Feed',
+        add: releases.filter(r => r.status === 'NEW'),
+        existing: releases.filter(r => r.status === 'IGNORED' && r.radarr_movie_id),
+        upgrade: releases.filter(r => r.status === 'UPGRADE_CANDIDATE'),
+      });
+    }
 
     res.render('dashboard', {
-      newReleases,
-      upgradeCandidates,
+      feeds: categorized,
     });
   } catch (error) {
     console.error('Dashboard error:', error);

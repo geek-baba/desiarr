@@ -26,98 +26,172 @@
       </button>
     </div>
 
-    <div class="mb-8">
-      <h3 class="text-xl font-semibold mb-4">New Movies (<%= newReleases.length %>)</h3>
-      <% if (newReleases.length === 0) { %>
-        <p class="text-gray-600">No new movies found.</p>
-      <% } else { %>
-        <div class="grid gap-4">
-          <% newReleases.forEach(release => { %>
-            <div class="bg-white rounded-lg shadow p-6">
-              <div class="flex justify-between items-start">
-                <div class="flex-1">
-                  <h4 class="text-lg font-semibold"><%= release.title %></h4>
-                  <div class="mt-2 text-sm text-gray-600">
-                    <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
-                    <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
-                    <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
-                    <% if (release.rss_size_mb) { %>
-                      <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
-                    <% } %>
+    <% if (feeds.length === 0) { %>
+      <p class="text-gray-600">No feeds configured. Go to Settings to add RSS feeds.</p>
+    <% } else { %>
+      <% feeds.forEach(feed => { %>
+        <div class="mb-8 bg-white rounded-lg shadow p-6">
+          <h3 class="text-xl font-semibold mb-4"><%= feed.feedName %></h3>
+          
+          <!-- Add Section -->
+          <% if (feed.add.length > 0) { %>
+            <div class="mb-6">
+              <h4 class="text-lg font-medium mb-3 text-green-600">Add (<%= feed.add.length %>)</h4>
+              <div class="grid gap-4">
+                <% feed.add.forEach(release => { %>
+                  <div class="border-l-4 border-green-500 bg-green-50 rounded p-4">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <h5 class="text-lg font-semibold"><%= release.title %></h5>
+                        <div class="mt-2 text-sm text-gray-600">
+                          <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
+                          <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                          <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                          <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2"><%= release.audio %></span>
+                          <% if (release.rss_size_mb) { %>
+                            <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                          <% } %>
+                        </div>
+                        <% if (release.tmdb_title) { %>
+                          <p class="mt-2 text-sm">TMDB: <%= release.tmdb_title %> (<%= release.tmdb_id %>)</p>
+                        <% } %>
+                        <p class="mt-1 text-xs text-gray-500">Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
+                      </div>
+                      <div class="ml-4 space-x-2">
+                        <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm">
+                          Add to Radarr
+                        </button>
+                        <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                          Ignore
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <% if (release.tmdb_title) { %>
-                    <p class="mt-2 text-sm">TMDB: <%= release.tmdb_title %> (<%= release.tmdb_id %>)</p>
-                  <% } %>
-                  <p class="mt-1 text-xs text-gray-500">Source: <%= release.source_site %> | Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
-                </div>
-                <div class="ml-4 space-x-2">
-                  <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm">
-                    Add to Radarr
-                  </button>
-                  <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
-                    Ignore
-                  </button>
-                </div>
+                <% }); %>
               </div>
             </div>
-          <% }); %>
-        </div>
-      <% } %>
-    </div>
+          <% } %>
 
-    <div>
-      <h3 class="text-xl font-semibold mb-4">Upgrade Candidates (<%= upgradeCandidates.length %>)</h3>
-      <% if (upgradeCandidates.length === 0) { %>
-        <p class="text-gray-600">No upgrade candidates found.</p>
-      <% } else { %>
-        <div class="grid gap-4">
-          <% upgradeCandidates.forEach(release => { %>
-            <div class="bg-white rounded-lg shadow p-6">
-              <div class="flex justify-between items-start">
-                <div class="flex-1">
-                  <h4 class="text-lg font-semibold"><%= release.title %></h4>
-                  <div class="mt-2 text-sm text-gray-600">
-                    <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
-                    <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
-                    <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
-                    <% if (release.rss_size_mb) { %>
-                      <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
-                    <% } %>
+          <!-- Existing Section -->
+          <% if (feed.existing.length > 0) { %>
+            <div class="mb-6">
+              <h4 class="text-lg font-medium mb-3 text-blue-600">Existing (<%= feed.existing.length %>)</h4>
+              <div class="grid gap-4">
+                <% feed.existing.forEach(release => { %>
+                  <div class="border-l-4 border-blue-500 bg-blue-50 rounded p-4">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <h5 class="text-lg font-semibold"><%= release.title %></h5>
+                        <div class="mt-2 text-sm">
+                          <div class="mb-2">
+                            <span class="font-medium text-gray-700">RSS Release:</span>
+                            <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 ml-2"><%= release.resolution %></span>
+                            <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                            <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                            <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2"><%= release.audio %></span>
+                            <% if (release.rss_size_mb) { %>
+                              <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                            <% } %>
+                          </div>
+                          <% if (release.audio_languages) { %>
+                            <div class="mb-2">
+                              <span class="font-medium text-gray-700">Languages:</span>
+                              <span class="ml-2 text-gray-600"><%= JSON.parse(release.audio_languages).join(', ') %></span>
+                            </div>
+                          <% } %>
+                        </div>
+                        <% if (release.radarr_movie_title) { %>
+                          <p class="mt-2 text-sm">Radarr: <strong><%= release.radarr_movie_title %></strong></p>
+                        <% } %>
+                        <% if (release.existing_size_mb) { %>
+                          <p class="mt-1 text-sm text-gray-600">Existing Size: <%= release.existing_size_mb.toFixed(2) %> MB</p>
+                        <% } %>
+                        <p class="mt-1 text-xs text-gray-500">Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
+                      </div>
+                      <div class="ml-4 space-x-2">
+                        <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                          Ignore
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <% if (release.radarr_movie_title) { %>
-                    <p class="mt-2 text-sm">Radarr: <%= release.radarr_movie_title %></p>
-                  <% } %>
-                  <div class="mt-2 text-sm">
-                    <% if (release.existing_size_mb) { %>
-                      <span class="text-gray-600">Existing: <%= release.existing_size_mb.toFixed(2) %> MB</span>
-                      <span class="mx-2">→</span>
-                    <% } %>
-                    <span class="text-green-600 font-semibold">New: <%= release.rss_size_mb ? release.rss_size_mb.toFixed(2) : 'N/A' %> MB</span>
-                  </div>
-                  <div class="mt-2 text-sm">
-                    <% if (release.radarr_existing_quality_score !== null && release.new_quality_score !== null) { %>
-                      <span class="text-gray-600">Score: <%= release.radarr_existing_quality_score.toFixed(2) %></span>
-                      <span class="mx-2">→</span>
-                      <span class="text-green-600 font-semibold"><%= release.new_quality_score.toFixed(2) %></span>
-                      <span class="text-blue-600 ml-2">(Δ<%= (release.new_quality_score - release.radarr_existing_quality_score).toFixed(2) %>)</span>
-                    <% } %>
-                  </div>
-                  <p class="mt-1 text-xs text-gray-500">Source: <%= release.source_site %> | Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
-                </div>
-                <div class="ml-4 space-x-2">
-                  <button onclick="upgradeMovie(<%= release.id %>)" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm">
-                    Upgrade
-                  </button>
-                  <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
-                    Ignore
-                  </button>
-                </div>
+                <% }); %>
               </div>
             </div>
-          <% }); %>
+          <% } %>
+
+          <!-- Upgrade Section -->
+          <% if (feed.upgrade.length > 0) { %>
+            <div class="mb-6">
+              <h4 class="text-lg font-medium mb-3 text-orange-600">Upgrade (<%= feed.upgrade.length %>)</h4>
+              <div class="grid gap-4">
+                <% feed.upgrade.forEach(release => { %>
+                  <div class="border-l-4 border-orange-500 bg-orange-50 rounded p-4">
+                    <div class="flex justify-between items-start">
+                      <div class="flex-1">
+                        <h5 class="text-lg font-semibold"><%= release.title %></h5>
+                        <div class="mt-2 text-sm">
+                          <div class="mb-2">
+                            <span class="font-medium text-gray-700">RSS Release:</span>
+                            <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 ml-2"><%= release.resolution %></span>
+                            <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                            <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                            <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2"><%= release.audio %></span>
+                            <% if (release.rss_size_mb) { %>
+                              <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                            <% } %>
+                          </div>
+                          <% if (release.audio_languages) { %>
+                            <div class="mb-2">
+                              <span class="font-medium text-gray-700">Languages:</span>
+                              <span class="ml-2 text-gray-600"><%= JSON.parse(release.audio_languages).join(', ') %></span>
+                            </div>
+                          <% } %>
+                          <% if (release.existing_size_mb) { %>
+                            <div class="mb-2">
+                              <span class="font-medium text-gray-700">Size Comparison:</span>
+                              <span class="ml-2 text-gray-600">Existing: <%= release.existing_size_mb.toFixed(2) %> MB</span>
+                              <span class="mx-2">→</span>
+                              <span class="text-green-600 font-semibold">New: <%= release.rss_size_mb ? release.rss_size_mb.toFixed(2) : 'N/A' %> MB</span>
+                            </div>
+                          <% } %>
+                          <% if (release.radarr_existing_quality_score !== null && release.new_quality_score !== null) { %>
+                            <div class="mb-2">
+                              <span class="font-medium text-gray-700">Quality Score:</span>
+                              <span class="ml-2 text-gray-600">Existing: <%= release.radarr_existing_quality_score.toFixed(2) %></span>
+                              <span class="mx-2">→</span>
+                              <span class="text-green-600 font-semibold">New: <%= release.new_quality_score.toFixed(2) %></span>
+                              <span class="text-blue-600 ml-2">(Δ<%= (release.new_quality_score - release.radarr_existing_quality_score).toFixed(2) %>)</span>
+                            </div>
+                          <% } %>
+                        </div>
+                        <% if (release.radarr_movie_title) { %>
+                          <p class="mt-2 text-sm">Radarr: <strong><%= release.radarr_movie_title %></strong></p>
+                        <% } %>
+                        <p class="mt-1 text-xs text-gray-500">Published: <%= new Date(release.published_at).toLocaleDateString() %></p>
+                      </div>
+                      <div class="ml-4 space-x-2">
+                        <button onclick="upgradeMovie(<%= release.id %>)" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm">
+                          Upgrade
+                        </button>
+                        <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                          Ignore
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                <% }); %>
+              </div>
+            </div>
+          <% } %>
+
+          <!-- Summary -->
+          <% if (feed.add.length === 0 && feed.existing.length === 0 && feed.upgrade.length === 0) { %>
+            <p class="text-gray-600">No releases found for this feed.</p>
+          <% } %>
         </div>
-      <% } %>
-    </div>
+      <% }); %>
+    <% } %>
   </main>
 
   <script>
@@ -186,4 +260,3 @@
   </script>
 </body>
 </html>
-
