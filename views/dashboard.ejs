@@ -187,7 +187,7 @@
                             <div class="mt-3 p-3 bg-gray-50 rounded border">
                               <div class="font-medium text-gray-700 mb-2">Download History:</div>
                               <div class="text-xs space-y-1 max-h-32 overflow-y-auto">
-                                <% history.slice(0, 5).forEach((h: any) => { %>
+                                <% history.slice(0, 5).forEach(function(h) { %>
                                   <div class="text-gray-600">
                                     <%= new Date(h.date).toLocaleDateString() %> - 
                                     <%= h.sourceTitle || h.eventType %>
@@ -384,7 +384,7 @@
                             <div class="mt-3 p-3 bg-gray-50 rounded border">
                               <div class="font-medium text-gray-700 mb-2">Download History:</div>
                               <div class="text-xs space-y-1 max-h-32 overflow-y-auto">
-                                <% history.slice(0, 5).forEach((h: any) => { %>
+                                <% history.slice(0, 5).forEach(function(h) { %>
                                   <div class="text-gray-600">
                                     <%= new Date(h.date).toLocaleDateString() %> - 
                                     <%= h.sourceTitle || h.eventType %>
