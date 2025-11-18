@@ -100,6 +100,8 @@ router.get('/', async (req: Request, res: Response) => {
                             releases[0];
       
       const movieTitle = buildDisplayTitle(primaryRelease);
+
+      const hasRadarrMatch = releases.some(r => Boolean(r.radarr_movie_id));
       
       // Categorize releases by state
       const upgrade = releases.filter(r => (
@@ -107,9 +109,14 @@ router.get('/', async (req: Request, res: Response) => {
         (r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED')
       ));
       const upgradeGuids = new Set(upgrade.map(r => r.guid));
-      const add = releases.filter(r => !r.radarr_movie_id);
+
+      const add = hasRadarrMatch
+        ? []
+        : releases.filter(r => !r.radarr_movie_id);
+
       const existing = releases.filter(r => (
-        r.radarr_movie_id && !upgradeGuids.has(r.guid)
+        !upgradeGuids.has(r.guid) &&
+        (r.radarr_movie_id || hasRadarrMatch)
       ));
       
       movieGroups.push({
@@ -199,6 +206,8 @@ router.get('/', async (req: Request, res: Response) => {
       }
       
       // Add poster/metadata to all releases in this group
+      const hasRadarrMatch = movieGroup.existing.some(r => r.radarr_movie_id) || movieGroup.upgrade.some(r => r.radarr_movie_id);
+
       for (const release of [...movieGroup.add, ...movieGroup.existing, ...movieGroup.upgrade]) {
         if (movieGroup.posterUrl) {
           (release as any).posterUrl = movieGroup.posterUrl;
@@ -211,6 +220,9 @@ router.get('/', async (req: Request, res: Response) => {
         }
         if (movieGroup.originalLanguage) {
           (release as any).originalLanguage = movieGroup.originalLanguage;
+        }
+        if (!release.radarr_movie_id && hasRadarrMatch) {
+          (release as any).radarrInferred = true;
         }
       }
     }

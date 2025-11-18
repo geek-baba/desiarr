@@ -173,6 +173,9 @@
                                 <span class="ml-2 text-gray-500">(Below upgrade thresholds)</span>
                               <% } else if (release.status === 'ADDED') { %>
                                 <span class="ml-2 text-gray-500">(Already in Radarr)</span>
+                                  <% } %>
+                                  <% if (release.radarrInferred) { %>
+                                    <span class="ml-2 text-gray-500">(Radarr match inferred)</span>
                               <% } %>
                             </div>
                           </div>
