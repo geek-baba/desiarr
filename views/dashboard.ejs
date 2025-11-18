@@ -168,10 +168,15 @@
                                   <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded mr-2 ml-2"><%= existingAttrs.sizeMb.toFixed(2) %> MB</span>
                                 </div>
                               <% } %>
-                              <% if (existingAttrs.audioLanguages && existingAttrs.audioLanguages.length > 0) { %>
+                              <% if (existingAttrs.audioLanguages && Array.isArray(existingAttrs.audioLanguages) && existingAttrs.audioLanguages.length > 0) { %>
                                 <div>
                                   <span class="font-medium">Languages:</span>
                                   <span class="ml-2 text-gray-600"><%= existingAttrs.audioLanguages.join(', ') %></span>
+                                </div>
+                              <% } else if (existingAttrs.audioLanguages && typeof existingAttrs.audioLanguages === 'string') { %>
+                                <div>
+                                  <span class="font-medium">Languages:</span>
+                                  <span class="ml-2 text-gray-600"><%= existingAttrs.audioLanguages %></span>
                                 </div>
                               <% } %>
                             </div>
