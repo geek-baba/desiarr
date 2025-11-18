@@ -1,12 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
 import { feedsModel } from '../models/feeds';
-
-const router = Router();
-
-import { Router, Request, Response } from 'express';
-import { releasesModel } from '../models/releases';
-import { feedsModel } from '../models/feeds';
 import radarrClient from '../radarr/client';
 
 const router = Router();

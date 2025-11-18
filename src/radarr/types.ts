@@ -3,6 +3,7 @@ export interface RadarrMovie {
   title: string;
   year?: number;
   tmdbId: number;
+  imdbId?: string;
   path?: string;
   hasFile?: boolean;
   movieFile?: RadarrMovieFile;
@@ -10,6 +11,11 @@ export interface RadarrMovie {
     id: number;
     name: string;
   };
+  images?: Array<{
+    coverType: string;
+    url?: string;
+    remoteUrl?: string;
+  }>;
 }
 
 export interface RadarrMovieFile {
