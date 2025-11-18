@@ -44,36 +44,41 @@ const sizePattern = /(\d+(?:\.\d+)?)\s*(?:GB|MB|GiB|MiB)/gi;
 export function parseReleaseFromTitle(title: string): ParsedRelease {
   const normalized = title.toUpperCase();
 
-  // Parse resolution
+  // Parse resolution - test against original title (case-insensitive)
   let resolution: Resolution = 'UNKNOWN';
   for (const { pattern, value } of resolutionPatterns) {
+    // Reset regex lastIndex to avoid issues with global regex
+    pattern.lastIndex = 0;
     if (pattern.test(title)) {
       resolution = value;
       break;
     }
   }
 
-  // Parse codec
+  // Parse codec - test against original title
   let codec: Codec = 'UNKNOWN';
   for (const { pattern, value } of codecPatterns) {
+    pattern.lastIndex = 0;
     if (pattern.test(title)) {
       codec = value;
       break;
     }
   }
 
-  // Parse source tag
+  // Parse source tag - test against original title
   let sourceTag = 'OTHER';
   for (const { pattern, value } of sourcePatterns) {
+    pattern.lastIndex = 0;
     if (pattern.test(title)) {
       sourceTag = value;
       break;
     }
   }
 
-  // Parse audio
+  // Parse audio - test against original title
   let audio = 'Unknown';
   for (const { pattern, value } of audioPatterns) {
+    pattern.lastIndex = 0;
     if (pattern.test(title)) {
       audio = value;
       break;
