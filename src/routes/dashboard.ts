@@ -4,6 +4,13 @@ import { feedsModel } from '../models/feeds';
 
 const router = Router();
 
+import { Router, Request, Response } from 'express';
+import { releasesModel } from '../models/releases';
+import { feedsModel } from '../models/feeds';
+import radarrClient from '../radarr/client';
+
+const router = Router();
+
 router.get('/', async (req: Request, res: Response) => {
   try {
     // Get all releases, grouped by feed
@@ -49,10 +56,50 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Add feed names to releases for easier access in template
+    // Add feed names and enrich with movie metadata for easier access in template
     for (const feed of categorized) {
       for (const release of [...feed.add, ...feed.existing, ...feed.upgrade]) {
         (release as any).feedName = feed.feedName;
+        
+        // Get movie metadata if we have TMDB ID or Radarr movie ID
+        if (release.tmdb_id || release.radarr_movie_id) {
+          try {
+            let movie: any = null;
+            if (release.radarr_movie_id) {
+              movie = await radarrClient.getMovie(release.radarr_movie_id);
+            } else if (release.tmdb_id) {
+              movie = await radarrClient.getMovie(release.tmdb_id);
+            }
+            
+            if (movie) {
+              // Get poster URL (Radarr provides images array)
+              if (movie.images && movie.images.length > 0) {
+                const poster = movie.images.find((img: any) => img.coverType === 'poster');
+                if (poster) {
+                  (release as any).posterUrl = poster.remoteUrl || poster.url;
+                }
+              }
+              
+              // Get IMDB ID
+              if (movie.imdbId) {
+                (release as any).imdbId = movie.imdbId;
+              }
+              
+              // Get TMDB ID (already have it, but ensure it's set)
+              if (movie.tmdbId) {
+                (release as any).tmdbId = movie.tmdbId;
+              }
+              
+              // Get original language
+              if (movie.originalLanguage) {
+                (release as any).originalLanguage = movie.originalLanguage.name || movie.originalLanguage;
+              }
+            }
+          } catch (error) {
+            // Silently fail - just don't add metadata
+            console.error(`Error fetching movie metadata for release ${release.id}:`, error);
+          }
+        }
       }
     }
 

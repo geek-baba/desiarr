@@ -26,12 +26,20 @@ class RadarrClient {
     }
   }
 
-  async getMovie(tmdbId: number): Promise<RadarrMovie | null> {
+  async getMovie(tmdbIdOrRadarrId: number): Promise<RadarrMovie | null> {
     try {
-      const response = await this.client.get<RadarrMovie[]>('/movie', {
-        params: { tmdbId },
-      });
-      return response.data[0] || null;
+      // Try to get by Radarr ID first (if it's a small number, likely Radarr ID)
+      // Otherwise try by TMDB ID
+      try {
+        const response = await this.client.get<RadarrMovie>(`/movie/${tmdbIdOrRadarrId}`);
+        return response.data;
+      } catch (error) {
+        // If that fails, try by TMDB ID
+        const response = await this.client.get<RadarrMovie[]>('/movie', {
+          params: { tmdbId: tmdbIdOrRadarrId },
+        });
+        return response.data[0] || null;
+      }
     } catch (error) {
       console.error('Radarr get movie error:', error);
       return null;
