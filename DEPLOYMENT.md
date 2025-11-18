@@ -10,7 +10,7 @@ docker run -d \
   -p 8085:8085 \
   -e RADARR_API_URL=http://10.10.10.20:7880/api/v3 \
   -e RADARR_API_KEY=8131da6e33fe4aac86806fa2fafe7466 \
-  -v "$(pwd)/my_daily_chore:/app/data" \
+  -v "/Users/shwet/my_daily_chore:/app/data" \
   ghcr.io/geek-baba/radarr-indian-helper:latest
 ```
 
@@ -51,7 +51,7 @@ docker pull ghcr.io/geek-baba/radarr-indian-helper:latest
 
 ## Data Persistence
 
-The database and all settings are stored in the mounted volume: `$(pwd)/my_daily_chore`
+The database and all settings are stored in the mounted volume: `/Users/shwet/my_daily_chore`
 
 This directory contains:
 - `app.db` - SQLite database with all releases, feeds, and settings
