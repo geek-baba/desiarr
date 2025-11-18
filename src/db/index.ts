@@ -86,6 +86,7 @@ const defaultSettings = {
     'ZEE5': 80,
     'DSNP': 85,
     'HS': 75,
+    'SS': 85,
     'OTHER': 50,
   },
   codecWeights: {

@@ -19,6 +19,7 @@ const sourcePatterns = [
   { pattern: /ZEE5|Zee5/gi, value: 'ZEE5' },
   { pattern: /DSNP|Disney|Hotstar/gi, value: 'DSNP' },
   { pattern: /HS|Hotstar/gi, value: 'HS' },
+  { pattern: /\bSS\b/gi, value: 'SS' }, // SS (likely SonyLIV or similar)
 ];
 
 const audioPatterns = [
