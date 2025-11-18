@@ -220,6 +220,25 @@
   </div>
 
   <script>
+    async function saveTmdbApiKey(event) {
+      event.preventDefault();
+      const apiKey = document.getElementById('tmdbApiKey').value;
+      try {
+        const res = await fetch('/settings/tmdb-api-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('TMDB API key saved successfully!');
+        } else {
+          alert('Error: ' + (data.error || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
     let editingFeedId = null;
 
     function showAddFeedModal() {

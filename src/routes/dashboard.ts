@@ -2,11 +2,20 @@ import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
 import { feedsModel } from '../models/feeds';
 import radarrClient from '../radarr/client';
+import tmdbClient from '../tmdb/client';
+import { settingsModel } from '../models/settings';
 
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
   try {
+    // Get TMDB API key from settings
+    const settings = settingsModel.getAll();
+    const tmdbApiKey = settings.find(s => s.key === 'tmdb_api_key')?.value;
+    if (tmdbApiKey) {
+      tmdbClient.setApiKey(tmdbApiKey);
+    }
+
     // Get all releases
     const allReleases = releasesModel.getAll();
     const feeds = feedsModel.getAll();
@@ -129,6 +138,38 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
       
+      // If we still don't have TMDB ID or poster, try TMDB API search
+      if ((!movieGroup.tmdbId || !movieGroup.posterUrl) && tmdbApiKey) {
+        try {
+          // Get a release to extract title and year for search
+          const searchRelease = movieGroup.add[0] || movieGroup.existing[0] || movieGroup.upgrade[0];
+          if (searchRelease) {
+            const searchTitle = searchRelease.tmdb_title || 
+                              searchRelease.radarr_movie_title || 
+                              searchRelease.title.split(/\s+\d{4}/)[0];
+            const searchYear = searchRelease.year;
+            
+            const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
+            if (tmdbMovie) {
+              if (!movieGroup.tmdbId) {
+                movieGroup.tmdbId = tmdbMovie.id;
+              }
+              if (!movieGroup.posterUrl && tmdbMovie.poster_path) {
+                movieGroup.posterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path);
+              }
+              if (!movieGroup.imdbId && tmdbMovie.imdb_id) {
+                movieGroup.imdbId = tmdbMovie.imdb_id;
+              }
+              if (!movieGroup.originalLanguage && tmdbMovie.original_language) {
+                movieGroup.originalLanguage = tmdbMovie.original_language;
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error searching TMDB for ${movieGroup.movieTitle}:`, error);
+        }
+      }
+      
       // Add poster/metadata to all releases in this group
       for (const release of [...movieGroup.add, ...movieGroup.existing, ...movieGroup.upgrade]) {
         if (movieGroup.posterUrl) {
@@ -146,8 +187,20 @@ router.get('/', async (req: Request, res: Response) => {
       }
     }
 
-    // Sort movie groups by title
-    movieGroups.sort((a, b) => a.movieTitle.localeCompare(b.movieTitle));
+    // Sort movie groups by latest release date (most recent first)
+    movieGroups.sort((a, b) => {
+      // Get the most recent published_at date from all releases in each group
+      const getLatestDate = (group: typeof a) => {
+        const allReleases = [...group.add, ...group.existing, ...group.upgrade];
+        if (allReleases.length === 0) return 0;
+        const dates = allReleases.map(r => new Date(r.published_at).getTime());
+        return Math.max(...dates);
+      };
+      
+      const dateA = getLatestDate(a);
+      const dateB = getLatestDate(b);
+      return dateB - dateA; // Descending order (newest first)
+    });
 
     res.render('dashboard', {
       movieGroups,

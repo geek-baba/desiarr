@@ -136,5 +136,16 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/tmdb-api-key', (req: Request, res: Response) => {
+  try {
+    const { apiKey } = req.body;
+    settingsModel.set('tmdb_api_key', apiKey || '');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Save TMDB API key error:', error);
+    res.status(500).json({ error: 'Failed to save TMDB API key' });
+  }
+});
+
 export default router;
 

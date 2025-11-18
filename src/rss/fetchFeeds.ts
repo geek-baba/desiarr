@@ -103,9 +103,11 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             
             if (lookupResults.length === 0) {
               // No movie found in Radarr - mark as NEW
+              // But first, try to get TMDB ID from lookup results if available
               const release: Omit<Release, 'id'> = {
                 ...parsed,
                 status: 'NEW',
+                tmdb_id: (parsed as any).tmdb_id, // Keep TMDB ID if we extracted it
                 last_checked_at: new Date().toISOString(),
               };
               releasesModel.upsert(release);
