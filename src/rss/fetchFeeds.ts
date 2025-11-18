@@ -147,14 +147,51 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             existingParsed = parseReleaseFromTitle(existingFile.relativePath);
             // Also try to get info from mediaInfo if available
             if (existingFile.mediaInfo) {
+              // Use MediaInfo codec if parsed codec is UNKNOWN
+              if (existingFile.mediaInfo.videoCodec) {
+                existingParsed.videoCodecFromMediaInfo = existingFile.mediaInfo.videoCodec;
+                if (existingParsed.codec === 'UNKNOWN') {
+                  // Try to map MediaInfo codec to our format
+                  const upper = existingFile.mediaInfo.videoCodec.toUpperCase();
+                  if (upper.includes('264') || upper.includes('AVC') || upper.includes('H.264')) {
+                    existingParsed.codec = 'x264';
+                  } else if (upper.includes('265') || upper.includes('HEVC') || upper.includes('H.265')) {
+                    existingParsed.codec = 'x265';
+                  }
+                }
+              }
+              // Use MediaInfo audio if parsed audio is Unknown
               if (existingFile.mediaInfo.audioCodec) {
                 existingParsed.audioFromMediaInfo = existingFile.mediaInfo.audioCodec;
+                existingParsed.audioChannelsFromMediaInfo = existingFile.mediaInfo.audioChannels;
+                if (existingParsed.audio === 'Unknown') {
+                  // Map MediaInfo audio codec
+                  const upper = existingFile.mediaInfo.audioCodec.toUpperCase();
+                  const channels = existingFile.mediaInfo.audioChannels;
+                  if (upper.includes('EAC3') || upper.includes('E-AC-3') || upper.includes('DDP')) {
+                    if (channels === 2) existingParsed.audio = 'DDP 2.0';
+                    else if (channels === 6) existingParsed.audio = 'DDP 5.1';
+                    else if (channels === 8) existingParsed.audio = 'DDP 7.1';
+                    else existingParsed.audio = 'DDP';
+                  } else if (upper.includes('AC3') || upper.includes('AC-3')) {
+                    if (channels === 2) existingParsed.audio = 'DD 2.0';
+                    else if (channels === 6) existingParsed.audio = 'DD 5.1';
+                    else existingParsed.audio = 'DD';
+                  } else if (upper.includes('TRUEHD')) {
+                    existingParsed.audio = 'TrueHD';
+                  } else if (upper.includes('ATMOS')) {
+                    existingParsed.audio = 'Atmos';
+                  } else if (upper.includes('AAC')) {
+                    if (channels === 2) existingParsed.audio = 'AAC 2.0';
+                    else if (channels === 6) existingParsed.audio = 'AAC 5.1';
+                    else existingParsed.audio = 'AAC';
+                  } else {
+                    existingParsed.audio = existingFile.mediaInfo.audioCodec;
+                  }
+                }
               }
               if (existingFile.mediaInfo.audioLanguages) {
                 existingParsed.audioLanguagesFromMediaInfo = existingFile.mediaInfo.audioLanguages;
-              }
-              if (existingFile.mediaInfo.videoCodec) {
-                existingParsed.videoCodecFromMediaInfo = existingFile.mediaInfo.videoCodec;
               }
             }
           }
@@ -227,17 +264,50 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             }
           }
 
+          // Get last download from history
+          let lastDownload: any = null;
+          if (movieWithHistory?.history && movieWithHistory.history.length > 0) {
+            // Find the most recent download event
+            const downloadEvents = movieWithHistory.history.filter((h: any) => 
+              h.eventType === 'downloadFolderImported' || 
+              h.eventType === 'grabbed' ||
+              h.data?.downloadUrl
+            );
+            if (downloadEvents.length > 0) {
+              // Sort by date, most recent first
+              downloadEvents.sort((a: any, b: any) => 
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+              );
+              lastDownload = downloadEvents[0];
+            }
+          }
+
+          // Parse last download to get source tag if available
+          let lastDownloadSourceTag = existingParsed?.sourceTag || 'OTHER';
+          if (lastDownload && lastDownload.sourceTitle) {
+            const lastDownloadParsed = parseReleaseFromTitle(lastDownload.sourceTitle);
+            if (lastDownloadParsed.sourceTag && lastDownloadParsed.sourceTag !== 'OTHER') {
+              lastDownloadSourceTag = lastDownloadParsed.sourceTag;
+            }
+          }
+
           // Store existing file attributes and history
           const existingFileAttributes = existingFile && existingParsed ? {
             path: existingFile.relativePath,
             resolution: existingParsed.resolution,
             codec: existingParsed.codec,
-            sourceTag: existingParsed.sourceTag,
+            sourceTag: lastDownloadSourceTag, // Use source from last download
             audio: existingParsed.audio,
             audioFromMediaInfo: existingParsed.audioFromMediaInfo,
+            audioChannelsFromMediaInfo: existingParsed.audioChannelsFromMediaInfo,
             audioLanguages: existingParsed.audioLanguagesFromMediaInfo,
             videoCodec: existingParsed.videoCodecFromMediaInfo,
             sizeMb: existingSizeMb,
+            lastDownload: lastDownload ? {
+              sourceTitle: lastDownload.sourceTitle,
+              date: lastDownload.date,
+              releaseGroup: lastDownload.data?.releaseGroup,
+            } : null,
           } : null;
 
           const release: any = {

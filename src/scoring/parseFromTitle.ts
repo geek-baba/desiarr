@@ -23,10 +23,19 @@ const sourcePatterns = [
 ];
 
 const audioPatterns = [
+  { pattern: /DDP5\.1\s*Atmos|DD\+5\.1\s*Atmos|TrueHD\s*Atmos/gi, value: 'DDP 5.1 Atmos' },
   { pattern: /Atmos/gi, value: 'Atmos' },
   { pattern: /TrueHD/gi, value: 'TrueHD' },
-  { pattern: /DD\+?\s*5\.1|DDP5\.1|EAC3/gi, value: 'DDP5.1' }, // Match DD+ 5.1, DD+5.1, DDP5.1, EAC3
-  { pattern: /DD5\.1|AC3/gi, value: 'DD5.1' },
+  { pattern: /DD\+?\s*7\.1|DDP7\.1/gi, value: 'DDP 7.1' },
+  { pattern: /DD\+?\s*5\.1|DDP5\.1|EAC3\s*5\.1/gi, value: 'DDP 5.1' }, // Match DD+ 5.1, DD+5.1, DDP5.1, EAC3 5.1
+  { pattern: /DD\+?\s*2\.0|DDP2\.0|EAC3\s*2\.0/gi, value: 'DDP 2.0' }, // Match DD+ 2.0, DDP2.0, EAC3 2.0
+  { pattern: /DD\+|DDP|EAC3/gi, value: 'DDP' }, // Generic DDP
+  { pattern: /DD5\.1|AC3\s*5\.1/gi, value: 'DD 5.1' },
+  { pattern: /DD2\.0|AC3\s*2\.0/gi, value: 'DD 2.0' },
+  { pattern: /AC3|DD(?!P)/gi, value: 'DD' }, // AC3 or DD (but not DDP)
+  { pattern: /AAC\s*5\.1/gi, value: 'AAC 5.1' },
+  { pattern: /AAC\s*2\.0/gi, value: 'AAC 2.0' },
+  { pattern: /AAC/gi, value: 'AAC' },
   { pattern: /2\.0|Stereo/gi, value: '2.0' },
 ];
 

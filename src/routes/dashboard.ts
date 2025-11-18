@@ -49,6 +49,13 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
+    // Add feed names to releases for easier access in template
+    for (const feed of categorized) {
+      for (const release of [...feed.add, ...feed.existing, ...feed.upgrade]) {
+        (release as any).feedName = feed.feedName;
+      }
+    }
+
     res.render('dashboard', {
       feeds: categorized,
     });
