@@ -5,8 +5,30 @@ import radarrClient from '../radarr/client';
 import tmdbClient from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 import { config } from '../config';
+import { Release } from '../types/Release';
 
 const router = Router();
+
+function sanitizeTitle(value: string): string {
+  return value
+    .replace(/[._]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildDisplayTitle(release: Release): string {
+  if (release.radarr_movie_title) {
+    return release.radarr_movie_title;
+  }
+  if (release.tmdb_title) {
+    return release.tmdb_title;
+  }
+  const base = sanitizeTitle(release.title || '');
+  if (release.year && !base.includes(release.year.toString())) {
+    return `${base} (${release.year})`.trim();
+  }
+  return base || release.title || 'Unknown Title';
+}
 
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -32,6 +54,7 @@ router.get('/', async (req: Request, res: Response) => {
     // Add feed names to releases
     for (const release of allReleases) {
       (release as any).feedName = feedMap[release.feed_id] || 'Unknown Feed';
+      (release as any).displayTitle = buildDisplayTitle(release);
     }
 
     // Group releases by movie (using TMDB ID as primary key, fallback to normalized title)
@@ -67,6 +90,7 @@ router.get('/', async (req: Request, res: Response) => {
       add: any[];
       existing: any[];
       upgrade: any[];
+      ignored: any[];
     }> = [];
 
     for (const movieKey in releasesByMovie) {
@@ -77,9 +101,7 @@ router.get('/', async (req: Request, res: Response) => {
                             releases.find(r => r.tmdb_id) || 
                             releases[0];
       
-      const movieTitle = primaryRelease.radarr_movie_title || 
-                        primaryRelease.tmdb_title || 
-                        primaryRelease.title.split(/\s+\d{4}/)[0]; // Extract title without year
+      const movieTitle = (primaryRelease as any).displayTitle || buildDisplayTitle(primaryRelease);
       
       // Categorize releases by status
       const add = releases.filter(r => r.status === 'NEW');
@@ -90,6 +112,11 @@ router.get('/', async (req: Request, res: Response) => {
       const upgrade = releases.filter(r => (
         r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED'
       ));
+      const ignored = releases.filter(r => (
+        r.status !== 'NEW' &&
+        !( (r.status === 'IGNORED' || r.status === 'ADDED') && r.radarr_movie_id ) &&
+        !(r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED')
+      ));
       
       movieGroups.push({
         movieKey,
@@ -99,6 +126,7 @@ router.get('/', async (req: Request, res: Response) => {
         add,
         existing,
         upgrade,
+        ignored,
       });
     }
 
@@ -178,7 +206,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
       
       // Add poster/metadata to all releases in this group
-      for (const release of [...movieGroup.add, ...movieGroup.existing, ...movieGroup.upgrade]) {
+      for (const release of [...movieGroup.add, ...movieGroup.existing, ...movieGroup.upgrade, ...movieGroup.ignored]) {
         if (movieGroup.posterUrl) {
           (release as any).posterUrl = movieGroup.posterUrl;
         }
@@ -198,7 +226,7 @@ router.get('/', async (req: Request, res: Response) => {
     movieGroups.sort((a, b) => {
       // Get the most recent published_at date from all releases in each group
       const getLatestDate = (group: typeof a) => {
-        const allReleases = [...group.add, ...group.existing, ...group.upgrade];
+        const allReleases = [...group.add, ...group.existing, ...group.upgrade, ...group.ignored];
         if (allReleases.length === 0) return 0;
         const dates = allReleases.map(r => new Date(r.published_at).getTime());
         return Math.max(...dates);

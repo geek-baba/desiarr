@@ -11,10 +11,18 @@ export interface RSSItem {
   description?: string;
 }
 
+function sanitizeTitle(value: string): string {
+  return value
+    .replace(/[._]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) {
   const title = item.title || item.link || 'Unknown';
   const parsed = parseReleaseFromTitle(title);
   const normalized = normalizeTitle(title);
+  const sanitizedTitle = sanitizeTitle(title);
 
   // Try to extract year from title
   const yearMatch = title.match(/\b(19|20)\d{2}\b/);
@@ -54,9 +62,8 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
 
   // Extract clean movie title (remove quality info, year, etc.)
   // Try to get just the movie name part before the year and quality info
-  let cleanTitle = title;
-  // Remove common patterns: year, resolution, codec, source tags, etc.
-  cleanTitle = cleanTitle.replace(/\s+\d{4}\s+.*$/, ''); // Remove year and everything after
+  let cleanTitle = sanitizedTitle;
+  cleanTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*$/, ''); // Remove year and everything after
   cleanTitle = cleanTitle.replace(/\s*\(.*?\)\s*$/, ''); // Remove parenthetical info at end
   cleanTitle = cleanTitle.trim();
 

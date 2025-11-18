@@ -67,7 +67,7 @@
                           <div class="mb-3 p-3 bg-white rounded border">
                             <div class="font-medium text-gray-700 mb-2">
                               <strong><%= release.feedName || release.source_site %>:</strong> 
-                              <span class="text-gray-600 font-normal"><%= release.title %></span>
+                              <span class="text-gray-600 font-normal"><%= release.displayTitle || release.title %></span>
                               <span class="text-gray-500 text-sm ml-2">- <%= new Date(release.published_at).toLocaleString() %></span>
                               <% if (release.link) { %>
                                 <a href="<%= release.link %>" target="_blank" class="text-blue-600 hover:underline text-sm ml-2" title="View source">🔗</a>
@@ -118,7 +118,7 @@
                         <!-- Movie Poster -->
                         <div class="flex-shrink-0">
                           <% if (release.posterUrl) { %>
-                            <img src="<%= release.posterUrl %>" alt="<%= release.radarr_movie_title || release.title %>" class="w-32 h-48 object-cover rounded shadow">
+                            <img src="<%= release.posterUrl %>" alt="<%= release.radarr_movie_title || release.displayTitle || release.title %>" class="w-32 h-48 object-cover rounded shadow">
                           <% } else { %>
                             <div class="w-32 h-48 bg-gray-200 rounded shadow flex items-center justify-center text-gray-400 text-xs text-center p-2">No Poster</div>
                           <% } %>
@@ -141,7 +141,7 @@
                           <div class="mb-3 p-3 bg-white rounded border">
                             <div class="font-medium text-gray-700 mb-2">
                               <strong><%= release.feedName || release.source_site %>:</strong> 
-                              <span class="text-gray-600 font-normal"><%= release.title %></span>
+                              <span class="text-gray-600 font-normal"><%= release.displayTitle || release.title %></span>
                               <span class="text-gray-500 text-sm ml-2">- <%= new Date(release.published_at).toLocaleString() %></span>
                               <% if (release.link) { %>
                                 <a href="<%= release.link %>" target="_blank" class="text-blue-600 hover:underline text-sm ml-2" title="View source">🔗</a>
@@ -230,7 +230,7 @@
                         <!-- Movie Poster -->
                         <div class="flex-shrink-0">
                           <% if (release.posterUrl) { %>
-                            <img src="<%= release.posterUrl %>" alt="<%= release.radarr_movie_title || release.title %>" class="w-32 h-48 object-cover rounded shadow">
+                            <img src="<%= release.posterUrl %>" alt="<%= release.radarr_movie_title || release.displayTitle || release.title %>" class="w-32 h-48 object-cover rounded shadow">
                           <% } else { %>
                             <div class="w-32 h-48 bg-gray-200 rounded shadow flex items-center justify-center text-gray-400 text-xs text-center p-2">No Poster</div>
                           <% } %>
@@ -255,7 +255,7 @@
                             <div class="p-3 bg-white rounded border">
                               <div class="font-medium text-gray-700 mb-2">
                                 <strong><%= release.feedName || release.source_site %>:</strong> 
-                                <span class="text-gray-600 font-normal text-sm"><%= release.title %></span>
+                                        <span class="text-gray-600 font-normal text-sm"><%= release.displayTitle || release.title %></span>
                                 <span class="text-gray-500 text-xs ml-2">- <%= new Date(release.published_at).toLocaleString() %></span>
                               </div>
                               <div class="text-sm mt-2">
@@ -384,8 +384,123 @@
             </div>
           <% } %>
 
+                  <!-- Ignored / Needs Attention Section -->
+                  <% if (movie.ignored.length > 0) { %>
+                    <div class="mb-6">
+                      <h4 class="text-lg font-medium mb-3 text-gray-600">Needs Attention (<%= movie.ignored.length %>)</h4>
+                      <div class="grid gap-4">
+                        <% movie.ignored.forEach(release => { %>
+                          <div class="border-l-4 border-gray-400 bg-gray-50 rounded p-4">
+                            <div class="flex justify-between items-start">
+                              <div class="flex-1 flex gap-4">
+                                <!-- Movie Poster -->
+                                <div class="flex-shrink-0">
+                                  <% if (movie.posterUrl || release.posterUrl) { %>
+                                    <img src="<%= movie.posterUrl || release.posterUrl %>" alt="<%= movie.movieTitle %>" class="w-32 h-48 object-cover rounded shadow">
+                                  <% } else { %>
+                                    <div class="w-32 h-48 bg-gray-200 rounded shadow flex items-center justify-center text-gray-400 text-xs text-center p-2">No Poster</div>
+                                  <% } %>
+                                  <div class="mt-2 text-xs space-y-1">
+                                    <% if (movie.imdbId || release.imdbId) { %>
+                                      <a href="https://www.imdb.com/title/<%= movie.imdbId || release.imdbId %>" target="_blank" class="text-blue-600 hover:underline block">IMDB</a>
+                                    <% } %>
+                                    <% if (movie.tmdbId || release.tmdbId || release.tmdb_id) { %>
+                                      <a href="https://www.themoviedb.org/movie/<%= movie.tmdbId || release.tmdbId || release.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline block">TMDB</a>
+                                    <% } %>
+                                    <% if (movie.originalLanguage || release.originalLanguage) { %>
+                                      <div class="text-gray-600">Lang: <%= movie.originalLanguage || release.originalLanguage %></div>
+                                    <% } %>
+                                  </div>
+                                </div>
+
+                                <!-- Content -->
+                                <div class="flex-1">
+                                  <div class="mb-3 p-3 bg-white rounded border">
+                                    <div class="font-medium text-gray-700 mb-2">
+                                      <strong><%= release.feedName || release.source_site %>:</strong> 
+                                      <span class="text-gray-600 font-normal"><%= release.displayTitle || release.title %></span>
+                                      <span class="text-gray-500 text-sm ml-2">- <%= new Date(release.published_at).toLocaleString() %></span>
+                                      <% if (release.link) { %>
+                                        <a href="<%= release.link %>" target="_blank" class="text-blue-600 hover:underline text-sm ml-2" title="View source">🔗</a>
+                                      <% } %>
+                                    </div>
+                                    <div class="text-sm mt-2">
+                                      <span class="font-medium">Resolution:</span> <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= release.resolution %></span>
+                                      <span class="font-medium ml-2">Codec:</span> <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= release.codec %></span>
+                                      <span class="font-medium ml-2">Source:</span> <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= release.source_tag %></span>
+                                      <span class="font-medium ml-2">Audio:</span> <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2"><%= release.audio %></span>
+                                      <% if (release.rss_size_mb) { %>
+                                        <span class="font-medium ml-2">Size:</span> <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded mr-2"><%= release.rss_size_mb.toFixed(2) %> MB</span>
+                                      <% } %>
+                                    </div>
+                                    <% if (release.audio_languages) { %>
+                                      <div class="text-sm mt-1">
+                                        <span class="font-medium">Languages:</span>
+                                        <span class="ml-2 text-gray-600"><%= JSON.parse(release.audio_languages).join(', ') %></span>
+                                      </div>
+                                    <% } %>
+                                    <div class="text-sm mt-2 text-gray-600">
+                                      <span class="font-medium">Status:</span>
+                                      <span class="ml-2 inline-flex items-center px-2 py-1 rounded bg-gray-200 text-gray-800 text-xs uppercase tracking-wide"><%= release.status %></span>
+                                      <% if (!release.radarr_movie_id) { %>
+                                        <span class="ml-2 text-gray-500">(Radarr match not found)</span>
+                                      <% } else if (release.status === 'IGNORED') { %>
+                                        <span class="ml-2 text-gray-500">(Below upgrade thresholds)</span>
+                                      <% } %>
+                                    </div>
+                                  </div>
+
+                                  <% if (release.radarr_movie_id && release.existing_file_attributes) { %>
+                                    <% const existingAttrs = JSON.parse(release.existing_file_attributes); %>
+                                    <div class="mb-3 p-3 bg-gray-50 rounded border">
+                                      <div class="font-medium text-gray-700 mb-2">
+                                        <strong>Radarr:</strong>
+                                        <% if (existingAttrs.lastDownload) { %>
+                                          <span class="text-gray-600 font-normal"><%= existingAttrs.lastDownload.sourceTitle %></span>
+                                          <span class="text-gray-500 text-sm ml-2">- Downloaded on <%= new Date(existingAttrs.lastDownload.date).toLocaleDateString() %></span>
+                                        <% } else if (release.radarr_movie_title) { %>
+                                          <span class="text-gray-600 font-normal"><%= release.radarr_movie_title %></span>
+                                        <% } %>
+                                      </div>
+                                      <% if (existingAttrs.path) { %>
+                                        <div class="text-xs text-gray-500 font-mono mb-2 truncate" title="<%= existingAttrs.path %>"><%= existingAttrs.path %></div>
+                                      <% } %>
+                                      <div class="text-sm mt-2">
+                                        <span class="font-medium">Resolution:</span> <span class="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2"><%= existingAttrs.resolution || 'N/A' %></span>
+                                        <span class="font-medium ml-2">Codec:</span> <span class="inline-block bg-green-100 text-green-800 px-2 py-1 rounded mr-2"><%= existingAttrs.codec || 'UNKNOWN' %></span>
+                                        <span class="font-medium ml-2">Source:</span> <span class="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded mr-2"><%= existingAttrs.sourceTag || 'OTHER' %></span>
+                                        <span class="font-medium ml-2">Audio:</span> <span class="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2"><%= existingAttrs.audio || 'Unknown' %></span>
+                                        <% if (existingAttrs.sizeMb) { %>
+                                          <span class="font-medium ml-2">Size:</span> <span class="inline-block bg-gray-100 text-gray-800 px-2 py-1 rounded mr-2"><%= existingAttrs.sizeMb.toFixed(2) %> MB</span>
+                                        <% } %>
+                                      </div>
+                                    </div>
+                                  <% } %>
+                                </div>
+                              </div>
+                              <div class="ml-4 space-x-2">
+                                <% if (!release.radarr_movie_id) { %>
+                                  <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm">
+                                    Add to Radarr
+                                  </button>
+                                <% } else { %>
+                                  <button onclick="upgradeMovie(<%= release.id %>)" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded text-sm">
+                                    Upgrade
+                                  </button>
+                                <% } %>
+                                <button onclick="ignoreRelease(<%= release.id %>)" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
+                                  Mark Ignored
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        <% }); %>
+                      </div>
+                    </div>
+                  <% } %>
+
           <!-- Summary -->
-          <% if (movie.add.length === 0 && movie.existing.length === 0 && movie.upgrade.length === 0) { %>
+                  <% if (movie.add.length === 0 && movie.existing.length === 0 && movie.upgrade.length === 0 && movie.ignored.length === 0) { %>
             <p class="text-gray-600">No releases found for this movie.</p>
           <% } %>
         </div>
