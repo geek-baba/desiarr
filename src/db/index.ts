@@ -59,6 +59,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_releases_guid ON releases(guid);
   CREATE INDEX IF NOT EXISTS idx_releases_tmdb_id ON releases(tmdb_id);
   CREATE INDEX IF NOT EXISTS idx_releases_radarr_movie_id ON releases(radarr_movie_id);
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 // Migrate existing databases - add new columns if they don't exist
@@ -68,22 +73,19 @@ try {
   
   if (!columnNames.includes('existing_file_path')) {
     db.exec('ALTER TABLE releases ADD COLUMN existing_file_path TEXT');
+    console.log('Added column: existing_file_path');
   }
   if (!columnNames.includes('existing_file_attributes')) {
     db.exec('ALTER TABLE releases ADD COLUMN existing_file_attributes TEXT');
+    console.log('Added column: existing_file_attributes');
   }
   if (!columnNames.includes('radarr_history')) {
     db.exec('ALTER TABLE releases ADD COLUMN radarr_history TEXT');
+    console.log('Added column: radarr_history');
   }
 } catch (error) {
   console.error('Migration error:', error);
 }
-
-  CREATE TABLE IF NOT EXISTS app_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
-`);
 
 // Initialize default quality settings if not exists
 const defaultSettings = {
