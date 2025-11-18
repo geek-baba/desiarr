@@ -60,6 +60,45 @@
       </div>
     </div>
 
+    <!-- API Configuration Section -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <h3 class="text-xl font-semibold mb-4">API Configuration</h3>
+      
+      <div class="bg-yellow-50 border border-yellow-200 rounded p-4 mb-4">
+        <p class="text-sm text-yellow-800">
+          <strong>Radarr API:</strong> Configured via environment variables:
+        </p>
+        <ul class="list-disc list-inside text-sm text-yellow-800 mt-2">
+          <li><code>RADARR_API_URL</code> - e.g., <code>http://10.10.10.20:7880/api/v3</code></li>
+          <li><code>RADARR_API_KEY</code> - Your Radarr API key</li>
+        </ul>
+        <p class="text-sm text-yellow-800 mt-2">
+          Update these in your Docker run command or environment configuration.
+        </p>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 rounded p-4">
+        <h4 class="font-semibold mb-2">TMDB API Key</h4>
+        <p class="text-sm text-blue-800 mb-3">
+          Optional: Add your TMDB API key to enable poster fetching and movie lookup for releases without TMDB ID.
+          Get your API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" class="underline">TMDB Settings</a>.
+        </p>
+        <form onsubmit="saveTmdbApiKey(event)" class="flex gap-2">
+          <input 
+            type="text" 
+            id="tmdbApiKey" 
+            name="tmdbApiKey" 
+            value="<%= tmdbApiKey %>" 
+            placeholder="Enter TMDB API Key"
+            class="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+          <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+            Save
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- Quality Settings Section -->
     <div class="bg-white rounded-lg shadow p-6">
       <h3 class="text-xl font-semibold mb-4">Quality Settings</h3>

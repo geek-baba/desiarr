@@ -11,6 +11,11 @@ export const settingsModel = {
     db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
   },
 
+  getAll: (): Array<{ key: string; value: string }> => {
+    const rows = db.prepare('SELECT key, value FROM app_settings').all() as Array<{ key: string; value: string }>;
+    return rows;
+  },
+
   getQualitySettings: (): QualitySettings => {
     const value = settingsModel.get('qualitySettings');
     if (!value) {

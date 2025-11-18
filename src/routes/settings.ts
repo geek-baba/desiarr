@@ -10,10 +10,13 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const feeds = feedsModel.getAll();
     const qualitySettings = settingsModel.getQualitySettings();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value || '';
 
     res.render('settings', {
       feeds,
       qualitySettings,
+      tmdbApiKey,
     });
   } catch (error) {
     console.error('Settings page error:', error);

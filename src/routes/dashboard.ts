@@ -4,6 +4,7 @@ import { feedsModel } from '../models/feeds';
 import radarrClient from '../radarr/client';
 import tmdbClient from '../tmdb/client';
 import { settingsModel } from '../models/settings';
+import { config } from '../config';
 
 const router = Router();
 
@@ -202,8 +203,12 @@ router.get('/', async (req: Request, res: Response) => {
       return dateB - dateA; // Descending order (newest first)
     });
 
+    // Get Radarr base URL for links
+    const radarrBaseUrl = config.radarr.apiUrl.replace('/api/v3', '');
+
     res.render('dashboard', {
       movieGroups,
+      radarrBaseUrl,
     });
   } catch (error) {
     console.error('Dashboard error:', error);

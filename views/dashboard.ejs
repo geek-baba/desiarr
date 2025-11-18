@@ -176,9 +176,8 @@
                                 <% } else if (release.radarr_movie_title) { %>
                                   <span class="text-gray-600 font-normal"><%= release.radarr_movie_title %></span>
                                 <% } %>
-                                <% if (release.radarr_movie_id) { %>
-                                  <% const radarrUrl = process.env.RADARR_API_URL?.replace('/api/v3', '') || 'http://10.10.10.20:7880'; %>
-                                  <a href="<%= radarrUrl %>/movie/<%= release.radarr_movie_id %>" target="_blank" class="text-blue-600 hover:underline text-sm ml-2" title="View in Radarr">🔗</a>
+                                <% if (release.radarr_movie_id && typeof radarrBaseUrl !== 'undefined') { %>
+                                  <a href="<%= radarrBaseUrl %>/movie/<%= release.radarr_movie_id %>" target="_blank" class="text-blue-600 hover:underline text-sm ml-2" title="View in Radarr">🔗</a>
                                 <% } %>
                               </div>
                               <div class="text-sm mt-2">
