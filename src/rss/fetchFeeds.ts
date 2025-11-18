@@ -157,6 +157,13 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             ? ((parsed.rss_size_mb - existingSizeMb) / existingSizeMb) * 100
             : 0;
 
+          // Log detailed scoring for debugging
+          if (radarrMovie.id) {
+            console.log(`  ${parsed.title}: existingScore=${existingScore.toFixed(2)}, newScore=${newScore.toFixed(2)}, delta=${scoreDelta.toFixed(2)}, sizeDelta=${sizeDeltaPercent.toFixed(2)}%`);
+            console.log(`    Existing file: ${existingFile?.relativePath || 'none'}, size=${existingSizeMb?.toFixed(2) || 'N/A'}MB`);
+            console.log(`    New release: ${parsed.parsed.resolution} ${parsed.parsed.sourceTag} ${parsed.parsed.codec} ${parsed.parsed.audio}, size=${parsed.rss_size_mb?.toFixed(2) || 'N/A'}MB`);
+          }
+
           // Determine if upgrade candidate
           if (
             scoreDelta >= settings.upgradeThreshold &&
@@ -167,6 +174,16 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           } else {
             status = 'IGNORED';
             ignoredCount++;
+            if (radarrMovie.id) {
+              const reasons: string[] = [];
+              if (scoreDelta < settings.upgradeThreshold) {
+                reasons.push(`scoreDelta ${scoreDelta.toFixed(2)} < threshold ${settings.upgradeThreshold}`);
+              }
+              if (sizeDeltaPercent < settings.minSizeIncreasePercentForUpgrade) {
+                reasons.push(`sizeDelta ${sizeDeltaPercent.toFixed(2)}% < threshold ${settings.minSizeIncreasePercentForUpgrade}%`);
+              }
+              console.log(`    → IGNORED: ${reasons.join(', ')}`);
+            }
           }
 
           const release: Omit<Release, 'id'> = {
