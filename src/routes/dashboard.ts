@@ -247,6 +247,24 @@ router.get('/', async (req: Request, res: Response) => {
           }
           
           if (movie) {
+            if (movie.id) {
+              movieGroup.radarrMovieId = movie.id;
+
+              // Propagate Radarr linkage to releases so UI can show them under "Existing"
+              for (const release of groupReleases) {
+                if (!release.radarr_movie_id) {
+                  release.radarr_movie_id = movie.id;
+                  release.radarr_movie_title = movie.title;
+                }
+              }
+
+              // If we previously categorized them as "Add", move them to "Existing"
+              if (movieGroup.add.length > 0) {
+                movieGroup.existing.push(...movieGroup.add);
+                movieGroup.add = [];
+              }
+            }
+
             // Get poster URL (Radarr provides images array)
             if (movie.images && movie.images.length > 0) {
               const poster = movie.images.find((img: any) => img.coverType === 'poster');
