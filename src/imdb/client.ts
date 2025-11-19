@@ -87,13 +87,14 @@ class IMDBClient {
   /**
    * Search Google/DuckDuckGo for IMDB ID by movie title and year
    * Extracts IMDB ID from search results
+   * Uses "clean title yyyy tmdb" format for better results
    */
   async searchGoogleForImdbId(query: string, year?: number): Promise<string | null> {
     try {
-      // Construct search query
+      // Construct search query - use "clean title yyyy tmdb" format
       const searchQuery = year 
-        ? `${query} ${year} imdb`
-        : `${query} imdb`;
+        ? `${query} ${year} tmdb`
+        : `${query} tmdb`;
       
       // Use DuckDuckGo HTML search (no API key needed, privacy-friendly)
       // DuckDuckGo doesn't require API keys and is more lenient with automated requests

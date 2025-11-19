@@ -122,10 +122,14 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           // Step 3: If we don't have a TMDB ID but have a clean title, try TMDB API search
           if (!tmdbId && tmdbApiKey && (parsed as any).clean_title) {
             try {
-              const searchTitle = (parsed as any).clean_title;
+              // Use "clean title yyyy" format for TMDB search
+              let searchTitle = (parsed as any).clean_title;
               const searchYear = parsed.year;
-              console.log(`  Searching TMDB API for: "${searchTitle}" (${searchYear || 'no year'})`);
-              const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
+              if (searchYear) {
+                searchTitle = `${searchTitle} ${searchYear}`;
+              }
+              console.log(`  Searching TMDB API for: "${searchTitle}"`);
+              const tmdbMovie = await tmdbClient.searchMovie((parsed as any).clean_title, searchYear);
               if (tmdbMovie) {
                 // Validate the match: check if year matches (if provided) and title similarity
                 let isValidMatch = true;
