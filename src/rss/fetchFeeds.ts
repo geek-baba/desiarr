@@ -408,14 +408,15 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           }
 
           // Determine if upgrade candidate
+          let finalStatus: Release['status'] = status;
           if (
             scoreDelta >= settings.upgradeThreshold &&
             sizeDeltaPercent >= settings.minSizeIncreasePercentForUpgrade
           ) {
-            status = 'UPGRADE_CANDIDATE';
+            finalStatus = 'UPGRADE_CANDIDATE';
             upgradeCount++;
           } else {
-            status = 'IGNORED';
+            finalStatus = needsAttention ? 'ATTENTION_NEEDED' : 'IGNORED';
             ignoredCount++;
             if (radarrMovie.id) {
               const reasons: string[] = [];
@@ -477,7 +478,7 @@ export async function fetchAndProcessFeeds(): Promise<void> {
 
                   const release: any = {
                     ...parsed,
-                    status: releaseStatus,
+                    status: finalStatus,
                     tmdb_id: tmdbId || lookupResult.tmdbId,
                     tmdb_title: tmdbTitle || lookupResult.title,
                     tmdb_original_language: tmdbOriginalLanguage || originalLang,
