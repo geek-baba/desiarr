@@ -147,14 +147,34 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                 
                 // For very short titles (like "x & y"), be more strict about matching
                 // Require exact title match OR year match for short titles
-                if (searchTitle.length <= 5) {
-                  const searchTitleLower = searchTitle.toLowerCase();
-                  const resultTitleLower = tmdbMovie.title.toLowerCase();
-                  const titleMatches = searchTitleLower === resultTitleLower || 
-                                      resultTitleLower.includes(searchTitleLower) ||
-                                      searchTitleLower.includes(resultTitleLower);
+                if (searchTitle.length <= 10) {
+                  const searchTitleLower = searchTitle.toLowerCase().trim();
+                  const resultTitleLower = tmdbMovie.title.toLowerCase().trim();
                   
+                  // For titles with "&" or "and", require the full phrase to match, not just substring
+                  const hasAmpersand = searchTitleLower.includes('&') || searchTitleLower.includes(' and ');
+                  const titleMatches = searchTitleLower === resultTitleLower;
+                  
+                  // If not exact match, check if it's a reasonable substring match (but not for short titles with &)
+                  let isReasonableMatch = false;
                   if (!titleMatches) {
+                    if (hasAmpersand) {
+                      // For titles with &, require both parts to be present
+                      const searchParts = searchTitleLower.split(/[&\s]+and\s+/).filter((p: string) => p.trim().length > 0);
+                      if (searchParts.length >= 2) {
+                        const allPartsMatch = searchParts.every((part: string) => resultTitleLower.includes(part.trim()));
+                        isReasonableMatch = allPartsMatch;
+                      } else {
+                        // Single word with &, require exact match
+                        isReasonableMatch = false;
+                      }
+                    } else {
+                      // For titles without &, allow substring match only if it's a significant portion
+                      isReasonableMatch = resultTitleLower.includes(searchTitleLower) && searchTitleLower.length >= 3;
+                    }
+                  }
+                  
+                  if (!titleMatches && !isReasonableMatch) {
                     console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
                     // For short titles, require both year AND title similarity
                     if (!searchYear || !tmdbMovie.release_date) {
@@ -163,6 +183,11 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                       const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
                       if (releaseYear !== searchYear) {
                         isValidMatch = false;
+                      } else {
+                        // Year matches, but title doesn't - still reject for short titles with &
+                        if (hasAmpersand) {
+                          isValidMatch = false;
+                        }
                       }
                     }
                   }
@@ -296,9 +321,9 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                   if (!titleMatches) {
                     if (hasAmpersand) {
                       // For titles with &, require both parts to be present
-                      const searchParts = searchTitleLower.split(/[&\s]+and\s+/).filter(p => p.trim().length > 0);
+                      const searchParts = searchTitleLower.split(/[&\s]+and\s+/).filter((p: string) => p.trim().length > 0);
                       if (searchParts.length >= 2) {
-                        const allPartsMatch = searchParts.every(part => resultTitleLower.includes(part.trim()));
+                        const allPartsMatch = searchParts.every((part: string) => resultTitleLower.includes(part.trim()));
                         isReasonableMatch = allPartsMatch;
                       } else {
                         // Single word with &, require exact match
