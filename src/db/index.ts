@@ -41,6 +41,7 @@ db.exec(`
     tmdb_id INTEGER,
     tmdb_title TEXT,
     tmdb_original_language TEXT,
+    imdb_id TEXT,
     is_dubbed INTEGER,
     audio_languages TEXT,
     radarr_movie_id INTEGER,
@@ -82,6 +83,10 @@ try {
   if (!columnNames.includes('radarr_history')) {
     db.exec('ALTER TABLE releases ADD COLUMN radarr_history TEXT');
     console.log('Added column: radarr_history');
+  }
+  if (!columnNames.includes('imdb_id')) {
+    db.exec('ALTER TABLE releases ADD COLUMN imdb_id TEXT');
+    console.log('Added column: imdb_id');
   }
 } catch (error) {
   console.error('Migration error:', error);

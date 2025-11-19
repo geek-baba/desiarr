@@ -7,6 +7,7 @@ import { isReleaseAllowed, computeQualityScore } from '../scoring/qualityScore';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import radarrClient from '../radarr/client';
 import tmdbClient from '../tmdb/client';
+import imdbClient from '../imdb/client';
 import { Release } from '../types/Release';
 import { QualitySettings } from '../types/QualitySettings';
 
@@ -16,11 +17,15 @@ export async function fetchAndProcessFeeds(): Promise<void> {
   const feeds = feedsModel.getEnabled();
   const settings = settingsModel.getQualitySettings();
   
-  // Get TMDB API key from settings
+  // Get API keys from settings
   const allSettings = settingsModel.getAll();
   const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
   if (tmdbApiKey) {
     tmdbClient.setApiKey(tmdbApiKey);
+  }
+  const omdbApiKey = allSettings.find(s => s.key === 'omdb_api_key')?.value;
+  if (omdbApiKey) {
+    imdbClient.setApiKey(omdbApiKey);
   }
 
   console.log(`Fetching ${feeds.length} enabled RSS feeds...`);
@@ -69,6 +74,8 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           let tmdbId = (parsed as any).tmdb_id;
           let tmdbTitle: string | undefined;
           let tmdbOriginalLanguage: string | undefined;
+          let imdbId: string | undefined;
+          let needsAttention = false;
           
           // If we don't have a TMDB ID but have a title, try TMDB API search
           if (!tmdbId && tmdbApiKey && (parsed as any).clean_title) {
@@ -107,18 +114,40 @@ export async function fetchAndProcessFeeds(): Promise<void> {
               console.error(`  TMDB API search error for "${(parsed as any).clean_title}":`, error);
             }
           }
+          
+          // If TMDB search didn't find a match, try IMDB/OMDB search
+          if (!tmdbId && (parsed as any).clean_title) {
+            try {
+              const searchTitle = (parsed as any).clean_title;
+              const searchYear = parsed.year;
+              console.log(`  TMDB not found, searching IMDB/OMDB for: "${searchTitle}" (${searchYear || 'no year'})`);
+              const imdbResult = await imdbClient.searchMovie(searchTitle, searchYear);
+              if (imdbResult) {
+                imdbId = imdbResult.imdbId;
+                console.log(`  Found IMDB ID ${imdbId} via OMDB search: ${imdbResult.title} (${imdbResult.year})`);
+                needsAttention = true; // Mark as attention needed since no TMDB match
+              }
+            } catch (error) {
+              console.error(`  IMDB/OMDB search error for "${(parsed as any).clean_title}":`, error);
+            }
+          }
 
-          // If not allowed, save as IGNORED but still include TMDB info if we found it
+          // If not allowed, save as IGNORED but still include TMDB/IMDB info if we found it
           if (!allowed) {
+            const releaseStatus = needsAttention ? 'ATTENTION_NEEDED' : status;
             const release: Omit<Release, 'id'> = {
               ...parsed,
-              status,
+              status: releaseStatus,
               tmdb_id: tmdbId,
               tmdb_title: tmdbTitle,
               tmdb_original_language: tmdbOriginalLanguage,
+              imdb_id: imdbId,
               last_checked_at: new Date().toISOString(),
             };
             releasesModel.upsert(release);
+            if (needsAttention) {
+              console.log(`  Marked as ATTENTION_NEEDED (IMDB ID found but no TMDB match)`);
+            }
             ignoredCount++;
             continue;
           }
@@ -196,6 +225,23 @@ export async function fetchAndProcessFeeds(): Promise<void> {
               console.error(`  TMDB API search error for "${(parsed as any).clean_title}":`, error);
             }
           }
+          
+          // If TMDB search still didn't find a match, try IMDB/OMDB search (for allowed releases)
+          if (!tmdbId && (parsed as any).clean_title) {
+            try {
+              const searchTitle = (parsed as any).clean_title;
+              const searchYear = parsed.year;
+              console.log(`  TMDB not found, searching IMDB/OMDB for: "${searchTitle}" (${searchYear || 'no year'})`);
+              const imdbResult = await imdbClient.searchMovie(searchTitle, searchYear);
+              if (imdbResult) {
+                imdbId = imdbResult.imdbId;
+                console.log(`  Found IMDB ID ${imdbId} via OMDB search: ${imdbResult.title} (${imdbResult.year})`);
+                needsAttention = true; // Mark as attention needed since no TMDB match
+              }
+            } catch (error) {
+              console.error(`  IMDB/OMDB search error for "${(parsed as any).clean_title}":`, error);
+            }
+          }
 
           // If TMDB ID lookup didn't work, try searching by title
           if (!radarrMovie || !radarrMovie.id) {
@@ -208,21 +254,25 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             const lookupResults = await radarrClient.lookupMovie(searchTerm);
             
             if (lookupResults.length === 0) {
-              // No movie found in Radarr - mark as NEW
-              // But first, try to get TMDB ID from lookup results if available
-                  const release: Omit<Release, 'id'> = {
-                    ...parsed,
-                    status: 'NEW',
-                    tmdb_id: tmdbId || (parsed as any).tmdb_id, // Use TMDB ID from API search or RSS
-                    tmdb_title: tmdbTitle,
-                    tmdb_original_language: tmdbOriginalLanguage,
-                    last_checked_at: new Date().toISOString(),
-                  };
-                  releasesModel.upsert(release);
-                  newCount++;
-                  processedCount++;
-                  continue;
-                }
+              // No movie found in Radarr - mark as NEW or ATTENTION_NEEDED
+              const releaseStatus = needsAttention ? 'ATTENTION_NEEDED' : 'NEW';
+              const release: Omit<Release, 'id'> = {
+                ...parsed,
+                status: releaseStatus,
+                tmdb_id: tmdbId || (parsed as any).tmdb_id, // Use TMDB ID from API search or RSS
+                tmdb_title: tmdbTitle,
+                tmdb_original_language: tmdbOriginalLanguage,
+                imdb_id: imdbId,
+                last_checked_at: new Date().toISOString(),
+              };
+              releasesModel.upsert(release);
+              if (needsAttention) {
+                console.log(`  Marked as ATTENTION_NEEDED (IMDB ID found but no TMDB match)`);
+              }
+              newCount++;
+              processedCount++;
+              continue;
+            }
 
             // Use first lookup result
             lookupResult = lookupResults[0];
@@ -230,16 +280,21 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           }
 
           if (!radarrMovie || !radarrMovie.id) {
-            // Movie not in Radarr - mark as NEW
+            // Movie not in Radarr - mark as NEW or ATTENTION_NEEDED
+            const releaseStatus = needsAttention ? 'ATTENTION_NEEDED' : 'NEW';
             const release: Omit<Release, 'id'> = {
               ...parsed,
-              status: 'NEW',
+              status: releaseStatus,
               tmdb_id: tmdbId || lookupResult?.tmdbId,
               tmdb_title: tmdbTitle || lookupResult?.title,
               tmdb_original_language: tmdbOriginalLanguage || lookupResult?.originalLanguage?.name,
+              imdb_id: imdbId,
               last_checked_at: new Date().toISOString(),
             };
             releasesModel.upsert(release);
+            if (needsAttention) {
+              console.log(`  Marked as ATTENTION_NEEDED (IMDB ID found but no TMDB match)`);
+            }
             newCount++;
             processedCount++;
             continue;
@@ -422,10 +477,11 @@ export async function fetchAndProcessFeeds(): Promise<void> {
 
                   const release: any = {
                     ...parsed,
-                    status,
+                    status: releaseStatus,
                     tmdb_id: tmdbId || lookupResult.tmdbId,
                     tmdb_title: tmdbTitle || lookupResult.title,
                     tmdb_original_language: tmdbOriginalLanguage || originalLang,
+                    imdb_id: imdbId,
             is_dubbed: isDubbed,
             radarr_movie_id: radarrMovie.id,
             radarr_movie_title: radarrMovie.title,

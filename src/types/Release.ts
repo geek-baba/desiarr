@@ -1,4 +1,4 @@
-export type ReleaseStatus = 'NEW' | 'UPGRADE_CANDIDATE' | 'IGNORED' | 'ADDED' | 'UPGRADED';
+export type ReleaseStatus = 'NEW' | 'UPGRADE_CANDIDATE' | 'IGNORED' | 'ADDED' | 'UPGRADED' | 'ATTENTION_NEEDED';
 export type Resolution = '2160p' | '1080p' | '720p' | '480p' | 'UNKNOWN';
 export type Codec = 'x265' | 'HEVC' | 'x264' | 'AVC' | 'UNKNOWN';
 
@@ -21,6 +21,7 @@ export interface Release {
   tmdb_id?: number;
   tmdb_title?: string;
   tmdb_original_language?: string;
+  imdb_id?: string;
   is_dubbed?: boolean;
   audio_languages?: string;
   radarr_movie_id?: number;
