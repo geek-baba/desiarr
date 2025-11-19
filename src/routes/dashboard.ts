@@ -203,11 +203,23 @@ router.get('/', async (req: Request, res: Response) => {
         (r.radarr_movie_id || hasRadarrMatch)
       ));
       
+      // Extract Radarr info from the first release that has existing_file_attributes
+      let radarrInfo: any = null;
+      const releaseWithRadarrInfo = releases.find(r => r.existing_file_attributes);
+      if (releaseWithRadarrInfo && releaseWithRadarrInfo.existing_file_attributes) {
+        try {
+          radarrInfo = JSON.parse(releaseWithRadarrInfo.existing_file_attributes);
+        } catch (e) {
+          console.error('Error parsing existing_file_attributes:', e);
+        }
+      }
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: primaryRelease.radarr_movie_id,
+        radarrInfo, // Add Radarr info to the movie group
         add,
         existing,
         upgrade,
