@@ -449,7 +449,7 @@
         }
       } catch (error) {
         console.error('Error loading Radarr options:', error);
-        alert('Error loading Radarr options: ' + error.message);
+        showToast('Error loading Radarr options: ' + error.message, 'error');
         return null;
       }
     }
