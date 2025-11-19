@@ -242,16 +242,34 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             }
           }
 
-          // If not allowed, save as IGNORED but still include TMDB/IMDB info if we found it
+          // If not allowed, still try to determine Radarr linkage so it shows as "Existing"
           if (!allowed) {
             const releaseStatus = needsAttention ? 'ATTENTION_NEEDED' : status;
-            const release: Omit<Release, 'id'> = {
+            let ignoredRadarrMovie: any = null;
+
+            if (tmdbId) {
+              try {
+                console.log(`  (IGNORED) Checking Radarr for TMDB ID ${tmdbId} to mark as existing`);
+                ignoredRadarrMovie = await radarrClient.getMovie(tmdbId);
+                if (ignoredRadarrMovie && ignoredRadarrMovie.id) {
+                  console.log(`  (IGNORED) Found movie in Radarr: ${ignoredRadarrMovie.title} (ID: ${ignoredRadarrMovie.id})`);
+                }
+              } catch (error) {
+                console.error(`  Radarr lookup error for ignored release (TMDB ${tmdbId}):`, error);
+              }
+            }
+
+            const release: any = {
               ...parsed,
               status: releaseStatus,
               tmdb_id: tmdbId,
               tmdb_title: tmdbTitle,
               tmdb_original_language: tmdbOriginalLanguage,
               imdb_id: imdbId,
+              radarr_movie_id: ignoredRadarrMovie?.id || null,
+              radarr_movie_title: ignoredRadarrMovie?.title || null,
+              existing_size_mb: ignoredRadarrMovie?.movieFile ? ignoredRadarrMovie.movieFile.size / (1024 * 1024) : undefined,
+              existing_file_path: ignoredRadarrMovie?.movieFile?.relativePath || null,
               last_checked_at: new Date().toISOString(),
             };
             releasesModel.upsert(release);
