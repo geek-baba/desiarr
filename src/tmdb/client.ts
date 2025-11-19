@@ -50,6 +50,21 @@ class TMDBClient {
       const response = await this.client.get<TMDBSearchResponse>('/search/movie', { params });
       
       if (response.data.results && response.data.results.length > 0) {
+        // If we have a year, prefer results that match the year exactly
+        if (year) {
+          const yearMatch = response.data.results.find(movie => {
+            if (movie.release_date) {
+              const releaseYear = new Date(movie.release_date).getFullYear();
+              return releaseYear === year;
+            }
+            return false;
+          });
+          if (yearMatch) {
+            return yearMatch;
+          }
+        }
+        
+        // Return first result
         return response.data.results[0];
       }
       

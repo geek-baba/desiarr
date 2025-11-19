@@ -78,10 +78,30 @@ export async function fetchAndProcessFeeds(): Promise<void> {
               console.log(`  Searching TMDB API for: "${searchTitle}" (${searchYear || 'no year'})`);
               const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
               if (tmdbMovie) {
-                tmdbId = tmdbMovie.id;
-                tmdbTitle = tmdbMovie.title;
-                tmdbOriginalLanguage = tmdbMovie.original_language;
-                console.log(`  Found TMDB ID ${tmdbId} via API search: ${tmdbTitle}`);
+                // Validate the match: check if year matches (if provided) and title similarity
+                let isValidMatch = true;
+                if (searchYear && tmdbMovie.release_date) {
+                  const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                  if (releaseYear !== searchYear) {
+                    console.log(`  TMDB search result year mismatch: expected ${searchYear}, got ${releaseYear} for "${tmdbMovie.title}"`);
+                    isValidMatch = false;
+                  }
+                }
+                
+                // For very short titles (like "x & y"), be more strict about matching
+                if (searchTitle.length <= 5 && tmdbMovie.title.toLowerCase() !== searchTitle.toLowerCase()) {
+                  console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
+                  // Still accept it if year matches, but log the mismatch
+                }
+                
+                if (isValidMatch) {
+                  tmdbId = tmdbMovie.id;
+                  tmdbTitle = tmdbMovie.title;
+                  tmdbOriginalLanguage = tmdbMovie.original_language;
+                  console.log(`  Found TMDB ID ${tmdbId} via API search: ${tmdbTitle}`);
+                } else {
+                  console.log(`  Rejected TMDB search result due to validation failure`);
+                }
               }
             } catch (error) {
               console.error(`  TMDB API search error for "${(parsed as any).clean_title}":`, error);
@@ -133,23 +153,43 @@ export async function fetchAndProcessFeeds(): Promise<void> {
               console.log(`  Searching TMDB API for: "${searchTitle}" (${searchYear || 'no year'})`);
               const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
               if (tmdbMovie) {
-                tmdbId = tmdbMovie.id;
-                tmdbTitle = tmdbMovie.title;
-                tmdbOriginalLanguage = tmdbMovie.original_language;
-                console.log(`  Found TMDB ID ${tmdbId} via API search: ${tmdbTitle}`);
-                
-                // Try Radarr lookup again with the TMDB ID we just found
-                if (!radarrMovie || !radarrMovie.id) {
-                  radarrMovie = await radarrClient.getMovie(tmdbId);
-                  if (radarrMovie && radarrMovie.id) {
-                    console.log(`  Found movie in Radarr by TMDB ID (from API): ${radarrMovie.title} (ID: ${radarrMovie.id})`);
-                    lookupResult = {
-                      tmdbId: radarrMovie.tmdbId,
-                      title: radarrMovie.title,
-                      year: radarrMovie.year,
-                      originalLanguage: radarrMovie.originalLanguage,
-                    };
+                // Validate the match: check if year matches (if provided) and title similarity
+                let isValidMatch = true;
+                if (searchYear && tmdbMovie.release_date) {
+                  const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                  if (releaseYear !== searchYear) {
+                    console.log(`  TMDB search result year mismatch: expected ${searchYear}, got ${releaseYear} for "${tmdbMovie.title}"`);
+                    isValidMatch = false;
                   }
+                }
+                
+                // For very short titles (like "x & y"), be more strict about matching
+                if (searchTitle.length <= 5 && tmdbMovie.title.toLowerCase() !== searchTitle.toLowerCase()) {
+                  console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
+                  // Still accept it if year matches, but log the mismatch
+                }
+                
+                if (isValidMatch) {
+                  tmdbId = tmdbMovie.id;
+                  tmdbTitle = tmdbMovie.title;
+                  tmdbOriginalLanguage = tmdbMovie.original_language;
+                  console.log(`  Found TMDB ID ${tmdbId} via API search: ${tmdbTitle}`);
+                  
+                  // Try Radarr lookup again with the TMDB ID we just found
+                  if (!radarrMovie || !radarrMovie.id) {
+                    radarrMovie = await radarrClient.getMovie(tmdbId);
+                    if (radarrMovie && radarrMovie.id) {
+                      console.log(`  Found movie in Radarr by TMDB ID (from API): ${radarrMovie.title} (ID: ${radarrMovie.id})`);
+                      lookupResult = {
+                        tmdbId: radarrMovie.tmdbId,
+                        title: radarrMovie.title,
+                        year: radarrMovie.year,
+                        originalLanguage: radarrMovie.originalLanguage,
+                      };
+                    }
+                  }
+                } else {
+                  console.log(`  Rejected TMDB search result due to validation failure`);
                 }
               }
             } catch (error) {

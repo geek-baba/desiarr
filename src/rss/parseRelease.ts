@@ -63,9 +63,22 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   // Extract clean movie title (remove quality info, year, etc.)
   // Try to get just the movie name part before the year and quality info
   let cleanTitle = sanitizedTitle;
-  cleanTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*$/, ''); // Remove year and everything after
-  cleanTitle = cleanTitle.replace(/\s*\(.*?\)\s*$/, ''); // Remove parenthetical info at end
-  cleanTitle = cleanTitle.trim();
+  
+  // Remove parenthetical info first (like "(2025)")
+  cleanTitle = cleanTitle.replace(/\s*\([^)]*\)\s*/g, ' ');
+  
+  // Remove year and everything after it
+  cleanTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*$/, '');
+  
+  // Remove any remaining parenthetical info at the end
+  cleanTitle = cleanTitle.replace(/\s*\(.*?\)\s*$/, '');
+  
+  // Normalize "and" to "&" for better matching (e.g., "x and y" -> "x & y")
+  // This helps match titles like "X & Y" in TMDB
+  cleanTitle = cleanTitle.replace(/\s+and\s+/gi, ' & ');
+  
+  // Clean up extra whitespace
+  cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
 
   return {
     guid: item.guid || item.link,
