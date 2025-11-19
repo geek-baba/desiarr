@@ -120,6 +120,21 @@
       </div>
     </div>
 
+    <!-- Maintenance Section -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+      <h3 class="text-xl font-semibold mb-4">Maintenance</h3>
+      <p class="text-sm text-gray-700 mb-4">
+        Backfill Radarr links for any releases that already have TMDB IDs but were imported before Radarr matching existed.
+        This is useful when older items (like <em>Ujda Chaman</em>) still show an "Add" action even though they exist in Radarr.
+      </p>
+      <div class="flex items-center gap-4">
+        <button id="backfillRadarrButton" onclick="runBackfillRadarr()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded">
+          Backfill Radarr Links
+        </button>
+        <span id="backfillRadarrStatus" class="text-sm text-gray-600"></span>
+      </div>
+    </div>
+
     <!-- Quality Settings Section -->
     <div class="bg-white rounded-lg shadow p-6">
       <h3 class="text-xl font-semibold mb-4">Quality Settings</h3>
@@ -446,6 +461,39 @@
         }
       } catch (error) {
         alert('Error: ' + error.message);
+      }
+    }
+
+    async function runBackfillRadarr() {
+      if (!confirm('Backfill Radarr links for all releases missing them?')) {
+        return;
+      }
+
+      const button = document.getElementById('backfillRadarrButton');
+      const statusEl = document.getElementById('backfillRadarrStatus');
+
+      button.disabled = true;
+      button.textContent = 'Running...';
+      statusEl.textContent = 'Backfilling...';
+      statusEl.className = 'text-sm text-gray-600';
+
+      try {
+        const res = await fetch('/settings/maintenance/backfill-radarr', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          const summary = data.summary;
+          statusEl.textContent = `Updated ${summary.updated}/${summary.totalCandidates} releases. Not found: ${summary.notFound}, Errors: ${summary.errors.length}`;
+          statusEl.className = 'text-sm text-green-600';
+        } else {
+          statusEl.textContent = 'Error: ' + (data.error || 'Unknown error');
+          statusEl.className = 'text-sm text-red-600';
+        }
+      } catch (error) {
+        statusEl.textContent = 'Error: ' + error.message;
+        statusEl.className = 'text-sm text-red-600';
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Backfill Radarr Links';
       }
     }
   </script>

@@ -3,6 +3,7 @@ import { feedsModel } from '../models/feeds';
 import { settingsModel } from '../models/settings';
 import { QualitySettings } from '../types/QualitySettings';
 import { fetchAndProcessFeeds } from '../rss/fetchFeeds';
+import { backfillRadarrLinks } from '../tasks/backfillRadarr';
 
 const router = Router();
 
@@ -160,6 +161,16 @@ router.post('/omdb-api-key', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Save OMDB API key error:', error);
     res.status(500).json({ error: 'Failed to save OMDB API key' });
+  }
+});
+
+router.post('/maintenance/backfill-radarr', async (_req: Request, res: Response) => {
+  try {
+    const summary = await backfillRadarrLinks();
+    res.json({ success: true, summary });
+  } catch (error) {
+    console.error('Backfill Radarr links error:', error);
+    res.status(500).json({ error: 'Failed to backfill Radarr links' });
   }
 });
 
