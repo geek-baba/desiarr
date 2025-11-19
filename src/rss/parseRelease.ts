@@ -25,8 +25,8 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   const sanitizedTitle = sanitizeTitle(title);
 
   // Try to extract year from title
-  const yearMatch = title.match(/\b(19|20)\d{2}\b/);
-  const year = yearMatch ? parseInt(yearMatch[0], 10) : undefined;
+  const yearMatchForExtraction = title.match(/\b(19|20)\d{2}\b/);
+  const year = yearMatchForExtraction ? parseInt(yearMatchForExtraction[0], 10) : undefined;
 
   // Try to extract TMDB ID and IMDB ID from description
   let tmdbId: number | undefined;
