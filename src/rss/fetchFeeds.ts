@@ -178,7 +178,7 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             }
           }
           
-          // If TMDB search didn't find a match, try IMDB/OMDB search, then Google search
+          // If TMDB search didn't find a match, try IMDB/OMDB search, then DuckDuckGo search
           if (!tmdbId && (parsed as any).clean_title) {
             try {
               const searchTitle = (parsed as any).clean_title;
@@ -192,8 +192,15 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                 console.log(`  Found IMDB ID ${imdbId} via OMDB search: ${imdbResult.title} (${imdbResult.year})`);
                 needsAttention = true; // Mark as attention needed since no TMDB match
               } else {
-                // If OMDB didn't find it, try Google search as fallback
-                console.log(`  OMDB not found, searching Google for IMDB ID: "${searchTitle}" (${searchYear || 'no year'})`);
+                // If OMDB didn't find it, try DuckDuckGo search as fallback
+                // Use "clean title yyyy tmdb" format for web search
+                let webSearchQuery = searchTitle;
+                if (searchYear) {
+                  webSearchQuery = `${searchTitle} ${searchYear} tmdb`;
+                } else {
+                  webSearchQuery = `${searchTitle} tmdb`;
+                }
+                console.log(`  OMDB not found, searching DuckDuckGo for IMDB ID: "${webSearchQuery}"`);
                 const googleImdbId = await imdbClient.searchGoogleForImdbId(searchTitle, searchYear);
                 if (googleImdbId) {
                   imdbId = googleImdbId;
@@ -251,10 +258,14 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           // If we still don't have TMDB ID, try TMDB API search (for allowed releases)
           if (!tmdbId && tmdbApiKey && (parsed as any).clean_title) {
             try {
-              const searchTitle = (parsed as any).clean_title;
+              // Use "clean title yyyy" format for TMDB search
+              let searchTitle = (parsed as any).clean_title;
               const searchYear = parsed.year;
-              console.log(`  Searching TMDB API for: "${searchTitle}" (${searchYear || 'no year'})`);
-              const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
+              if (searchYear) {
+                searchTitle = `${searchTitle} ${searchYear}`;
+              }
+              console.log(`  Searching TMDB API for: "${searchTitle}"`);
+              const tmdbMovie = await tmdbClient.searchMovie((parsed as any).clean_title, searchYear);
               if (tmdbMovie) {
                 // Validate the match: check if year matches (if provided) and title similarity
                 let isValidMatch = true;
@@ -317,7 +328,7 @@ export async function fetchAndProcessFeeds(): Promise<void> {
             }
           }
           
-          // If TMDB search still didn't find a match, try IMDB/OMDB search, then Google search (for allowed releases)
+          // If TMDB search still didn't find a match, try IMDB/OMDB search, then DuckDuckGo search (for allowed releases)
           if (!tmdbId && (parsed as any).clean_title) {
             try {
               const searchTitle = (parsed as any).clean_title;
@@ -331,8 +342,15 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                 console.log(`  Found IMDB ID ${imdbId} via OMDB search: ${imdbResult.title} (${imdbResult.year})`);
                 needsAttention = true; // Mark as attention needed since no TMDB match
               } else {
-                // If OMDB didn't find it, try Google search as fallback
-                console.log(`  OMDB not found, searching Google for IMDB ID: "${searchTitle}" (${searchYear || 'no year'})`);
+                // If OMDB didn't find it, try DuckDuckGo search as fallback
+                // Use "clean title yyyy tmdb" format for web search
+                let webSearchQuery = searchTitle;
+                if (searchYear) {
+                  webSearchQuery = `${searchTitle} ${searchYear} tmdb`;
+                } else {
+                  webSearchQuery = `${searchTitle} tmdb`;
+                }
+                console.log(`  OMDB not found, searching DuckDuckGo for IMDB ID: "${webSearchQuery}"`);
                 const googleImdbId = await imdbClient.searchGoogleForImdbId(searchTitle, searchYear);
                 if (googleImdbId) {
                   imdbId = googleImdbId;
