@@ -96,6 +96,34 @@ class TMDBClient {
     }
   }
 
+  /**
+   * Find TMDB movie by IMDB ID
+   */
+  async findMovieByImdbId(imdbId: string): Promise<TMDBMovie | null> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping search');
+      return null;
+    }
+
+    try {
+      const response = await this.client.get<any>(`/find/${imdbId}`, {
+        params: {
+          api_key: this.apiKey,
+          external_source: 'imdb_id',
+        },
+      });
+      
+      if (response.data.movie_results && response.data.movie_results.length > 0) {
+        return response.data.movie_results[0];
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('TMDB find by IMDB ID error:', error);
+      return null;
+    }
+  }
+
   getPosterUrl(posterPath: string | null | undefined): string | null {
     if (!posterPath) return null;
     return `https://image.tmdb.org/t/p/w500${posterPath}`;

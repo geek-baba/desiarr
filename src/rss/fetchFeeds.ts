@@ -71,13 +71,55 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           let status: Release['status'] = allowed ? 'NEW' : 'IGNORED';
           
           // Try to get TMDB ID even for IGNORED releases (for better matching)
+          // Priority: 1. RSS feed TMDB ID, 2. RSS feed IMDB ID -> TMDB lookup, 3. Clean title search
           let tmdbId = (parsed as any).tmdb_id;
           let tmdbTitle: string | undefined;
           let tmdbOriginalLanguage: string | undefined;
           let imdbId: string | undefined;
           let needsAttention = false;
           
-          // If we don't have a TMDB ID but have a title, try TMDB API search
+          // Step 1: If RSS feed has IMDB ID but no TMDB ID, try to get TMDB ID from IMDB ID using TMDB API
+          if (!tmdbId && (parsed as any).imdb_id && tmdbApiKey) {
+            imdbId = (parsed as any).imdb_id;
+            console.log(`  Found IMDB ID ${imdbId} from RSS feed, looking up TMDB ID...`);
+            try {
+              const tmdbMovie = await tmdbClient.findMovieByImdbId(imdbId);
+              if (tmdbMovie) {
+                tmdbId = tmdbMovie.id;
+                tmdbTitle = tmdbMovie.title;
+                tmdbOriginalLanguage = tmdbMovie.original_language;
+                console.log(`  Found TMDB ID ${tmdbId} from IMDB ID ${imdbId}: ${tmdbTitle}`);
+              } else {
+                console.log(`  TMDB ID not found for IMDB ID ${imdbId}, will mark as attention needed`);
+                needsAttention = true;
+              }
+            } catch (error) {
+              console.error(`  Error looking up TMDB from IMDB ID ${imdbId}:`, error);
+              needsAttention = true;
+            }
+          } else if (!tmdbId && (parsed as any).imdb_id) {
+            // IMDB ID found but no TMDB API key
+            imdbId = (parsed as any).imdb_id;
+            needsAttention = true;
+            console.log(`  Found IMDB ID ${imdbId} from RSS feed but no TMDB API key configured`);
+          }
+          
+          // Step 2: If we have TMDB ID from RSS feed, use it directly
+          if (tmdbId) {
+            console.log(`  Using TMDB ID ${tmdbId} from RSS feed for: ${parsed.title}`);
+            try {
+              const movie = await radarrClient.getMovie(tmdbId);
+              if (movie) {
+                tmdbTitle = movie.title;
+                tmdbOriginalLanguage = movie.originalLanguage?.name;
+                console.log(`  Verified TMDB ID ${tmdbId}: ${tmdbTitle}`);
+              }
+            } catch (error) {
+              console.error(`  Error verifying TMDB ID ${tmdbId}:`, error);
+            }
+          }
+          
+          // Step 3: If we don't have a TMDB ID but have a clean title, try TMDB API search
           if (!tmdbId && tmdbApiKey && (parsed as any).clean_title) {
             try {
               const searchTitle = (parsed as any).clean_title;
@@ -96,9 +138,26 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                 }
                 
                 // For very short titles (like "x & y"), be more strict about matching
-                if (searchTitle.length <= 5 && tmdbMovie.title.toLowerCase() !== searchTitle.toLowerCase()) {
-                  console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
-                  // Still accept it if year matches, but log the mismatch
+                // Require exact title match OR year match for short titles
+                if (searchTitle.length <= 5) {
+                  const searchTitleLower = searchTitle.toLowerCase();
+                  const resultTitleLower = tmdbMovie.title.toLowerCase();
+                  const titleMatches = searchTitleLower === resultTitleLower || 
+                                      resultTitleLower.includes(searchTitleLower) ||
+                                      searchTitleLower.includes(resultTitleLower);
+                  
+                  if (!titleMatches) {
+                    console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
+                    // For short titles, require both year AND title similarity
+                    if (!searchYear || !tmdbMovie.release_date) {
+                      isValidMatch = false;
+                    } else {
+                      const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                      if (releaseYear !== searchYear) {
+                        isValidMatch = false;
+                      }
+                    }
+                  }
                 }
                 
                 if (isValidMatch) {
@@ -204,9 +263,26 @@ export async function fetchAndProcessFeeds(): Promise<void> {
                 }
                 
                 // For very short titles (like "x & y"), be more strict about matching
-                if (searchTitle.length <= 5 && tmdbMovie.title.toLowerCase() !== searchTitle.toLowerCase()) {
-                  console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
-                  // Still accept it if year matches, but log the mismatch
+                // Require exact title match OR year match for short titles
+                if (searchTitle.length <= 5) {
+                  const searchTitleLower = searchTitle.toLowerCase();
+                  const resultTitleLower = tmdbMovie.title.toLowerCase();
+                  const titleMatches = searchTitleLower === resultTitleLower || 
+                                      resultTitleLower.includes(searchTitleLower) ||
+                                      searchTitleLower.includes(resultTitleLower);
+                  
+                  if (!titleMatches) {
+                    console.log(`  TMDB search result title mismatch for short query: "${searchTitle}" vs "${tmdbMovie.title}"`);
+                    // For short titles, require both year AND title similarity
+                    if (!searchYear || !tmdbMovie.release_date) {
+                      isValidMatch = false;
+                    } else {
+                      const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                      if (releaseYear !== searchYear) {
+                        isValidMatch = false;
+                      }
+                    }
+                  }
                 }
                 
                 if (isValidMatch) {

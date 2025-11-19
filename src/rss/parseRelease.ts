@@ -28,9 +28,11 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   const yearMatch = title.match(/\b(19|20)\d{2}\b/);
   const year = yearMatch ? parseInt(yearMatch[0], 10) : undefined;
 
-  // Try to extract TMDB ID from description
+  // Try to extract TMDB ID and IMDB ID from description
   let tmdbId: number | undefined;
+  let imdbId: string | undefined;
   const description = item.description || item.content || '';
+  
   // Try multiple patterns to find TMDB ID
   const tmdbMatch = description.match(/themoviedb\.org\/movie\/(\d+)/i) || 
                     description.match(/TMDB\s+Link.*?(\d{4,})/i) ||
@@ -38,6 +40,15 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   if (tmdbMatch) {
     tmdbId = parseInt(tmdbMatch[1], 10);
     console.log(`  Extracted TMDB ID ${tmdbId} from RSS feed for: ${title}`);
+  }
+  
+  // Try to extract IMDB ID from description
+  const imdbMatch = description.match(/imdb\.com\/title\/(tt\d{7,})/i) ||
+                    description.match(/IMDB\s+Link.*?(tt\d{7,})/i) ||
+                    description.match(/IMDB.*?(tt\d{7,})/i);
+  if (imdbMatch) {
+    imdbId = imdbMatch[1];
+    console.log(`  Extracted IMDB ID ${imdbId} from RSS feed for: ${title}`);
   }
 
   // Try to extract size from description (RSS feeds often have size in description)
@@ -61,35 +72,55 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   }
 
   // Extract clean movie title (remove quality info, year, etc.)
-  // Try to get just the movie name part before the year and quality info
-  let cleanTitle = sanitizedTitle;
+  // Strategy: Find year (including in parentheses), discard everything after it
+  // Example: "X.and.Y.(2025).2160p..." -> "X and Y"
+  // Example: "Uruttu Uruttu 2025 1080p..." -> "Uruttu Uruttu"
   
-  // Remove parenthetical info first (like "(2025)")
-  cleanTitle = cleanTitle.replace(/\s*\([^)]*\)\s*/g, ' ');
+  // First, replace dots and hyphens with spaces for easier matching
+  let cleanTitle = sanitizedTitle.replace(/[._-]+/g, ' ');
   
-  // Remove quality/resolution patterns (2160p, 1080p, etc.)
-  cleanTitle = cleanTitle.replace(/\b(2160p|1080p|720p|480p|4k|uhd|fhd|hd|sd)\b/gi, '');
+  // Find the year position - can be in format: (2025), 2025, or just digits
+  // Try to find year in parentheses first, then standalone year
+  let yearMatch = cleanTitle.match(/\s*\([^)]*(19|20)\d{2}[^)]*\)/i);
+  let yearIndex: number | undefined;
   
-  // Remove codec patterns
-  cleanTitle = cleanTitle.replace(/\b(x264|x265|h264|h265|hevc|avc|h\.?264|h\.?265)\b/gi, '');
+  if (yearMatch && yearMatch.index !== undefined) {
+    // Found year in parentheses - extract everything before the opening parenthesis
+    yearIndex = yearMatch.index;
+  } else {
+    // Try to find standalone year
+    yearMatch = cleanTitle.match(/\b(19|20)\d{2}\b/);
+    if (yearMatch && yearMatch.index !== undefined) {
+      yearIndex = yearMatch.index;
+    }
+  }
   
-  // Remove source tags and quality indicators (handle hyphens: web-dl, web-dl, etc.)
-  cleanTitle = cleanTitle.replace(/\b(amzn|netflix|nf|jc|jiocinema|zee5|dsnp|disney|hotstar|hs|ss|web[- ]?dl|webdl|webrip|bluray|dvdrip|dus|dtr|khn)\b/gi, '');
+  if (yearIndex !== undefined) {
+    // Extract everything before the year (including parentheses if found)
+    cleanTitle = cleanTitle.substring(0, yearIndex).trim();
+  } else {
+    // No year found, remove quality patterns instead as fallback
+    // Remove quality/resolution patterns (2160p, 1080p, etc.)
+    cleanTitle = cleanTitle.replace(/\b(2160p|1080p|720p|480p|4k|uhd|fhd|hd|sd)\b/gi, '');
+    
+    // Remove codec patterns
+    cleanTitle = cleanTitle.replace(/\b(x264|x265|h264|h265|hevc|avc|h\.?264|h\.?265)\b/gi, '');
+    
+    // Remove source tags and quality indicators
+    cleanTitle = cleanTitle.replace(/\b(amzn|netflix|nf|jc|jiocinema|zee5|dsnp|disney|hotstar|hs|ss|web[- ]?dl|webdl|webrip|bluray|dvdrip|dus|dtr|khn)\b/gi, '');
+    
+    // Remove audio patterns
+    cleanTitle = cleanTitle.replace(/\b(dd\+?|ddp|eac3|ac3|atmos|truehd|dts|aac|stereo|5\s*\.?\s*1|7\s*\.?\s*1|2\s*\.?\s*0)\b/gi, '');
+    
+    // Remove common release group patterns
+    cleanTitle = cleanTitle.replace(/\b([a-z]{2,4}(?:[-_][a-z]{2,4})?)\b/gi, '');
+    
+    // Remove any remaining numbers that might be part of quality info
+    cleanTitle = cleanTitle.replace(/\b\d{3,}\b/g, '');
+  }
   
-  // Remove audio patterns
-  cleanTitle = cleanTitle.replace(/\b(dd\+?|ddp|eac3|ac3|atmos|truehd|dts|aac|stereo|5\s*\.?\s*1|7\s*\.?\s*1|2\s*\.?\s*0)\b/gi, '');
-  
-  // Remove year and everything after it (if year appears later in the string)
-  cleanTitle = cleanTitle.replace(/\b(19|20)\d{2}\b.*$/, '');
-  
-  // Remove any remaining parenthetical info at the end
+  // Remove any remaining parenthetical info at the end (shouldn't happen if year was found, but just in case)
   cleanTitle = cleanTitle.replace(/\s*\(.*?\)\s*$/, '');
-  
-  // Remove common release group patterns (usually at the end, handle hyphens)
-  cleanTitle = cleanTitle.replace(/\b([a-z]{2,4}(?:[-_][a-z]{2,4})?)\b/gi, '');
-  
-  // Remove any remaining numbers that might be part of quality info
-  cleanTitle = cleanTitle.replace(/\b\d{3,}\b/g, '');
   
   // Remove standalone hyphens and dashes
   cleanTitle = cleanTitle.replace(/\s*[-–—]\s*/g, ' ');
@@ -111,6 +142,7 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
     normalized_title: normalized,
     year,
     tmdb_id: tmdbId,
+    imdb_id: imdbId, // Add IMDB ID from RSS feed
     source_site: sourceSite,
     feed_id: feedId,
     link: item.link,
