@@ -195,9 +195,10 @@ router.get('/', async (req: Request, res: Response) => {
       ));
       const upgradeGuids = new Set(upgrade.map(r => r.guid));
 
+      // Add releases: those without radarr_movie_id (includes NEW and ATTENTION_NEEDED)
       const add = hasRadarrMatch
         ? []
-        : releases.filter(r => !r.radarr_movie_id);
+        : releases.filter(r => !r.radarr_movie_id && (r.status === 'NEW' || r.status === 'ATTENTION_NEEDED'));
 
       const existing = releases.filter(r => (
         !upgradeGuids.has(r.guid) &&

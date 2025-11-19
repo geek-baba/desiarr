@@ -215,7 +215,12 @@
                         <% } %>
                       </td>
                       <td class="px-4 py-3 text-sm">
-                        <span class="px-2 py-1 bg-green-200 text-green-800 rounded text-xs uppercase">NEW</span>
+                        <% if (release.status === 'ATTENTION_NEEDED') { %>
+                          <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-xs uppercase">ATTENTION NEEDED</span>
+                          <div class="text-xs text-gray-500 mt-1">(No TMDB match)</div>
+                        <% } else { %>
+                          <span class="px-2 py-1 bg-green-200 text-green-800 rounded text-xs uppercase">NEW</span>
+                        <% } %>
                       </td>
                       <td class="px-4 py-3 text-sm space-x-2">
                         <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs">

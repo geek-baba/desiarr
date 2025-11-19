@@ -32,13 +32,8 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Release not found' });
     }
 
-    // Allow adding if status is NEW or ATTENTION_NEEDED (both are "new" movies not in Radarr)
-    if (release.status !== 'NEW' && release.status !== 'ATTENTION_NEEDED') {
-      return res.status(400).json({ 
-        error: `Release is not in NEW status (current status: ${release.status})` 
-      });
-    }
-    
+    console.log(`Add movie request for release ID ${req.params.id}: status=${release.status}, tmdb_id=${release.tmdb_id}, radarr_movie_id=${release.radarr_movie_id}`);
+
     // Also check if movie already exists in Radarr
     if (release.radarr_movie_id) {
       return res.status(400).json({ 
@@ -46,7 +41,16 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       });
     }
 
-    if (!release.tmdb_id) {
+    // Allow adding if status is NEW or ATTENTION_NEEDED (both are "new" movies not in Radarr)
+    if (release.status !== 'NEW' && release.status !== 'ATTENTION_NEEDED') {
+      return res.status(400).json({ 
+        error: `Release is not in NEW or ATTENTION_NEEDED status (current status: ${release.status})` 
+      });
+    }
+
+    // For ATTENTION_NEEDED releases, we might not have a TMDB ID, so allow adding without it
+    // The Radarr lookup will try to find it
+    if (!release.tmdb_id && release.status !== 'ATTENTION_NEEDED') {
       return res.status(400).json({ error: 'TMDB ID not found' });
     }
 
