@@ -22,15 +22,11 @@ class RadarrClient {
         headers: {
           'X-Api-Key': radarrApiKey,
         },
+        timeout: 30000, // 30 second timeout
       });
     } else {
-      // Create a dummy client that will fail gracefully
-      this.client = axios.create({
-        baseURL: '',
-        headers: {
-          'X-Api-Key': '',
-        },
-      });
+      // Don't create a dummy client - let ensureClient throw an error
+      this.client = null;
     }
   }
 
@@ -40,11 +36,19 @@ class RadarrClient {
   }
 
   private ensureClient(): AxiosInstance {
+    // Always re-initialize to get latest settings
+    this.initializeClient();
+    
     if (!this.client) {
-      this.initializeClient();
-    }
-    if (!this.client) {
-      throw new Error('Radarr client not initialized. Please configure Radarr API URL and Key in Settings.');
+      const allSettings = settingsModel.getAll();
+      const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value;
+      const radarrApiKey = allSettings.find(s => s.key === 'radarr_api_key')?.value;
+      
+      if (!radarrApiUrl || !radarrApiKey) {
+        throw new Error('Radarr API not configured. Please configure Radarr API URL and Key in Settings page.');
+      } else {
+        throw new Error('Radarr client initialization failed. Please check your Radarr API URL and Key in Settings.');
+      }
     }
     return this.client;
   }
@@ -84,10 +88,11 @@ class RadarrClient {
   async getAllMovies(): Promise<RadarrMovie[]> {
     try {
       const response = await this.ensureClient().get<RadarrMovie[]>('/movie');
-      return response.data;
-    } catch (error) {
+      return response.data || [];
+    } catch (error: any) {
       console.error('Radarr get all movies error:', error);
-      return [];
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      throw new Error(`Failed to fetch movies from Radarr: ${errorMessage}`);
     }
   }
 

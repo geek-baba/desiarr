@@ -26,15 +26,19 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
   try {
     console.log('Starting Radarr movies sync...');
     syncProgress.start('radarr', 0);
-    syncProgress.update('Fetching movies from Radarr...', 0);
+    syncProgress.update('Connecting to Radarr...', 0);
     
+    // Update client config in case it changed
+    radarrClient.updateConfig();
+    
+    syncProgress.update('Fetching movies from Radarr...', 0);
     const movies = await radarrClient.getAllMovies();
     stats.totalMovies = movies.length;
 
     console.log(`Found ${movies.length} movies in Radarr`);
     
     if (movies.length === 0) {
-      syncProgress.update('No movies found in Radarr', 0, 0);
+      syncProgress.update('No movies found in Radarr (this might be normal if your Radarr library is empty)', 0, 0);
       syncProgress.complete();
       return stats;
     }
