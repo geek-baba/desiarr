@@ -83,8 +83,13 @@ export async function fetchAndProcessFeeds(): Promise<void> {
           let status: Release['status'] = allowed ? 'NEW' : 'IGNORED';
           
           // Try to get TMDB ID even for IGNORED releases (for better matching)
-          // Priority: 1. RSS feed TMDB ID, 2. RSS feed IMDB ID -> TMDB lookup, 3. Clean title search
-          let tmdbId = (parsed as any).tmdb_id;
+          // Priority: 1. Existing release with manually set TMDB ID (preserve override), 2. RSS feed TMDB ID, 3. RSS feed IMDB ID -> TMDB lookup, 4. Clean title search
+          let tmdbId = existing?.tmdb_id; // Preserve manually overridden TMDB ID
+          if (!tmdbId) {
+            tmdbId = (parsed as any).tmdb_id; // Fall back to RSS feed TMDB ID
+          } else if (existing?.tmdb_id) {
+            console.log(`  Preserving existing TMDB ID ${tmdbId} (manually overridden)`);
+          }
           let tmdbTitle: string | undefined;
           let tmdbOriginalLanguage: string | undefined;
           let imdbId: string | undefined;

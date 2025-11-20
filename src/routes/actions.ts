@@ -192,6 +192,7 @@ router.post('/:id/override-tmdb', async (req: Request, res: Response) => {
 
     // Import tmdbClient
     const tmdbClient = (await import('../tmdb/client')).default;
+    const { parseReleaseFromTitle } = await import('../scoring/parseFromTitle');
     
     // Verify the TMDB ID by fetching movie details
     const tmdbMovie = await tmdbClient.getMovie(parseInt(tmdbId, 10));
@@ -199,12 +200,129 @@ router.post('/:id/override-tmdb', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'TMDB ID not found' });
     }
 
-    // Update the release with the new TMDB ID
-    const updatedRelease: Omit<Release, 'id'> = {
+    // Look up movie in Radarr using the new TMDB ID
+    let radarrMovie = await radarrClient.getMovie(parseInt(tmdbId, 10));
+    let radarrMovieWithHistory = null;
+    let existingFileAttributes = null;
+    let existingFilePath = null;
+    let existingSizeMb = null;
+    let radarrHistory = null;
+
+    if (radarrMovie && radarrMovie.id) {
+      // Get full movie details with history
+      radarrMovieWithHistory = await radarrClient.getMovieWithHistory(radarrMovie.id);
+      const existingFile = radarrMovie.movieFile;
+      existingSizeMb = existingFile ? existingFile.size / (1024 * 1024) : undefined;
+      existingFilePath = existingFile?.relativePath || null;
+
+      // Parse existing file attributes (same logic as fetchFeeds)
+      if (existingFile) {
+        const existingParsed = parseReleaseFromTitle(existingFile.relativePath);
+        
+        // Also try to get info from mediaInfo if available
+        if (existingFile.mediaInfo) {
+          if (existingFile.mediaInfo.videoCodec) {
+            existingParsed.videoCodecFromMediaInfo = existingFile.mediaInfo.videoCodec;
+            if (existingParsed.codec === 'UNKNOWN') {
+              const upper = existingFile.mediaInfo.videoCodec.toUpperCase();
+              if (upper.includes('264') || upper.includes('AVC') || upper.includes('H.264')) {
+                existingParsed.codec = 'x264';
+              } else if (upper.includes('265') || upper.includes('HEVC') || upper.includes('H.265')) {
+                existingParsed.codec = 'x265';
+              }
+            }
+          }
+          if (existingFile.mediaInfo.audioCodec) {
+            existingParsed.audioFromMediaInfo = existingFile.mediaInfo.audioCodec;
+            existingParsed.audioChannelsFromMediaInfo = existingFile.mediaInfo.audioChannels;
+            if (existingParsed.audio === 'Unknown') {
+              const upper = existingFile.mediaInfo.audioCodec.toUpperCase();
+              const channels = existingFile.mediaInfo.audioChannels;
+              if (upper.includes('EAC3') || upper.includes('E-AC-3') || upper.includes('DDP')) {
+                if (channels === 2) existingParsed.audio = 'DDP 2.0';
+                else if (channels === 6) existingParsed.audio = 'DDP 5.1';
+                else if (channels === 8) existingParsed.audio = 'DDP 7.1';
+                else existingParsed.audio = 'DDP';
+              } else if (upper.includes('AC3') || upper.includes('AC-3')) {
+                if (channels === 2) existingParsed.audio = 'DD 2.0';
+                else if (channels === 6) existingParsed.audio = 'DD 5.1';
+                else existingParsed.audio = 'DD';
+              } else if (upper.includes('TRUEHD')) {
+                existingParsed.audio = 'TrueHD';
+              } else if (upper.includes('ATMOS')) {
+                existingParsed.audio = 'Atmos';
+              } else if (upper.includes('AAC')) {
+                if (channels === 2) existingParsed.audio = 'AAC 2.0';
+                else if (channels === 6) existingParsed.audio = 'AAC 5.1';
+                else existingParsed.audio = 'AAC';
+              } else {
+                existingParsed.audio = existingFile.mediaInfo.audioCodec;
+              }
+            }
+          }
+          if (existingFile.mediaInfo.audioLanguages) {
+            existingParsed.audioLanguagesFromMediaInfo = existingFile.mediaInfo.audioLanguages;
+          }
+        }
+
+        // Get last download from history
+        let lastDownload: any = null;
+        if (radarrMovieWithHistory?.history && radarrMovieWithHistory.history.length > 0) {
+          const downloadEvents = radarrMovieWithHistory.history.filter((h: any) => 
+            h.eventType === 'downloadFolderImported' || 
+            h.eventType === 'grabbed' ||
+            h.data?.downloadUrl
+          );
+          if (downloadEvents.length > 0) {
+            downloadEvents.sort((a: any, b: any) => 
+              new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
+            lastDownload = downloadEvents[0];
+          }
+        }
+
+        // Parse last download to get source tag if available
+        let lastDownloadSourceTag = existingParsed?.sourceTag || 'OTHER';
+        if (lastDownload && lastDownload.sourceTitle) {
+          const lastDownloadParsed = parseReleaseFromTitle(lastDownload.sourceTitle);
+          if (lastDownloadParsed.sourceTag && lastDownloadParsed.sourceTag !== 'OTHER') {
+            lastDownloadSourceTag = lastDownloadParsed.sourceTag;
+          }
+        }
+
+        existingFileAttributes = {
+          path: existingFile.relativePath,
+          resolution: existingParsed.resolution,
+          codec: existingParsed.codec,
+          sourceTag: lastDownloadSourceTag,
+          audio: existingParsed.audio,
+          audioFromMediaInfo: existingParsed.audioFromMediaInfo,
+          audioChannelsFromMediaInfo: existingParsed.audioChannelsFromMediaInfo,
+          audioLanguages: existingParsed.audioLanguagesFromMediaInfo,
+          videoCodec: existingParsed.videoCodecFromMediaInfo,
+          sizeMb: existingSizeMb,
+          lastDownload: lastDownload ? {
+            sourceTitle: lastDownload.sourceTitle,
+            date: lastDownload.date,
+            releaseGroup: lastDownload.data?.releaseGroup,
+          } : null,
+        };
+        radarrHistory = radarrMovieWithHistory?.history ? JSON.stringify(radarrMovieWithHistory.history.slice(0, 10)) : null;
+      }
+    }
+
+    // Update the release with the new TMDB ID and all Radarr details
+    const updatedRelease: any = {
       ...release,
       tmdb_id: parseInt(tmdbId, 10),
       tmdb_title: tmdbMovie.title,
       tmdb_original_language: tmdbMovie.original_language,
+      radarr_movie_id: radarrMovie?.id || null,
+      radarr_movie_title: radarrMovie?.title || null,
+      existing_size_mb: existingSizeMb,
+      existing_file_path: existingFilePath,
+      existing_file_attributes: existingFileAttributes ? JSON.stringify(existingFileAttributes) : null,
+      radarr_history: radarrHistory,
       status: release.status === 'ATTENTION_NEEDED' ? 'NEW' : release.status, // Clear attention needed if it was set
     };
     
@@ -212,8 +330,9 @@ router.post('/:id/override-tmdb', async (req: Request, res: Response) => {
 
     res.json({ 
       success: true, 
-      message: `TMDB ID updated to ${tmdbId} (${tmdbMovie.title})`,
+      message: `TMDB ID updated to ${tmdbId} (${tmdbMovie.title})${radarrMovie ? ` - Found in Radarr` : ''}`,
       tmdbTitle: tmdbMovie.title,
+      foundInRadarr: !!radarrMovie,
     });
   } catch (error) {
     console.error('Override TMDB ID error:', error);
