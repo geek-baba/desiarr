@@ -8,7 +8,25 @@ export const settingsModel = {
   },
 
   set: (key: string, value: string): void => {
-    db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+    try {
+      console.log(`SettingsModel.set: Setting key="${key}", value length=${value.length}`);
+      const stmt = db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
+      const result = stmt.run(key, value);
+      console.log(`SettingsModel.set: Result changes=${result.changes}, lastInsertRowid=${result.lastInsertRowid}`);
+      
+      // Verify it was saved
+      const verify = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+      if (verify && verify.value === value) {
+        console.log(`SettingsModel.set: ✓ Verified key="${key}" was saved correctly`);
+      } else {
+        console.error(`SettingsModel.set: ✗ ERROR - Key="${key}" was NOT saved correctly!`);
+        console.error(`  Expected: ${value.substring(0, 50)}...`);
+        console.error(`  Got: ${verify?.value?.substring(0, 50) || 'null'}...`);
+      }
+    } catch (error: any) {
+      console.error(`SettingsModel.set: ERROR saving key="${key}":`, error);
+      throw error;
+    }
   },
 
   getAll: (): Array<{ key: string; value: string }> => {
