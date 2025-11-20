@@ -623,7 +623,9 @@
         sizeBonusEnabled: form.sizeBonusEnabled?.checked || false,
         minSizeIncreasePercentForUpgrade: parseFloat(form.minSizeIncreasePercentForUpgrade.value),
         upgradeThreshold: parseFloat(form.upgradeThreshold.value),
-        pollIntervalMinutes: parseInt(form.pollIntervalMinutes.value, 10)
+        pollIntervalMinutes: parseInt(form.pollIntervalMinutes.value, 10),
+        radarrSyncIntervalHours: parseFloat(form.radarrSyncIntervalHours.value) || 6,
+        rssSyncIntervalHours: parseFloat(form.rssSyncIntervalHours.value) || 1
       };
 
       try {
