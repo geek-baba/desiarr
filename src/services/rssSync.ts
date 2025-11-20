@@ -2,6 +2,9 @@ import Parser from 'rss-parser';
 import db from '../db';
 import { feedsModel } from '../models/feeds';
 import { parseRSSItem } from '../rss/parseRelease';
+import tmdbClient from '../tmdb/client';
+import imdbClient from '../imdb/client';
+import { settingsModel } from '../models/settings';
 
 const parser = new Parser();
 
@@ -31,6 +34,19 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
 
   try {
     console.log('Starting RSS feeds sync...');
+    
+    // Get API keys for TMDB/OMDB lookups
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+    const omdbApiKey = allSettings.find(s => s.key === 'omdb_api_key')?.value;
+    
+    if (tmdbApiKey) {
+      tmdbClient.setApiKey(tmdbApiKey);
+    }
+    if (omdbApiKey) {
+      imdbClient.setApiKey(omdbApiKey);
+    }
+    
     const feeds = feedsModel.getEnabled();
     stats.totalFeeds = feeds.length;
 
@@ -50,16 +66,117 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
         console.log(`Found ${feedData.items.length} items in feed: ${feed.name}`);
         stats.totalItems += feedData.items.length;
 
+        // Process items and enrich with TMDB/IMDB IDs
+        const enrichedItems = [];
+        for (const item of feedData.items) {
+          try {
+            if (!item.title && !item.link) {
+              continue; // Skip items without title or link
+            }
+
+            const parsed = parseRSSItem(item as any, feed.id!, feed.name);
+            let tmdbId = (parsed as any).tmdb_id;
+            let imdbId = (parsed as any).imdb_id;
+            const cleanTitle = (parsed as any).clean_title;
+            const year = parsed.year;
+
+            // Enrich with TMDB/IMDB IDs if missing
+            // Priority: TMDB (primary), IMDB (secondary)
+            
+            // Step 1: If we have IMDB ID but no TMDB ID, try to get TMDB ID from IMDB ID
+            if (!tmdbId && imdbId && tmdbApiKey) {
+              try {
+                console.log(`  Looking up TMDB ID for IMDB ID ${imdbId} (${parsed.title})`);
+                const tmdbMovie = await tmdbClient.findMovieByImdbId(imdbId);
+                if (tmdbMovie) {
+                  tmdbId = tmdbMovie.id;
+                  console.log(`  ✓ Found TMDB ID ${tmdbId} for IMDB ID ${imdbId}`);
+                }
+              } catch (error) {
+                console.log(`  ✗ Failed to find TMDB ID for IMDB ID ${imdbId}:`, error);
+              }
+            }
+
+            // Step 2: If we don't have IMDB ID but have clean title, try OMDB/IMDB search
+            if (!imdbId && cleanTitle && (omdbApiKey || true)) { // OMDB works without key but has rate limits
+              try {
+                console.log(`  Searching IMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
+                const imdbResult = await imdbClient.searchMovie(cleanTitle, year || undefined);
+                if (imdbResult) {
+                  imdbId = imdbResult.imdbId;
+                  console.log(`  ✓ Found IMDB ID ${imdbId} for "${cleanTitle}"`);
+                  
+                  // If we now have IMDB ID but still no TMDB ID, try to get TMDB ID
+                  if (!tmdbId && tmdbApiKey) {
+                    try {
+                      const tmdbMovie = await tmdbClient.findMovieByImdbId(imdbId);
+                      if (tmdbMovie) {
+                        tmdbId = tmdbMovie.id;
+                        console.log(`  ✓ Found TMDB ID ${tmdbId} from IMDB ID ${imdbId}`);
+                      }
+                    } catch (error) {
+                      // Ignore
+                    }
+                  }
+                }
+              } catch (error) {
+                console.log(`  ✗ Failed to find IMDB ID for "${cleanTitle}":`, error);
+              }
+            }
+
+            // Step 3: If we still don't have TMDB ID but have clean title, try TMDB search
+            if (!tmdbId && cleanTitle && tmdbApiKey) {
+              try {
+                console.log(`  Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
+                const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined);
+                if (tmdbMovie) {
+                  // Validate year match if we have a year
+                  let isValidMatch = true;
+                  if (year && tmdbMovie.release_date) {
+                    const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                    if (releaseYear !== year) {
+                      isValidMatch = false;
+                      console.log(`  ✗ TMDB result year mismatch: ${releaseYear} vs ${year}`);
+                    }
+                  }
+                  
+                  if (isValidMatch) {
+                    tmdbId = tmdbMovie.id;
+                    console.log(`  ✓ Found TMDB ID ${tmdbId} for "${cleanTitle}"`);
+                    
+                    // If TMDB movie has IMDB ID and we don't have it yet, use it
+                    if (!imdbId && tmdbMovie.imdb_id) {
+                      imdbId = tmdbMovie.imdb_id;
+                      console.log(`  ✓ Found IMDB ID ${imdbId} from TMDB movie`);
+                    }
+                  }
+                }
+              } catch (error) {
+                console.log(`  ✗ Failed to find TMDB ID for "${cleanTitle}":`, error);
+              }
+            }
+
+            enrichedItems.push({
+              parsed,
+              tmdbId,
+              imdbId,
+            });
+          } catch (itemError: any) {
+            console.error(`Error enriching RSS item: ${item.title || item.link}`, itemError);
+            // Still add the item without enrichment
+            enrichedItems.push({
+              parsed: parseRSSItem(item as any, feed.id!, feed.name),
+              tmdbId: null,
+              imdbId: null,
+            });
+          }
+        }
+
         // Use transaction for better performance
         const transaction = db.transaction(() => {
-          for (const item of feedData.items) {
+          for (const { parsed, tmdbId, imdbId } of enrichedItems) {
             try {
-              if (!item.title && !item.link) {
-                continue; // Skip items without title or link
-              }
-
-              const parsed = parseRSSItem(item as any, feed.id!, feed.name);
-              const guid = parsed.guid || item.link || '';
+              const guid = parsed.guid || parsed.link || '';
 
               // Check if item already exists
               const existing = db
@@ -82,10 +199,10 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                 audio: parsed.audio,
                 rss_size_mb: parsed.rss_size_mb || null,
                 published_at: parsed.published_at,
-                tmdb_id: (parsed as any).tmdb_id || null,
-                imdb_id: (parsed as any).imdb_id || null,
+                tmdb_id: tmdbId || null, // Use enriched TMDB ID (primary)
+                imdb_id: imdbId || null, // Use enriched IMDB ID (secondary)
                 audio_languages: parsed.audio_languages || null,
-                raw_data: JSON.stringify(item),
+                raw_data: JSON.stringify(parsed),
                 synced_at: new Date().toISOString(),
               };
 
