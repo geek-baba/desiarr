@@ -121,7 +121,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               // Step 2: If we don't have IMDB ID but have clean title, try OMDB/IMDB search
               if (!imdbId && cleanTitle && (omdbApiKey || true)) { // OMDB works without key but has rate limits
                 try {
-                  console.log(`    Searching IMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
+                  console.log(`    Searching IMDB (OMDB) for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
                   const imdbResult = await imdbClient.searchMovie(cleanTitle, year || undefined);
                   if (imdbResult) {
                     imdbId = imdbResult.imdbId;
@@ -141,7 +141,34 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                     }
                   }
                 } catch (error) {
-                  console.log(`    ✗ Failed to find IMDB ID for "${cleanTitle}":`, error);
+                  console.log(`    ✗ Failed to find IMDB ID via OMDB for "${cleanTitle}":`, error);
+                }
+              }
+
+              // Step 2b: If still no IMDB ID, try DuckDuckGo web search as fallback
+              if (!imdbId && cleanTitle) {
+                try {
+                  console.log(`    Searching IMDB (DuckDuckGo) for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
+                  const duckDuckGoImdbId = await imdbClient.searchGoogleForImdbId(cleanTitle, year || undefined);
+                  if (duckDuckGoImdbId) {
+                    imdbId = duckDuckGoImdbId;
+                    console.log(`    ✓ Found IMDB ID ${imdbId} via DuckDuckGo for "${cleanTitle}"`);
+                    
+                    // If we now have IMDB ID but still no TMDB ID, try to get TMDB ID
+                    if (!tmdbId && tmdbApiKey) {
+                      try {
+                        const tmdbMovie = await tmdbClient.findMovieByImdbId(imdbId);
+                        if (tmdbMovie) {
+                          tmdbId = tmdbMovie.id;
+                          console.log(`    ✓ Found TMDB ID ${tmdbId} from IMDB ID ${imdbId}`);
+                        }
+                      } catch (error) {
+                        // Ignore
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.log(`    ✗ Failed to find IMDB ID via DuckDuckGo for "${cleanTitle}":`, error);
                 }
               }
 
@@ -174,6 +201,38 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                   }
                 } catch (error) {
                   console.log(`    ✗ Failed to find TMDB ID for "${cleanTitle}":`, error);
+                }
+              }
+
+              // Step 3b: If still no TMDB ID and we have normalized title, try with normalized title
+              if (!tmdbId && tmdbApiKey && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
+                try {
+                  console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}`);
+                  const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined);
+                  if (tmdbMovie) {
+                    // Validate year match if we have a year
+                    let isValidMatch = true;
+                    if (year && tmdbMovie.release_date) {
+                      const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
+                      if (releaseYear !== year) {
+                        isValidMatch = false;
+                        console.log(`    ✗ TMDB result year mismatch: ${releaseYear} vs ${year}`);
+                      }
+                    }
+                    
+                    if (isValidMatch) {
+                      tmdbId = tmdbMovie.id;
+                      console.log(`    ✓ Found TMDB ID ${tmdbId} for "${parsed.normalized_title}"`);
+                      
+                      // If TMDB movie has IMDB ID and we don't have it yet, use it
+                      if (!imdbId && tmdbMovie.imdb_id) {
+                        imdbId = tmdbMovie.imdb_id;
+                        console.log(`    ✓ Found IMDB ID ${imdbId} from TMDB movie`);
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.log(`    ✗ Failed to find TMDB ID for "${parsed.normalized_title}":`, error);
                 }
               }
             }
