@@ -67,7 +67,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
         stats.totalItems += feedData.items.length;
 
         // Process items and enrich with TMDB/IMDB IDs
-        const enrichedItems = [];
+        const enrichedItems: Array<{ parsed: any; tmdbId: number | null; imdbId: string | null; originalItem: any }> = [];
         for (const item of feedData.items) {
           try {
             if (!item.title && !item.link) {
@@ -158,8 +158,9 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
 
             enrichedItems.push({
               parsed,
-              tmdbId,
-              imdbId,
+              tmdbId: tmdbId || null,
+              imdbId: imdbId || null,
+              originalItem: item,
             });
           } catch (itemError: any) {
             console.error(`Error enriching RSS item: ${item.title || item.link}`, itemError);
@@ -168,13 +169,14 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               parsed: parseRSSItem(item as any, feed.id!, feed.name),
               tmdbId: null,
               imdbId: null,
+              originalItem: item,
             });
           }
         }
 
         // Use transaction for better performance
         const transaction = db.transaction(() => {
-          for (const { parsed, tmdbId, imdbId } of enrichedItems) {
+          for (const { parsed, tmdbId, imdbId, originalItem } of enrichedItems) {
             try {
               const guid = parsed.guid || parsed.link || '';
 
@@ -287,7 +289,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                 stats.itemsSynced++;
               }
             } catch (itemError: any) {
-              console.error(`Error processing RSS item: ${item.title || item.link}`, itemError);
+              console.error(`Error processing RSS item: ${parsed.title || parsed.link}`, itemError);
               // Continue processing other items
             }
           }
