@@ -25,11 +25,20 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
 
   try {
     console.log('Starting Radarr movies sync...');
+    syncProgress.start('radarr', 0);
     syncProgress.update('Fetching movies from Radarr...', 0);
+    
     const movies = await radarrClient.getAllMovies();
     stats.totalMovies = movies.length;
 
     console.log(`Found ${movies.length} movies in Radarr`);
+    
+    if (movies.length === 0) {
+      syncProgress.update('No movies found in Radarr', 0, 0);
+      syncProgress.complete();
+      return stats;
+    }
+    
     syncProgress.update('Processing movies...', 0, movies.length);
 
     // Use transaction for better performance
@@ -134,10 +143,16 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
       stats.lastSyncAt.toISOString()
     );
 
+    syncProgress.update('Sync completed', stats.totalMovies, stats.totalMovies, stats.errors.length);
+    syncProgress.complete();
+    
     console.log(`Radarr sync completed: ${stats.synced} new, ${stats.updated} updated, ${stats.errors.length} errors`);
     return stats;
   } catch (error: any) {
     console.error('Radarr sync error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+    syncProgress.complete();
     throw error;
   }
 }

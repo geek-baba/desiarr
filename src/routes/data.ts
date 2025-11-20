@@ -36,13 +36,7 @@ router.post('/radarr/sync', async (req: Request, res: Response) => {
     // Start sync in background
     (async () => {
       try {
-        syncProgress.start('radarr', 0);
-        syncProgress.update('Fetching movies from Radarr...', 0);
-        
-        const stats = await syncRadarrMovies();
-        
-        syncProgress.update('Sync completed', stats.totalMovies, stats.totalMovies, stats.errors.length);
-        syncProgress.complete();
+        await syncRadarrMovies();
         
         // Clear progress after 5 seconds
         setTimeout(() => {
@@ -50,7 +44,8 @@ router.post('/radarr/sync', async (req: Request, res: Response) => {
         }, 5000);
       } catch (error: any) {
         console.error('Radarr sync error:', error);
-        syncProgress.update(`Error: ${error?.message || 'Unknown error'}`, 0, 0, 1);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
         syncProgress.complete();
       }
     })();
