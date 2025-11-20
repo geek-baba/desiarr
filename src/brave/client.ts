@@ -19,6 +19,8 @@ interface BraveWebSearchResponse {
 class BraveClient {
   private client: AxiosInstance;
   private apiKey: string | null = null;
+  private lastRequestTime: number = 0;
+  private readonly minRequestInterval: number = 1000; // 1 second (1000ms) between requests
 
   constructor() {
     this.client = axios.create({
@@ -32,14 +34,35 @@ class BraveClient {
   }
 
   /**
+   * Rate limiter: Ensures at least 1 second between requests
+   * to respect Brave API's 1 request per second limit
+   */
+  private async waitForRateLimit(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+    
+    if (timeSinceLastRequest < this.minRequestInterval) {
+      const waitTime = this.minRequestInterval - timeSinceLastRequest;
+      console.log(`    ⏳ Rate limiting: waiting ${waitTime}ms before next Brave API request`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastRequestTime = Date.now();
+  }
+
+  /**
    * Search the web using Brave Search API
    * Returns an array of search results with title and URL
+   * Automatically rate-limited to 1 request per second
    */
   async searchWeb(query: string, count: number = 5): Promise<BraveSearchResult[]> {
     if (!this.apiKey) {
       console.log('Brave API key not configured, skipping search');
       return [];
     }
+
+    // Rate limit: wait if needed to respect 1 request/second limit
+    await this.waitForRateLimit();
 
     try {
       const response = await this.client.get<BraveWebSearchResponse>('/web/search', {
