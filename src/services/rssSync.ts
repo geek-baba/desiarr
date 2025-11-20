@@ -115,6 +115,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
 
             if (needsEnrichment) {
               console.log(`  Enriching ${existingItem ? 'existing' : 'new'} item: "${parsed.title}" (TMDB: ${tmdbId || 'missing'}, IMDB: ${imdbId || 'missing'})`);
+              console.log(`    Clean title: "${cleanTitle}", Year: ${year || 'none'}`);
 
               // Enrich with TMDB/IMDB IDs if missing
               // Priority: TMDB (primary), IMDB (secondary)
@@ -140,7 +141,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                   const imdbResult = await imdbClient.searchMovie(cleanTitle, year || undefined);
                   if (imdbResult) {
                     imdbId = imdbResult.imdbId;
-                    console.log(`    ✓ Found IMDB ID ${imdbId} for "${cleanTitle}"`);
+                    console.log(`    ✓ Found IMDB ID ${imdbId} for "${cleanTitle}" (OMDB returned: "${imdbResult.title}" ${imdbResult.year})`);
                     
                     // If we now have IMDB ID but still no TMDB ID, try to get TMDB ID
                     if (!tmdbId && tmdbApiKey) {
@@ -151,12 +152,14 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                           console.log(`    ✓ Found TMDB ID ${tmdbId} from IMDB ID ${imdbId}`);
                         }
                       } catch (error) {
-                        // Ignore
+                        console.log(`    ✗ Failed to get TMDB ID from IMDB ID ${imdbId}:`, error);
                       }
                     }
+                  } else {
+                    console.log(`    ✗ OMDB search returned no results for "${cleanTitle}" ${year ? `(${year})` : ''}`);
                   }
-                } catch (error) {
-                  console.log(`    ✗ Failed to find IMDB ID via OMDB for "${cleanTitle}":`, error);
+                } catch (error: any) {
+                  console.log(`    ✗ Failed to find IMDB ID via OMDB for "${cleanTitle}":`, error?.message || error);
                 }
               }
 
@@ -191,13 +194,14 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                   console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
                   const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined);
                   if (tmdbMovie) {
+                    console.log(`    TMDB search returned: "${tmdbMovie.title}" (ID: ${tmdbMovie.id}, Year: ${tmdbMovie.release_date ? new Date(tmdbMovie.release_date).getFullYear() : 'unknown'})`);
                     // Validate year match if we have a year
                     let isValidMatch = true;
                     if (year && tmdbMovie.release_date) {
                       const releaseYear = new Date(tmdbMovie.release_date).getFullYear();
                       if (releaseYear !== year) {
                         isValidMatch = false;
-                        console.log(`    ✗ TMDB result year mismatch: ${releaseYear} vs ${year}`);
+                        console.log(`    ✗ TMDB result year mismatch: ${releaseYear} vs ${year} - rejecting match`);
                       }
                     }
                     
@@ -211,9 +215,11 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                         console.log(`    ✓ Found IMDB ID ${imdbId} from TMDB movie`);
                       }
                     }
+                  } else {
+                    console.log(`    ✗ TMDB search returned no results for "${cleanTitle}" ${year ? `(${year})` : ''}`);
                   }
-                } catch (error) {
-                  console.log(`    ✗ Failed to find TMDB ID for "${cleanTitle}":`, error);
+                } catch (error: any) {
+                  console.log(`    ✗ Failed to find TMDB ID for "${cleanTitle}":`, error?.message || error);
                 }
               }
 

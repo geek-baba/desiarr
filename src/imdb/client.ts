@@ -53,6 +53,9 @@ class IMDBClient {
       const response = await this.client.get<OMDBResponse>('/', { params });
       
       if (response.data.Response === 'True' && response.data.Search && response.data.Search.length > 0) {
+        console.log(`      OMDB returned ${response.data.Search.length} results. First 3:`, 
+          response.data.Search.slice(0, 3).map(m => `"${m.Title}" (${m.Year})`).join(', '));
+        
         // If we have a year, prefer results that match the year exactly
         if (year) {
           const yearMatch = response.data.Search.find(movie => {
@@ -60,21 +63,29 @@ class IMDBClient {
             return movieYear === year;
           });
           if (yearMatch) {
+            console.log(`      Selected year-matched result: "${yearMatch.Title}" (${yearMatch.Year})`);
             return {
               imdbId: yearMatch.imdbID,
               title: yearMatch.Title,
               year: yearMatch.Year,
             };
+          } else {
+            console.log(`      No year match found in OMDB results for year ${year}`);
           }
         }
         
         // Return first result
         const first = response.data.Search[0];
+        console.log(`      Using first OMDB result: "${first.Title}" (${first.Year})`);
         return {
           imdbId: first.imdbID,
           title: first.Title,
           year: first.Year,
         };
+      }
+      
+      if (response.data.Error) {
+        console.log(`      OMDB error: ${response.data.Error}`);
       }
       
       return null;
