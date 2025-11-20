@@ -7,6 +7,8 @@ import { settingsModel } from '../models/settings';
 import { config } from '../config';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from '../services/radarrSync';
+import { runMatchingEngine } from '../services/matchingEngine';
+import { syncProgress } from '../services/syncProgress';
 
 const router = Router();
 
@@ -392,34 +394,19 @@ router.get('/', async (req: Request, res: Response) => {
       return Math.max(...dates);
     };
 
-    // Helper function to categorize a date into time periods
+    // Helper function to categorize a date into time periods (simplified: today, yesterday, older)
     const categorizeByTimePeriod = (dateMs: number): string => {
       const now = Date.now();
-      const date = new Date(dateMs);
       const today = new Date(now);
       today.setHours(0, 0, 0, 0);
       
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       
-      const thisWeekStart = new Date(today);
-      thisWeekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-      
-      const lastWeekStart = new Date(thisWeekStart);
-      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-      
-      const lastWeekEnd = new Date(thisWeekStart);
-      lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
-      lastWeekEnd.setHours(23, 59, 59, 999);
-      
       if (dateMs >= today.getTime()) {
         return 'today';
       } else if (dateMs >= yesterday.getTime()) {
         return 'yesterday';
-      } else if (dateMs >= thisWeekStart.getTime()) {
-        return 'thisWeek';
-      } else if (dateMs >= lastWeekStart.getTime() && dateMs <= lastWeekEnd.getTime()) {
-        return 'lastWeek';
       } else {
         return 'older';
       }
@@ -435,47 +422,137 @@ router.get('/', async (req: Request, res: Response) => {
     // Filter out movie groups that have no releases to display
     const filteredMovieGroups = movieGroups.filter(group => group.add.length > 0 || group.existing.length > 0 || group.upgrade.length > 0);
 
-    // Group by time period
-    const groupedByTimePeriod: { [key: string]: typeof movieGroups } = {
-      today: [],
-      yesterday: [],
-      thisWeek: [],
-      lastWeek: [],
-      older: [],
-    };
+    // Separate into New Movies, Existing Movies, and Unmatched Items
+    const newMovies: typeof movieGroups = [];
+    const existingMovies: typeof movieGroups = [];
+    const unmatchedItems: typeof movieGroups = [];
 
     for (const group of filteredMovieGroups) {
-      const latestDate = getLatestDate(group);
-      const period = categorizeByTimePeriod(latestDate);
-      groupedByTimePeriod[period].push(group);
+      // Check if this is an unmatched item (no TMDB ID and no Radarr ID)
+      if (!group.tmdbId && !group.radarrMovieId) {
+        unmatchedItems.push(group);
+      } else if (group.add.length > 0 || group.upgrade.length > 0) {
+        // Has new releases or upgrades - goes to "New Movies"
+        newMovies.push(group);
+      } else if (group.existing.length > 0) {
+        // Only existing releases - goes to "Existing Movies"
+        existingMovies.push(group);
+      }
     }
 
-    // Sort within each time period: first by status priority, then by date (newest first)
-    for (const period in groupedByTimePeriod) {
-      groupedByTimePeriod[period].sort((a, b) => {
-        const priorityA = getStatusPriority(a);
-        const priorityB = getStatusPriority(b);
-        if (priorityA !== priorityB) {
-          return priorityA - priorityB; // Lower priority number = higher priority
+    // Helper function to group by time period
+    const groupByTimePeriod = (groups: typeof movieGroups) => {
+      const grouped: { [key: string]: typeof movieGroups } = {
+        today: [],
+        yesterday: [],
+        older: [],
+      };
+
+      for (const group of groups) {
+        const latestDate = getLatestDate(group);
+        const period = categorizeByTimePeriod(latestDate);
+        
+        // Map to simplified periods: today, yesterday, older
+        if (period === 'today') {
+          grouped.today.push(group);
+        } else if (period === 'yesterday') {
+          grouped.yesterday.push(group);
+        } else {
+          grouped.older.push(group);
         }
-        // If same priority, sort by date (newest first)
-        const dateA = getLatestDate(a);
-        const dateB = getLatestDate(b);
-        return dateB - dateA;
-      });
-    }
+      }
+
+      // Sort within each time period: first by status priority, then by date (newest first)
+      for (const period in grouped) {
+        grouped[period].sort((a, b) => {
+          const priorityA = getStatusPriority(a);
+          const priorityB = getStatusPriority(b);
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+          const dateA = getLatestDate(a);
+          const dateB = getLatestDate(b);
+          return dateB - dateA;
+        });
+      }
+
+      return grouped;
+    };
+
+    const newMoviesByPeriod = groupByTimePeriod(newMovies);
+    const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
+    // Unmatched items don't need time period grouping
 
     // Get Radarr base URL for links
     const radarrBaseUrl = config.radarr.apiUrl.replace('/api/v3', '');
 
     res.render('dashboard', {
-      movieGroupsByPeriod: groupedByTimePeriod,
+      newMoviesByPeriod,
+      existingMoviesByPeriod,
+      unmatchedItems,
       radarrBaseUrl,
     });
   } catch (error) {
     console.error('Dashboard error:', error);
     res.status(500).send('Internal server error');
   }
+});
+
+// Refresh dashboard (runs matching engine)
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    // Check if matching is already running
+    const current = syncProgress.get();
+    if (current && current.isRunning && current.type === 'matching') {
+      return res.json({ success: false, message: 'Dashboard refresh is already in progress' });
+    }
+
+    // Start matching engine in background
+    (async () => {
+      try {
+        console.log('Starting dashboard refresh (matching engine) from API endpoint...');
+        syncProgress.start('matching', 0);
+        syncProgress.update('Starting matching engine...', 0);
+        
+        const stats = await runMatchingEngine();
+        
+        syncProgress.update('Matching completed', stats.processed, stats.processed, stats.errors);
+        syncProgress.complete();
+        
+        console.log('Dashboard refresh completed successfully');
+        
+        // Clear progress after 5 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 5000);
+      } catch (error: any) {
+        console.error('Dashboard refresh error in background task:', error);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        syncProgress.complete();
+        
+        // Keep error visible for 30 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 30000);
+      }
+    })();
+
+    res.json({ success: true, message: 'Dashboard refresh started' });
+  } catch (error: any) {
+    console.error('Start dashboard refresh error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start dashboard refresh',
+      message: error?.message || 'Unknown error'
+    });
+  }
+});
+
+// Get refresh progress
+router.get('/refresh/progress', (req: Request, res: Response) => {
+  const progress = syncProgress.get();
+  res.json(progress || { isRunning: false });
 });
 
 export default router;
