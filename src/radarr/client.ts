@@ -1,22 +1,57 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '../config';
+import { settingsModel } from '../models/settings';
 import { RadarrMovie, RadarrLookupResult, RadarrMovieFile, RadarrHistory } from './types';
 
 class RadarrClient {
-  private client: AxiosInstance;
+  private client: AxiosInstance | null = null;
 
   constructor() {
-    this.client = axios.create({
-      baseURL: config.radarr.apiUrl,
-      headers: {
-        'X-Api-Key': config.radarr.apiKey,
-      },
-    });
+    this.initializeClient();
+  }
+
+  private initializeClient() {
+    // Try to get from settings first, fall back to environment variables
+    const allSettings = settingsModel.getAll();
+    const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value || config.radarr.apiUrl;
+    const radarrApiKey = allSettings.find(s => s.key === 'radarr_api_key')?.value || config.radarr.apiKey;
+
+    if (radarrApiUrl && radarrApiKey) {
+      this.client = axios.create({
+        baseURL: radarrApiUrl,
+        headers: {
+          'X-Api-Key': radarrApiKey,
+        },
+      });
+    } else {
+      // Create a dummy client that will fail gracefully
+      this.client = axios.create({
+        baseURL: '',
+        headers: {
+          'X-Api-Key': '',
+        },
+      });
+    }
+  }
+
+  // Method to update client configuration when settings change
+  updateConfig() {
+    this.initializeClient();
+  }
+
+  private ensureClient(): AxiosInstance {
+    if (!this.client) {
+      this.initializeClient();
+    }
+    if (!this.client) {
+      throw new Error('Radarr client not initialized. Please configure Radarr API URL and Key in Settings.');
+    }
+    return this.client;
   }
 
   async lookupMovie(term: string): Promise<RadarrLookupResult[]> {
     try {
-      const response = await this.client.get<RadarrLookupResult[]>('/movie/lookup', {
+      const response = await this.ensureClient().get<RadarrLookupResult[]>('/movie/lookup', {
         params: { term },
       });
       return response.data;
@@ -31,11 +66,11 @@ class RadarrClient {
       // Try to get by Radarr ID first (if it's a small number, likely Radarr ID)
       // Otherwise try by TMDB ID
       try {
-        const response = await this.client.get<RadarrMovie>(`/movie/${tmdbIdOrRadarrId}`);
+        const response = await this.ensureClient().get<RadarrMovie>(`/movie/${tmdbIdOrRadarrId}`);
         return response.data;
       } catch (error) {
         // If that fails, try by TMDB ID
-        const response = await this.client.get<RadarrMovie[]>('/movie', {
+        const response = await this.ensureClient().get<RadarrMovie[]>('/movie', {
           params: { tmdbId: tmdbIdOrRadarrId },
         });
         return response.data[0] || null;
@@ -48,7 +83,7 @@ class RadarrClient {
 
   async getAllMovies(): Promise<RadarrMovie[]> {
     try {
-      const response = await this.client.get<RadarrMovie[]>('/movie');
+      const response = await this.ensureClient().get<RadarrMovie[]>('/movie');
       return response.data;
     } catch (error) {
       console.error('Radarr get all movies error:', error);
@@ -125,7 +160,7 @@ class RadarrClient {
           searchForMovie: false,
         },
       };
-      const response = await this.client.post<RadarrMovie>('/movie', addMovieRequest);
+      const response = await this.ensureClient().post<RadarrMovie>('/movie', addMovieRequest);
       return response.data;
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
@@ -136,7 +171,7 @@ class RadarrClient {
 
   async getMovieFile(movieId: number): Promise<RadarrMovieFile | null> {
     try {
-      const movie = await this.client.get<RadarrMovie>(`/movie/${movieId}`);
+      const movie = await this.ensureClient().get<RadarrMovie>(`/movie/${movieId}`);
       return movie.data.movieFile || null;
     } catch (error) {
       console.error('Radarr get movie file error:', error);
@@ -146,7 +181,7 @@ class RadarrClient {
 
   async triggerSearch(movieId: number): Promise<void> {
     try {
-      await this.client.post(`/command`, {
+      await this.ensureClient().post(`/command`, {
         name: 'MoviesSearch',
         movieIds: [movieId],
       });
@@ -158,7 +193,7 @@ class RadarrClient {
 
   async getMovieHistory(movieId: number): Promise<RadarrHistory[]> {
     try {
-      const response = await this.client.get<RadarrHistory[]>('/history/movie', {
+      const response = await this.ensureClient().get<RadarrHistory[]>('/history/movie', {
         params: { movieId },
       });
       return response.data || [];
@@ -170,7 +205,7 @@ class RadarrClient {
 
   async getMovieWithHistory(movieId: number): Promise<{ movie: RadarrMovie; history: RadarrHistory[] } | null> {
     try {
-      const movie = await this.client.get<RadarrMovie>(`/movie/${movieId}`);
+      const movie = await this.ensureClient().get<RadarrMovie>(`/movie/${movieId}`);
       const history = await this.getMovieHistory(movieId);
       return {
         movie: movie.data,

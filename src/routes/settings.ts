@@ -15,12 +15,16 @@ router.get('/', async (req: Request, res: Response) => {
     const allSettings = settingsModel.getAll();
     const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value || '';
     const omdbApiKey = allSettings.find(s => s.key === 'omdb_api_key')?.value || '';
+    const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value || '';
+    const radarrApiKey = allSettings.find(s => s.key === 'radarr_api_key')?.value || '';
 
     res.render('settings', {
       feeds,
       qualitySettings,
       tmdbApiKey,
       omdbApiKey,
+      radarrApiUrl,
+      radarrApiKey,
     });
   } catch (error) {
     console.error('Settings page error:', error);
@@ -178,6 +182,35 @@ router.post('/omdb-api-key', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Save OMDB API key error:', error);
     res.status(500).json({ error: 'Failed to save OMDB API key' });
+  }
+});
+
+router.post('/radarr-config', async (req: Request, res: Response) => {
+  try {
+    const { apiUrl, apiKey } = req.body;
+    
+    if (!apiUrl || !apiKey) {
+      return res.status(400).json({ error: 'Radarr API URL and Key are required' });
+    }
+
+    // Validate URL format
+    try {
+      new URL(apiUrl);
+    } catch (error) {
+      return res.status(400).json({ error: 'Invalid Radarr API URL format' });
+    }
+
+    settingsModel.set('radarr_api_url', apiUrl);
+    settingsModel.set('radarr_api_key', apiKey);
+
+    // Update Radarr client configuration
+    const radarrClient = (await import('../radarr/client')).default;
+    radarrClient.updateConfig();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Save Radarr config error:', error);
+    res.status(500).json({ error: 'Failed to save Radarr configuration' });
   }
 });
 
