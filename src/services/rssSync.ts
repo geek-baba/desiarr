@@ -66,6 +66,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
         if (!feedData.items || feedData.items.length === 0) {
           console.log(`No items found in feed: ${feed.name}`);
           stats.feedsProcessed++;
+          syncProgress.update(`Completed ${feed.name} (0 items)`, feedIndex + 1, feeds.length, stats.errors.length);
           continue;
         }
 
