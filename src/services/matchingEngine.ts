@@ -276,7 +276,9 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             status = 'UPGRADE_CANDIDATE';
             stats.upgradeCandidates++;
           } else {
-            status = 'EXISTING';
+            // Movie exists in Radarr but not an upgrade candidate - mark as IGNORED
+            // The dashboard will still show it as "existing" based on radarr_movie_id
+            status = 'IGNORED';
             stats.existing++;
           }
         } else if (allowed) {
@@ -284,7 +286,9 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           stats.newReleases++;
         } else {
           if (radarrMovieId) {
-            status = 'EXISTING';
+            // Movie exists in Radarr but quality doesn't meet requirements - mark as IGNORED
+            // The dashboard will still show it as "existing" based on radarr_movie_id
+            status = 'IGNORED';
             stats.existing++;
           } else {
             status = needsAttention ? 'ATTENTION_NEEDED' : 'IGNORED';
