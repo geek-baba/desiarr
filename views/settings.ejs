@@ -476,13 +476,18 @@
 
     async function saveRadarrConfig(event) {
       event.preventDefault();
-      const apiUrl = document.getElementById('radarrApiUrl').value;
-      const apiKey = document.getElementById('radarrApiKey').value;
+      const apiUrl = document.getElementById('radarrApiUrl').value.trim();
+      const apiKey = document.getElementById('radarrApiKey').value.trim();
       
       if (!apiUrl || !apiKey) {
         showToast('Please enter both Radarr API URL and API Key', 'warning');
         return;
       }
+
+      const button = event.target.querySelector('button[type="submit"]');
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Saving...';
 
       try {
         const res = await fetch('/settings/radarr-config', {
@@ -490,14 +495,26 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ apiUrl, apiKey }),
         });
+        
         const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || `HTTP ${res.status}: ${res.statusText}`);
+        }
+        
         if (data.success) {
           showToast('Radarr configuration saved successfully!', 'success');
+          // Reload page after 1 second to show updated values
+          setTimeout(() => location.reload(), 1000);
         } else {
           showToast('Error: ' + (data.error || 'Unknown error'), 'error');
         }
       } catch (error) {
-        showToast('Error: ' + error.message, 'error');
+        console.error('Save Radarr config error:', error);
+        showToast('Error saving configuration: ' + (error.message || 'Unknown error'), 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
       }
     }
     let editingFeedId = null;

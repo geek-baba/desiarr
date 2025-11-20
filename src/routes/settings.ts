@@ -191,28 +191,50 @@ router.post('/radarr-config', async (req: Request, res: Response) => {
   try {
     const { apiUrl, apiKey } = req.body;
     
+    console.log('Saving Radarr config - URL:', apiUrl ? 'Provided' : 'Missing', 'Key:', apiKey ? 'Provided' : 'Missing');
+    
     if (!apiUrl || !apiKey) {
-      return res.status(400).json({ error: 'Radarr API URL and Key are required' });
+      console.error('Radarr config validation failed: Missing URL or Key');
+      return res.status(400).json({ success: false, error: 'Radarr API URL and Key are required' });
     }
+
+    // Trim whitespace
+    const trimmedUrl = apiUrl.trim();
+    const trimmedKey = apiKey.trim();
 
     // Validate URL format
     try {
-      new URL(apiUrl);
+      new URL(trimmedUrl);
     } catch (error) {
-      return res.status(400).json({ error: 'Invalid Radarr API URL format' });
+      console.error('Radarr config validation failed: Invalid URL format', trimmedUrl);
+      return res.status(400).json({ success: false, error: 'Invalid Radarr API URL format' });
     }
 
-    settingsModel.set('radarr_api_url', apiUrl);
-    settingsModel.set('radarr_api_key', apiKey);
+    console.log('Saving Radarr config to database...');
+    settingsModel.set('radarr_api_url', trimmedUrl);
+    settingsModel.set('radarr_api_key', trimmedKey);
+    console.log('Radarr config saved to database successfully');
+
+    // Verify it was saved
+    const allSettings = settingsModel.getAll();
+    const savedUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value;
+    const savedKey = allSettings.find(s => s.key === 'radarr_api_key')?.value;
+    
+    if (savedUrl !== trimmedUrl || savedKey !== trimmedKey) {
+      console.error('Radarr config verification failed: Values do not match');
+      return res.status(500).json({ success: false, error: 'Configuration was not saved correctly. Please try again.' });
+    }
 
     // Update Radarr client configuration
+    console.log('Updating Radarr client configuration...');
     const radarrClient = (await import('../radarr/client')).default;
     radarrClient.updateConfig();
+    console.log('Radarr client configuration updated');
 
-    res.json({ success: true });
-  } catch (error) {
+    res.json({ success: true, message: 'Radarr configuration saved successfully' });
+  } catch (error: any) {
     console.error('Save Radarr config error:', error);
-    res.status(500).json({ error: 'Failed to save Radarr configuration' });
+    res.status(500).json({ success: false, error: 'Failed to save Radarr configuration: ' + (error?.message || 'Unknown error') });
   }
 });
 
