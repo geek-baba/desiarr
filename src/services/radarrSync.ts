@@ -1,6 +1,7 @@
 import db from '../db';
 import radarrClient from '../radarr/client';
 import { RadarrMovie } from '../radarr/types';
+import { syncProgress } from './syncProgress';
 
 export interface RadarrSyncStats {
   totalMovies: number;
@@ -24,17 +25,25 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
 
   try {
     console.log('Starting Radarr movies sync...');
+    syncProgress.update('Fetching movies from Radarr...', 0);
     const movies = await radarrClient.getAllMovies();
     stats.totalMovies = movies.length;
 
     console.log(`Found ${movies.length} movies in Radarr`);
+    syncProgress.update('Processing movies...', 0, movies.length);
 
     // Use transaction for better performance
     const transaction = db.transaction(() => {
+      let processed = 0;
       for (const movie of movies) {
         try {
           if (!movie.id) {
             continue; // Skip movies without ID
+          }
+
+          processed++;
+          if (processed % 10 === 0 || processed === movies.length) {
+            syncProgress.update(`Processing movies... (${processed}/${movies.length})`, processed, movies.length, stats.errors.length);
           }
 
           // Check if movie already exists

@@ -7,33 +7,50 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
-  <nav class="bg-gray-800 text-white">
-    <div class="container mx-auto px-4 py-3">
-      <div class="flex justify-between items-center">
-        <h1 class="text-xl font-bold">Radarr Indian Helper</h1>
-        <div class="space-x-4">
-          <a href="/" class="hover:text-gray-300">Dashboard</a>
-          <a href="/data/radarr" class="hover:text-gray-300 font-semibold">Radarr Data</a>
-          <a href="/data/rss" class="hover:text-gray-300">RSS Data</a>
-          <a href="/settings" class="hover:text-gray-300">Settings</a>
+  <%- include('partials/sidebar', { currentPage: 'radarr' }) %>
+  
+  <main class="ml-64 p-8">
+    <div class="mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-2xl font-bold">Radarr Movies</h2>
+          <p class="text-sm text-gray-600 mt-1">
+            Last synced: <%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %>
+          </p>
+        </div>
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <div class="text-sm text-gray-600">
+              Total: <span class="font-semibold"><%= totalMovies %></span> movies
+            </div>
+            <div class="text-sm text-gray-600">
+              With files: <span class="font-semibold"><%= moviesWithFiles %></span>
+            </div>
+          </div>
+          <button 
+            id="syncButton"
+            onclick="startSync()" 
+            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <svg id="syncIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span id="syncButtonText">Sync Now</span>
+          </button>
         </div>
       </div>
-    </div>
-  </nav>
-  <main class="container mx-auto px-4 py-8">
-    <div class="mb-6 flex justify-between items-center">
-      <div>
-        <h2 class="text-2xl font-bold">Radarr Movies</h2>
-        <p class="text-sm text-gray-600 mt-1">
-          Last synced: <%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %>
-        </p>
-      </div>
-      <div class="text-right">
-        <div class="text-sm text-gray-600">
-          Total: <span class="font-semibold"><%= totalMovies %></span> movies
+      
+      <!-- Progress Bar -->
+      <div id="progressContainer" class="hidden bg-white rounded-lg shadow p-4 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span id="progressStep" class="text-sm font-medium text-gray-700">Starting sync...</span>
+          <span id="progressPercent" class="text-sm text-gray-600">0%</span>
         </div>
-        <div class="text-sm text-gray-600">
-          With files: <span class="font-semibold"><%= moviesWithFiles %></span>
+        <div class="w-full bg-gray-200 rounded-full h-2.5">
+          <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="mt-2 text-xs text-gray-500">
+          <span id="progressStats">Processing...</span>
         </div>
       </div>
     </div>
@@ -93,6 +110,111 @@
       </div>
     </div>
   </main>
+
+  <script>
+    let progressInterval = null;
+
+    async function startSync() {
+      const button = document.getElementById('syncButton');
+      const buttonText = document.getElementById('syncButtonText');
+      const syncIcon = document.getElementById('syncIcon');
+      const progressContainer = document.getElementById('progressContainer');
+      
+      // Disable button
+      button.disabled = true;
+      button.classList.add('opacity-50', 'cursor-not-allowed');
+      buttonText.textContent = 'Syncing...';
+      syncIcon.classList.add('animate-spin');
+      
+      // Show progress bar
+      progressContainer.classList.remove('hidden');
+      
+      try {
+        const response = await fetch('/data/radarr/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+          alert('Error: ' + (data.message || 'Failed to start sync'));
+          resetButton();
+          return;
+        }
+        
+        // Start polling for progress
+        progressInterval = setInterval(checkProgress, 500);
+      } catch (error) {
+        console.error('Sync error:', error);
+        alert('Error starting sync: ' + error.message);
+        resetButton();
+      }
+    }
+
+    async function checkProgress() {
+      try {
+        const response = await fetch('/data/radarr/sync/progress');
+        const data = await response.json();
+        
+        if (data.progress) {
+          const progress = data.progress;
+          const progressBar = document.getElementById('progressBar');
+          const progressPercent = document.getElementById('progressPercent');
+          const progressStep = document.getElementById('progressStep');
+          const progressStats = document.getElementById('progressStats');
+          
+          progressBar.style.width = progress.progress + '%';
+          progressPercent.textContent = progress.progress + '%';
+          progressStep.textContent = progress.currentStep || 'Processing...';
+          
+          if (progress.total > 0) {
+            progressStats.textContent = `Processed: ${progress.processed} / ${progress.total}${progress.errors > 0 ? ` | Errors: ${progress.errors}` : ''}`;
+          }
+          
+          if (!progress.isRunning) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+            
+            // Wait a moment then reload page to show updated data
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+          }
+        } else {
+          // No progress data, might be done
+          clearInterval(progressInterval);
+          progressInterval = null;
+          resetButton();
+        }
+      } catch (error) {
+        console.error('Progress check error:', error);
+      }
+    }
+
+    function resetButton() {
+      const button = document.getElementById('syncButton');
+      const buttonText = document.getElementById('syncButtonText');
+      const syncIcon = document.getElementById('syncIcon');
+      const progressContainer = document.getElementById('progressContainer');
+      
+      button.disabled = false;
+      button.classList.remove('opacity-50', 'cursor-not-allowed');
+      buttonText.textContent = 'Sync Now';
+      syncIcon.classList.remove('animate-spin');
+      progressContainer.classList.add('hidden');
+    }
+
+    // Check for existing sync on page load
+    window.addEventListener('load', () => {
+      checkProgress();
+      // Poll every 2 seconds if sync might be running
+      setInterval(() => {
+        if (!progressInterval) {
+          checkProgress();
+        }
+      }, 2000);
+    });
+  </script>
 </body>
 </html>
 

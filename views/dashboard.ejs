@@ -37,20 +37,9 @@
 <body class="bg-gray-100 min-h-screen">
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
-  <nav class="bg-gray-800 text-white">
-    <div class="container mx-auto px-4 py-3">
-      <div class="flex justify-between items-center">
-        <h1 class="text-xl font-bold">Radarr Indian Helper</h1>
-        <div class="space-x-4">
-          <a href="/" class="hover:text-gray-300 font-semibold">Dashboard</a>
-          <a href="/data/radarr" class="hover:text-gray-300">Radarr Data</a>
-          <a href="/data/rss" class="hover:text-gray-300">RSS Data</a>
-          <a href="/settings" class="hover:text-gray-300">Settings</a>
-        </div>
-      </div>
-    </div>
-  </nav>
-  <main class="container mx-auto px-4 py-8">
+  <%- include('partials/sidebar', { currentPage: 'dashboard' }) %>
+  
+  <main class="ml-64 p-8">
     <div class="mb-6 flex justify-between items-center">
       <h2 class="text-2xl font-bold">Dashboard</h2>
       <div class="flex items-center gap-4">
