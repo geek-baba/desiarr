@@ -46,21 +46,37 @@ export function parseRSSItem(item: RSSItem, feedId: number, sourceSite: string) 
   }
   
   // Try multiple patterns to find TMDB ID
-  // Be strict: only match actual TMDB URLs or explicit "TMDB ID:" patterns
+  // Be strict: only match actual TMDB movie page URLs or explicit "TMDB ID:" patterns
+  // IMPORTANT: Exclude image.tmdb.org URLs (they contain image hashes, not movie IDs)
   // Avoid matching random numbers that happen to be after "TMDB"
-  const tmdbMatch = description.match(/themoviedb\.org\/movie\/(\d+)/i) || 
-                    description.match(/TMDB\s+ID\s*[:\-]?\s*(\d+)/i) ||
-                    description.match(/TMDB\s+Link[:\s]+.*?(\d+)/i) ||
-                    description.match(/tmdb[:\s]+(\d+)/i);
+  
+  // First, try to match actual movie page URLs (most reliable)
+  let tmdbMatch = description.match(/themoviedb\.org\/movie\/(\d+)/i);
+  
+  // If no movie URL found, try explicit ID patterns (but NOT in image URLs)
+  if (!tmdbMatch) {
+    // Match "TMDB ID: 12345" or "TMDB: 12345" but NOT in image URLs
+    tmdbMatch = description.match(/(?<!image\.)tmdb\s+id\s*[:\-]?\s*(\d+)/i) ||
+                description.match(/tmdb\s+link[:\s]+.*?(\d+)/i) ||
+                description.match(/(?<!image\.)tmdb[:\s]+(\d+)/i);
+  }
+  
   if (tmdbMatch) {
     const extractedId = parseInt(tmdbMatch[1], 10);
     // Validate: TMDB IDs are typically 4-8 digits, but be reasonable
     // Also log a warning if the ID seems suspicious (very low numbers might be old/incorrect)
     if (extractedId > 0 && extractedId < 100000000) {
-      tmdbId = extractedId;
-      console.log(`  Extracted TMDB ID ${tmdbId} from RSS feed for: ${title}`);
-      if (extractedId < 10000) {
-        console.log(`  ⚠ WARNING: TMDB ID ${tmdbId} seems unusually low - may be incorrect`);
+      // Double-check: make sure we didn't match from an image URL
+      const matchIndex = tmdbMatch.index || 0;
+      const beforeMatch = description.substring(Math.max(0, matchIndex - 50), matchIndex);
+      if (!beforeMatch.includes('image.tmdb.org') && !beforeMatch.includes('image.tmdb')) {
+        tmdbId = extractedId;
+        console.log(`  Extracted TMDB ID ${tmdbId} from RSS feed for: ${title}`);
+        if (extractedId < 10000) {
+          console.log(`  ⚠ WARNING: TMDB ID ${tmdbId} seems unusually low - may be incorrect`);
+        }
+      } else {
+        console.log(`  ⚠ Ignored TMDB ID ${extractedId} - matched from image URL, not movie page`);
       }
     } else {
       console.log(`  ⚠ Ignored invalid TMDB ID ${extractedId} from RSS feed (out of range)`);
