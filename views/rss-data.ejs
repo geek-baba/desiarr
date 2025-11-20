@@ -44,9 +44,13 @@
           class="border rounded px-3 py-2"
         >
           <option value="">All Feeds</option>
-          <% feeds.forEach(feed => { %>
+          <% feeds.forEach(function(feed) { %>
             <option value="<%= feed.id %>" <%= selectedFeedId === feed.id ? 'selected' : '' %>>
-              <%= feed.name %> (<%= itemsByFeed.find((f: any) => f.feedId === feed.id)?.itemCount || 0 %> items)
+              <% 
+                const feedStats = itemsByFeed.find(function(f) { return f.feedId === feed.id; });
+                const itemCount = feedStats ? feedStats.itemCount : 0;
+              %>
+              <%= feed.name %> (<%= itemCount %> items)
             </option>
           <% }); %>
         </select>
