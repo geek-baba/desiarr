@@ -5,8 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RSS Feed Data - Radarr Indian Helper</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    }
+    .toast-enter {
+      animation: slideIn 0.3s ease-out;
+    }
+    .toast-exit {
+      animation: slideOut 0.3s ease-out;
+    }
+  </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
   <%- include('partials/sidebar', { currentPage: 'rss' }) %>
   
   <main class="ml-64 p-8">
@@ -147,6 +177,40 @@
   <script>
     let progressInterval = null;
 
+    // Toast Notification System
+    function showToast(message, type = 'info', duration = 5000) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      const bgColors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500',
+      };
+      
+      const icons = {
+        success: '✓',
+        error: '✗',
+        warning: '⚠',
+        info: 'ℹ',
+      };
+      
+      toast.className = `${bgColors[type] || bgColors.info} text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 min-w-[300px] max-w-md toast-enter`;
+      toast.innerHTML = `
+        <span class="text-xl font-bold">${icons[type] || icons.info}</span>
+        <span class="flex-1">${message}</span>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
     function startSync() {
       const button = document.getElementById('syncButton');
       const buttonText = document.getElementById('syncButtonText');
@@ -170,16 +234,17 @@
       .then(response => response.json())
       .then(data => {
         if (data.success) {
+          showToast('RSS sync started successfully', 'success', 3000);
           // Start polling for progress
           progressInterval = setInterval(pollProgress, 1000);
         } else {
-          alert('Failed to start sync: ' + (data.message || 'Unknown error'));
+          showToast('Failed to start sync: ' + (data.message || 'Unknown error'), 'error');
           resetButton();
         }
       })
       .catch(error => {
         console.error('Error starting sync:', error);
-        alert('Failed to start sync: ' + error.message);
+        showToast('Failed to start sync: ' + error.message, 'error');
         resetButton();
       });
     }
@@ -217,9 +282,11 @@
               if (progress.errors > 0) {
                 progressStep.textContent = 'Completed with errors';
                 progressStep.classList.add('text-red-600');
+                showToast(`Sync completed with ${progress.errors} error(s)`, 'warning', 5000);
               } else {
                 progressStep.textContent = 'Sync completed successfully!';
                 progressStep.classList.add('text-green-600');
+                showToast('RSS sync completed successfully!', 'success', 3000);
               }
               
               // Reload page after 2 seconds to show updated data

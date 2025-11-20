@@ -106,10 +106,15 @@ router.get('/rss', (req: Request, res: Response) => {
 // Trigger RSS sync
 router.post('/rss/sync', async (req: Request, res: Response) => {
   try {
-    // Check if sync is already running
+    // Check if sync is already running - only check if actually running, not just if progress exists
     const current = syncProgress.get();
     if (current && current.isRunning && current.type === 'rss') {
       return res.json({ success: false, message: 'RSS sync is already in progress' });
+    }
+    
+    // Clear any stale progress that's not actually running
+    if (current && !current.isRunning && current.type === 'rss') {
+      syncProgress.clear();
     }
 
     // Start sync in background
