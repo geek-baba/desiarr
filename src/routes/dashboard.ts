@@ -206,15 +206,17 @@ router.get('/', async (req: Request, res: Response) => {
         : releases.filter(r => !r.radarr_movie_id && (r.status === 'NEW' || r.status === 'ATTENTION_NEEDED'));
 
       // Existing releases: those with radarr_movie_id but not upgrade candidates
-      // Exclude IGNORED releases from existing (they'll be shown in Ignored tab)
+      // Include IGNORED releases if they have radarr_movie_id (they represent existing movies)
       const existing = releases.filter(r => (
         !upgradeGuids.has(r.guid) &&
-        (r.radarr_movie_id || hasRadarrMatch) &&
-        r.status !== 'IGNORED' // Don't show ignored releases in existing section
+        (r.radarr_movie_id || hasRadarrMatch)
+        // Note: We include IGNORED releases here if they have radarr_movie_id
+        // because they represent an existing movie (just not an upgrade candidate)
       ));
       
-      // Ignored releases: those with IGNORED status
-      const ignored = releases.filter(r => r.status === 'IGNORED');
+      // Ignored releases: those with IGNORED status AND no radarr_movie_id
+      // (releases with radarr_movie_id but IGNORED status are shown in Existing section)
+      const ignored = releases.filter(r => r.status === 'IGNORED' && !r.radarr_movie_id);
       
       // Extract Radarr info from synced Radarr movies table (more complete than release attributes)
       let radarrInfo: any = null;
