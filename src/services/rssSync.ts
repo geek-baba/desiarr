@@ -532,6 +532,7 @@ export function getSyncedRssItems(feedId?: number): any[] {
   if (feedId) {
     return db.prepare('SELECT * FROM rss_feed_items WHERE feed_id = ? ORDER BY published_at DESC').all(feedId);
   }
+  // Sort by published_at DESC (newest first) - this is the feed release date
   return db.prepare('SELECT * FROM rss_feed_items ORDER BY published_at DESC').all();
 }
 
