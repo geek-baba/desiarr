@@ -343,7 +343,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                 }
               }
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error(`TMDB search error for "${item.clean_title}":`, error);
           }
         }
@@ -376,14 +376,14 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                   } else {
                     needsAttention = true; // Have IMDB but no TMDB
                   }
-                } catch (error) {
+                } catch (error: any) {
                   needsAttention = true;
                 }
               } else {
                 needsAttention = true; // Have IMDB but no TMDB and no API key
               }
             }
-          } catch (error) {
+          } catch (error: any) {
             // Continue
           }
         }
