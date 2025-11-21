@@ -10,6 +10,7 @@ import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from '..
 import { runMatchingEngine } from '../services/matchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
+import db from '../db';
 
 const router = Router();
 
