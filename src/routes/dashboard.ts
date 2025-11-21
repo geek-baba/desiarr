@@ -236,17 +236,27 @@ router.get('/', async (req: Request, res: Response) => {
       const movieTitle = buildDisplayTitle(primaryRelease);
 
       // Check if movie is in Radarr by checking synced Radarr data (even if releases don't have radarr_movie_id set)
+      // IMPORTANT: Do this BEFORE categorizing releases to ensure proper categorization
       let hasRadarrMatch = releases.some(r => Boolean(r.radarr_movie_id));
+      let radarrMovieId: number | undefined = primaryRelease.radarr_movie_id;
+      
       if (!hasRadarrMatch && primaryRelease.tmdb_id) {
         const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
         if (syncedMovie) {
           hasRadarrMatch = true;
-          // Update primary release with radarr_movie_id
+          radarrMovieId = syncedMovie.radarr_id;
+          // Update ALL releases in this group with radarr_movie_id BEFORE categorization
+          for (const release of releases) {
+            if (!release.radarr_movie_id) {
+              release.radarr_movie_id = syncedMovie.radarr_id;
+            }
+          }
+          // Also update primary release
           primaryRelease.radarr_movie_id = syncedMovie.radarr_id;
         }
       }
       
-      // Categorize releases by state
+      // Categorize releases by state (now that all releases have radarr_movie_id if movie is in Radarr)
       const upgrade = releases.filter(r => (
         r.radarr_movie_id &&
         (r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED')
@@ -254,23 +264,21 @@ router.get('/', async (req: Request, res: Response) => {
       const upgradeGuids = new Set(upgrade.map(r => r.guid));
 
       // Add releases: those without radarr_movie_id (includes NEW and ATTENTION_NEEDED)
+      // If movie is in Radarr, no releases should be in "add"
       const add = hasRadarrMatch
         ? []
         : releases.filter(r => !r.radarr_movie_id && (r.status === 'NEW' || r.status === 'ATTENTION_NEEDED'));
 
       // Existing releases: those with radarr_movie_id but not upgrade candidates
-      // Include IGNORED releases if they have radarr_movie_id (they represent existing movies)
+      // This includes IGNORED releases if they have radarr_movie_id (they represent existing movies)
       const existing = releases.filter(r => (
-        !upgradeGuids.has(r.guid) &&
-        (r.radarr_movie_id || hasRadarrMatch)
-        // Note: We include IGNORED releases here if they have radarr_movie_id
-        // because they represent an existing movie (just not an upgrade candidate)
+        r.radarr_movie_id && // Must have radarr_movie_id
+        !upgradeGuids.has(r.guid) // Not an upgrade candidate
       ));
       
-      // Ignored releases: those with IGNORED status
-      // Note: Ignored releases are included in the movie group but won't create separate "Ignored Items" entries
-      // if the movie is matched (has TMDB/IMDB) or in Radarr
-      const ignored = releases.filter(r => r.status === 'IGNORED');
+      // Ignored releases: those with IGNORED status AND no radarr_movie_id
+      // (releases with radarr_movie_id and IGNORED status are already in "existing")
+      const ignored = releases.filter(r => r.status === 'IGNORED' && !r.radarr_movie_id);
       
       // Extract Radarr info from synced Radarr movies table (more complete than release attributes)
       let radarrInfo: any = null;
@@ -356,35 +364,21 @@ router.get('/', async (req: Request, res: Response) => {
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
-        radarrMovieId: primaryRelease.radarr_movie_id,
+        radarrMovieId: radarrMovieId || primaryRelease.radarr_movie_id, // Use the detected radarrMovieId
         imdbId: imdbIdFromRelease, // Add IMDB ID from releases
         radarrInfo, // Add Radarr info to the movie group
         add,
         existing,
         upgrade,
-        ignored, // Add ignored releases
+        ignored, // Add ignored releases (only those not in Radarr)
       });
     }
 
-    // Enrich with movie metadata (poster, IMDB, etc.) and check if movie is in Radarr
+    // Enrich with movie metadata (poster, IMDB, etc.)
+    // Note: Radarr detection is already done during categorization, so we don't need to do it again here
     for (const movieGroup of movieGroups) {
       // Get all releases for this movie group
       const groupReleases = releasesByMovie[movieGroup.movieKey] || [];
-      
-      // Check if movie is in Radarr by checking synced Radarr data (even if releases don't have radarr_movie_id set)
-      if (movieGroup.tmdbId && !movieGroup.radarrMovieId) {
-        const syncedMovie = getSyncedRadarrMovieByTmdbId(movieGroup.tmdbId);
-        if (syncedMovie) {
-          // Movie exists in Radarr, update the group
-          movieGroup.radarrMovieId = syncedMovie.radarr_id;
-          // Also update all releases in the group to have radarr_movie_id
-          for (const release of groupReleases) {
-            if (!release.radarr_movie_id) {
-              release.radarr_movie_id = syncedMovie.radarr_id;
-            }
-          }
-        }
-      }
       
       // Get movie metadata if we have TMDB ID or Radarr movie ID
       if (movieGroup.tmdbId || movieGroup.radarrMovieId) {
