@@ -400,6 +400,10 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               };
 
               if (existing) {
+                // Preserve manually set IDs - don't overwrite if they were manually set
+                const preserveTmdbId = existing.tmdb_id_manual ? existing.tmdb_id : itemData.tmdb_id;
+                const preserveImdbId = existing.imdb_id_manual ? existing.imdb_id : itemData.imdb_id;
+                
                 // Update existing
                 db.prepare(`
                   UPDATE rss_feed_items SET
@@ -438,8 +442,8 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                   itemData.audio,
                   itemData.rss_size_mb,
                   itemData.published_at,
-                  itemData.tmdb_id,
-                  itemData.imdb_id,
+                  preserveTmdbId,
+                  preserveImdbId,
                   itemData.audio_languages,
                   itemData.raw_data,
                   itemData.synced_at,
@@ -570,10 +574,13 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
     console.log('Starting backfill of missing TMDB/IMDB IDs for existing RSS items...');
     
     // Get all items missing TMDB or IMDB IDs, OR items with both IDs (to validate they match)
+    // Exclude items with manually set IDs (they won't be overwritten)
     const itemsToEnrich = db.prepare(`
-      SELECT id, guid, title, clean_title, year, tmdb_id, imdb_id, feed_id, feed_name, raw_data, link
+      SELECT id, guid, title, clean_title, year, tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual, feed_id, feed_name, raw_data, link
       FROM rss_feed_items
-      WHERE tmdb_id IS NULL OR imdb_id IS NULL OR (tmdb_id IS NOT NULL AND imdb_id IS NOT NULL)
+      WHERE (tmdb_id IS NULL OR imdb_id IS NULL OR (tmdb_id IS NOT NULL AND imdb_id IS NOT NULL))
+        AND (tmdb_id_manual = 0 OR tmdb_id_manual IS NULL)
+        AND (imdb_id_manual = 0 OR imdb_id_manual IS NULL)
       ORDER BY id
     `).all() as Array<{
       id: number;
@@ -583,6 +590,8 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
       year: number | null;
       tmdb_id: number | null;
       imdb_id: string | null;
+      tmdb_id_manual: number | null;
+      imdb_id_manual: number | null;
       feed_id: number;
       feed_name: string;
       raw_data: string | null;
@@ -852,18 +861,21 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
           }
         }
 
-        // Update database if we found new IDs
-        if (tmdbId !== item.tmdb_id || imdbId !== item.imdb_id) {
+        // Update database if we found new IDs, but preserve manually set IDs
+        const preserveTmdbId = item.tmdb_id_manual ? item.tmdb_id : tmdbId;
+        const preserveImdbId = item.imdb_id_manual ? item.imdb_id : imdbId;
+        
+        if (preserveTmdbId !== item.tmdb_id || preserveImdbId !== item.imdb_id) {
           db.prepare(`
             UPDATE rss_feed_items 
             SET tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
             WHERE id = ?
-          `).run(tmdbId, imdbId, item.id);
+          `).run(preserveTmdbId, preserveImdbId, item.id);
           
           stats.updated++;
-          console.log(`  ✓ Updated item ${item.id}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}`);
+          console.log(`  ✓ Updated item ${item.id}: TMDB=${preserveTmdbId || 'null'}${item.tmdb_id_manual ? ' (manual)' : ''}, IMDB=${preserveImdbId || 'null'}${item.imdb_id_manual ? ' (manual)' : ''}`);
         } else {
-          console.log(`  ℹ No changes needed for item ${item.id}`);
+          console.log(`  ℹ No changes needed for item ${item.id}${item.tmdb_id_manual || item.imdb_id_manual ? ' (has manual IDs)' : ''}`);
         }
 
       } catch (error: any) {

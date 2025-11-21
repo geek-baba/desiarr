@@ -102,6 +102,8 @@ db.exec(`
     published_at TEXT NOT NULL,
     tmdb_id INTEGER,
     imdb_id TEXT,
+    tmdb_id_manual INTEGER DEFAULT 0,
+    imdb_id_manual INTEGER DEFAULT 0,
     audio_languages TEXT,
     raw_data TEXT,
     synced_at TEXT NOT NULL,
@@ -120,6 +122,20 @@ db.exec(`
 
 // Migrate existing databases - add new columns if they don't exist
 try {
+  // Check rss_feed_items table for manual ID tracking columns
+  const rssColumns = db.prepare("PRAGMA table_info(rss_feed_items)").all() as any[];
+  const rssColumnNames = rssColumns.map((c: any) => c.name);
+  
+  if (!rssColumnNames.includes('tmdb_id_manual')) {
+    db.exec('ALTER TABLE rss_feed_items ADD COLUMN tmdb_id_manual INTEGER DEFAULT 0');
+    console.log('Added column: rss_feed_items.tmdb_id_manual');
+  }
+  
+  if (!rssColumnNames.includes('imdb_id_manual')) {
+    db.exec('ALTER TABLE rss_feed_items ADD COLUMN imdb_id_manual INTEGER DEFAULT 0');
+    console.log('Added column: rss_feed_items.imdb_id_manual');
+  }
+  
   const columns = db.prepare("PRAGMA table_info(releases)").all() as any[];
   const columnNames = columns.map((c: any) => c.name);
   

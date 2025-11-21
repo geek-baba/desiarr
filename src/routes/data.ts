@@ -310,14 +310,14 @@ router.post('/rss/override-tmdb/:id', async (req: Request, res: Response) => {
       imdbId = tmdbMovie.imdb_id;
     }
 
-    // Update the RSS item with the new TMDB ID and IMDB ID
+    // Update the RSS item with the new TMDB ID and IMDB ID, mark as manually set
     db.prepare(`
       UPDATE rss_feed_items 
-      SET tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+      SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?, updated_at = datetime('now')
       WHERE id = ?
-    `).run(parseInt(tmdbId, 10), imdbId, itemId);
+    `).run(parseInt(tmdbId, 10), imdbId, imdbId ? 1 : 0, itemId);
 
-    console.log(`Updated RSS item ${itemId} with TMDB ID ${tmdbId} and IMDB ID ${imdbId || 'none'}`);
+    console.log(`Manually updated RSS item ${itemId} with TMDB ID ${tmdbId} and IMDB ID ${imdbId || 'none'}`);
 
     res.json({ 
       success: true, 
