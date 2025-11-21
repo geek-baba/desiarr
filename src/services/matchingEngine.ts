@@ -299,7 +299,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                     sizeMb: existingSizeMb,
                   });
                 }
-              } catch (error) {
+              } catch (error: any) {
                 console.error(`Error parsing movie file for ${syncedRadarrMovie.title}:`, error);
               }
             }
