@@ -5,6 +5,7 @@ import { isReleaseAllowed, computeQualityScore } from '../scoring/qualityScore';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import tmdbClient from '../tmdb/client';
 import imdbClient from '../imdb/client';
+import radarrClient from '../radarr/client';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from './radarrSync';
 import { getSyncedRssItems } from './rssSync';
@@ -172,6 +173,30 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             radarrMovieTitle = syncedRadarrMovie.title;
             tmdbTitle = syncedRadarrMovie.title;
             tmdbOriginalLanguage = syncedRadarrMovie.original_language;
+
+            // Fetch Radarr history for this movie to get last download
+            if (radarrMovieId) {
+              try {
+                const history = await radarrClient.getMovieHistory(radarrMovieId);
+                if (history && history.length > 0) {
+                  // Find the most recent download event
+                  const downloadEvents = history.filter((h: any) => 
+                    h.eventType === 'downloadFolderImported' || 
+                    h.eventType === 'grabbed' ||
+                    h.eventType === 'downloadCompleted'
+                  );
+                  if (downloadEvents.length > 0) {
+                    // Sort by date, most recent first
+                    downloadEvents.sort((a: any, b: any) => 
+                      new Date(b.date).getTime() - new Date(a.date).getTime()
+                    );
+                    radarrHistory = JSON.stringify(downloadEvents);
+                  }
+                }
+              } catch (error) {
+                console.log(`Could not fetch history for Radarr movie ${radarrMovieId}:`, error);
+              }
+            }
 
             // Parse movie file if available
             if (syncedRadarrMovie.movie_file) {

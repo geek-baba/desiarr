@@ -215,14 +215,81 @@ router.get('/', async (req: Request, res: Response) => {
       // Ignored releases: those with IGNORED status
       const ignored = releases.filter(r => r.status === 'IGNORED');
       
-      // Extract Radarr info from the first release that has existing_file_attributes
+      // Extract Radarr info from synced Radarr movies table (more complete than release attributes)
       let radarrInfo: any = null;
-      const releaseWithRadarrInfo = releases.find(r => r.existing_file_attributes);
-      if (releaseWithRadarrInfo && releaseWithRadarrInfo.existing_file_attributes) {
-        try {
-          radarrInfo = JSON.parse(releaseWithRadarrInfo.existing_file_attributes);
-        } catch (e) {
-          console.error('Error parsing existing_file_attributes:', e);
+      if (primaryRelease.radarr_movie_id) {
+        const syncedRadarrMovie = getSyncedRadarrMovieByRadarrId(primaryRelease.radarr_movie_id);
+        if (syncedRadarrMovie) {
+          try {
+            // Parse movie file for attributes
+            if (syncedRadarrMovie.movie_file) {
+              const movieFile = JSON.parse(syncedRadarrMovie.movie_file);
+              radarrInfo = {
+                path: syncedRadarrMovie.path,
+                fileName: movieFile.relativePath ? movieFile.relativePath.split('/').pop() : null,
+                resolution: movieFile.quality?.quality?.resolution || null,
+                codec: null, // Will be parsed from filename
+                sourceTag: movieFile.quality?.quality?.source || null,
+                audio: null, // Will be parsed from filename
+                sizeMb: movieFile.size ? movieFile.size / (1024 * 1024) : null,
+                mediaInfo: movieFile.mediaInfo || null,
+              };
+              
+              // Parse attributes from filename if available
+              if (movieFile.relativePath) {
+                const { parseReleaseFromTitle } = require('../scoring/parseFromTitle');
+                const parsed = parseReleaseFromTitle(movieFile.relativePath);
+                radarrInfo.codec = parsed.codec;
+                radarrInfo.resolution = parsed.resolution || radarrInfo.resolution;
+                radarrInfo.sourceTag = parsed.source_tag || radarrInfo.sourceTag;
+                radarrInfo.audio = parsed.audio;
+              }
+            }
+            
+            // Get last download from history stored in releases
+            const releaseWithHistory = releases.find(r => r.radarr_history);
+            if (releaseWithHistory && releaseWithHistory.radarr_history) {
+              try {
+                const history = JSON.parse(releaseWithHistory.radarr_history);
+                if (Array.isArray(history) && history.length > 0) {
+                  // Find the most recent download event
+                  const downloadEvents = history.filter((h: any) => 
+                    h.eventType === 'downloadFolderImported' || 
+                    h.eventType === 'grabbed' ||
+                    h.eventType === 'downloadCompleted'
+                  );
+                  if (downloadEvents.length > 0) {
+                    // Sort by date, most recent first
+                    downloadEvents.sort((a: any, b: any) => 
+                      new Date(b.date).getTime() - new Date(a.date).getTime()
+                    );
+                    const lastDownload = downloadEvents[0];
+                    radarrInfo.lastDownload = {
+                      sourceTitle: lastDownload.sourceTitle || null,
+                      date: lastDownload.date || null,
+                      releaseGroup: lastDownload.data?.releaseGroup || null,
+                    };
+                  }
+                }
+              } catch (e) {
+                console.error('Error parsing radarr_history:', e);
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing Radarr movie file:', e);
+          }
+        }
+      }
+      
+      // Fallback to existing_file_attributes if we don't have synced Radarr data
+      if (!radarrInfo) {
+        const releaseWithRadarrInfo = releases.find(r => r.existing_file_attributes);
+        if (releaseWithRadarrInfo && releaseWithRadarrInfo.existing_file_attributes) {
+          try {
+            radarrInfo = JSON.parse(releaseWithRadarrInfo.existing_file_attributes);
+          } catch (e) {
+            console.error('Error parsing existing_file_attributes:', e);
+          }
         }
       }
       

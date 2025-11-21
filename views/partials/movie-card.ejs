@@ -49,12 +49,28 @@
           </div>
           
           <!-- Radarr Info -->
-          <% if (movie.radarrInfo && movie.radarrInfo.fileName) { %>
+          <% if (movie.radarrInfo) { %>
             <div class="text-sm">
-              <div class="text-gray-700 mb-1">
-                <strong>Radarr File:</strong> <%= movie.radarrInfo.fileName %>
-              </div>
-              <% if (movie.radarrInfo.resolution || movie.radarrInfo.codec || movie.radarrInfo.sourceTag || movie.radarrInfo.audio) { %>
+              <% if (movie.radarrInfo.lastDownload && movie.radarrInfo.lastDownload.sourceTitle) { %>
+                <div class="text-gray-700 mb-1">
+                  <strong>Last Downloaded:</strong> <%= movie.radarrInfo.lastDownload.sourceTitle %>
+                  <% if (movie.radarrInfo.lastDownload.date) { %>
+                    <span class="text-gray-500 text-xs ml-2">(<%= new Date(movie.radarrInfo.lastDownload.date).toLocaleDateString() %>)</span>
+                  <% } %>
+                  <% if (movie.radarrInfo.lastDownload.releaseGroup) { %>
+                    <span class="text-gray-500 text-xs ml-1">[<%= movie.radarrInfo.lastDownload.releaseGroup %>]</span>
+                  <% } %>
+                </div>
+              <% } else if (movie.radarrInfo.fileName) { %>
+                <div class="text-gray-700 mb-1">
+                  <strong>Radarr File:</strong> <%= movie.radarrInfo.fileName %>
+                </div>
+              <% } else if (movie.radarrInfo.path) { %>
+                <div class="text-gray-700 mb-1">
+                  <strong>Radarr Path:</strong> <%= movie.radarrInfo.path.split('/').pop() %>
+                </div>
+              <% } %>
+              <% if (movie.radarrInfo.resolution || movie.radarrInfo.codec || movie.radarrInfo.sourceTag || movie.radarrInfo.audio || movie.radarrInfo.sizeMb) { %>
                 <div class="flex flex-wrap gap-1">
                   <% if (movie.radarrInfo.resolution) { %>
                     <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs"><%= movie.radarrInfo.resolution %></span>
