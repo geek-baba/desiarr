@@ -56,11 +56,16 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
     const rssItems = getSyncedRssItems();
     stats.totalRssItems = rssItems.length;
 
-    console.log(`Processing ${rssItems.length} synced RSS items...`);
+    console.log(`[MATCHING ENGINE] Processing ${rssItems.length} synced RSS items...`);
+    
+    // Log sample of items being processed
+    if (rssItems.length > 0) {
+      console.log(`[MATCHING ENGINE] Sample items: ${rssItems.slice(0, 5).map(i => `"${i.title}" (TMDB: ${i.tmdb_id || 'none'})`).join(', ')}`);
+    }
 
     for (const item of rssItems) {
       try {
-        console.log(`\nProcessing RSS item: "${item.title}" (TMDB: ${item.tmdb_id || 'none'}, IMDB: ${item.imdb_id || 'none'})`);
+        console.log(`\n[MATCHING ENGINE] Processing RSS item: "${item.title}" (TMDB: ${item.tmdb_id || 'none'}, IMDB: ${item.imdb_id || 'none'})`);
         
         // Check if we've already processed this item (by guid)
         const existingRelease = releasesModel.getByGuid(item.guid);
