@@ -79,12 +79,6 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
           // Radarr API returns 'added' field (not 'dateAdded'), handle both for compatibility
           const dateAdded = (movie as any).added || (movie as any).dateAdded || movie.dateAdded || null;
           
-          // Debug: Log first few movies to see what fields are available
-          if (processed <= 3) {
-            console.log(`[DEBUG] Movie "${movie.title}" (Radarr ID: ${movie.id}) - Raw API fields:`, Object.keys(movie as any));
-            console.log(`[DEBUG] Movie "${movie.title}" - added field:`, (movie as any).added, 'dateAdded field:', (movie as any).dateAdded);
-          }
-          
           const movieData = {
             radarr_id: movie.id,
             tmdb_id: movie.tmdbId,

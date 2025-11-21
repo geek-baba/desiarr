@@ -57,7 +57,7 @@
 
     <!-- Search Bar -->
     <div class="bg-white rounded-lg shadow p-4 mb-6">
-      <form onsubmit="handleSearchSubmit(event)" class="flex items-center gap-4">
+      <div class="flex items-center gap-4">
         <label for="searchInput" class="text-sm font-medium text-gray-700">Search:</label>
         <input 
           type="text" 
@@ -76,12 +76,13 @@
           </button>
         <% } %>
         <button 
-          type="submit"
+          type="button"
+          onclick="performSearch()" 
           class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
         >
           Search
         </button>
-      </form>
+      </div>
     </div>
 
     <div class="bg-white rounded-lg shadow overflow-hidden">
@@ -213,13 +214,8 @@
     let searchTimeout = null;
 
     // Search functionality
-    function handleSearchSubmit(event) {
-      event.preventDefault();
-      performSearch();
-    }
-
     function performSearch() {
-      const searchInput = document.getElementById('searchInput');
+      const searchInput = document.getElementById('searchInput') as HTMLInputElement;
       const searchTerm = searchInput.value.trim();
       const url = new URL(window.location.href);
       
@@ -240,6 +236,19 @@
       url.searchParams.set('page', '1');
       window.location.href = url.toString();
     }
+
+    // Handle Enter key in search input
+    document.addEventListener('DOMContentLoaded', function() {
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.addEventListener('keydown', function(event: KeyboardEvent) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            performSearch();
+          }
+        });
+      }
+    });
 
     async function startSync() {
       const button = document.getElementById('syncButton');
