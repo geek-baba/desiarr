@@ -212,6 +212,7 @@
   <script>
     let progressInterval = null;
     let searchTimeout = null;
+    let backgroundPollInterval = null;
 
     // Search functionality
     function performSearch() {
@@ -338,6 +339,12 @@
             clearInterval(progressInterval);
             progressInterval = null;
             
+            // Stop background polling if it was running
+            if (backgroundPollInterval) {
+              clearInterval(backgroundPollInterval);
+              backgroundPollInterval = null;
+            }
+            
             // If there was an error, don't reload immediately - let user see the error
             if (progress.currentStep && progress.currentStep.startsWith('Error:')) {
               // Keep error visible for 10 seconds, then allow manual reload
@@ -345,10 +352,15 @@
                 resetButton();
               }, 10000);
             } else {
-              // Success - reload after 2 seconds
-              setTimeout(() => {
-                window.location.reload();
-              }, 2000);
+              // Success - reload after 2 seconds (only if we were actively polling)
+              if (progressInterval !== null || backgroundPollInterval !== null) {
+                setTimeout(() => {
+                  window.location.reload();
+                }, 2000);
+              } else {
+                // Sync was already completed before page load, just reset button
+                resetButton();
+              }
             }
           }
         } else {
@@ -380,15 +392,39 @@
       progressContainer.classList.add('hidden');
     }
 
-    // Check for existing sync on page load
-    window.addEventListener('load', () => {
-      checkProgress();
-      // Poll every 2 seconds if sync might be running
-      setInterval(() => {
-        if (!progressInterval) {
+    // Check for existing sync on page load (only once, don't auto-poll)
+    window.addEventListener('load', async () => {
+      try {
+        const response = await fetch('/data/radarr/sync/progress');
+        const data = await response.json();
+        
+        // Only start polling if there's an active sync
+        if (data.progress && data.progress.isRunning) {
+          // Show progress bar
+          const progressContainer = document.getElementById('progressContainer');
+          if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+          }
+          
+          // Disable sync button
+          const button = document.getElementById('syncButton');
+          const buttonText = document.getElementById('syncButtonText');
+          const syncIcon = document.getElementById('syncIcon');
+          if (button) {
+            button.disabled = true;
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+            if (buttonText) buttonText.textContent = 'Syncing...';
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+          }
+          
+          // Start polling for progress
+          progressInterval = setInterval(checkProgress, 500);
           checkProgress();
         }
-      }, 2000);
+      } catch (error) {
+        // Silently fail - no active sync
+        console.log('No active sync detected');
+      }
     });
   </script>
 </body>
