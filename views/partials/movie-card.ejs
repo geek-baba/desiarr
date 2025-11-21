@@ -288,7 +288,11 @@
                   </div>
                 </td>
                 <td class="px-4 py-3 text-sm space-x-2">
-                  <!-- No actions for ignored releases -->
+                  <% if (!release.radarr_movie_id && movie.tmdbId) { %>
+                    <button onclick="addMovie(<%= release.id %>)" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs">
+                      Add to Radarr
+                    </button>
+                  <% } %>
                 </td>
               </tr>
             <% }); %>
