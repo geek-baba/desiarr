@@ -41,7 +41,16 @@
   
   <main class="ml-64 p-8">
     <div class="mb-6 flex justify-between items-center">
-      <h2 class="text-2xl font-bold">Dashboard</h2>
+      <div>
+        <h2 class="text-2xl font-bold">Dashboard</h2>
+        <% if (lastRefresh) { %>
+          <p class="text-sm text-gray-600 mt-1">
+            Last refreshed: <span class="font-medium"><%= new Date(lastRefresh).toLocaleString() %></span>
+          </p>
+        <% } else { %>
+          <p class="text-sm text-gray-500 mt-1">Last refreshed: Never</p>
+        <% } %>
+      </div>
       <div class="flex items-center gap-4">
         <div id="progressContainer" class="hidden flex-1 max-w-md">
           <div class="bg-gray-200 rounded-full h-2">
