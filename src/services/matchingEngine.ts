@@ -201,9 +201,6 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             tmdbTitle = syncedRadarrMovie.title;
             tmdbOriginalLanguage = syncedRadarrMovie.original_language;
             console.log(`  ✓ Found Radarr movie match: TMDB ID ${tmdbId} -> Radarr ID ${radarrMovieId} (${radarrMovieTitle})`);
-          } else {
-            console.log(`  ✗ No Radarr movie found for TMDB ID ${tmdbId} (${item.title})`);
-          }
 
             // Fetch Radarr history for this movie to get last download
             if (radarrMovieId) {
@@ -303,6 +300,8 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                 console.error(`Error parsing movie file for ${syncedRadarrMovie.title}:`, error);
               }
             }
+          } else {
+            console.log(`  ✗ No Radarr movie found for TMDB ID ${tmdbId} (${item.title})`);
           }
         }
 
