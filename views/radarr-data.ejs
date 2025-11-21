@@ -215,7 +215,7 @@
 
     // Search functionality
     function performSearch() {
-      const searchInput = document.getElementById('searchInput') as HTMLInputElement;
+      const searchInput = document.getElementById('searchInput');
       const searchTerm = searchInput.value.trim();
       const url = new URL(window.location.href);
       
@@ -241,7 +241,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       const searchInput = document.getElementById('searchInput');
       if (searchInput) {
-        searchInput.addEventListener('keydown', function(event: KeyboardEvent) {
+        searchInput.addEventListener('keydown', function(event) {
           if (event.key === 'Enter') {
             event.preventDefault();
             performSearch();
