@@ -57,7 +57,7 @@
 
     <!-- Search Bar -->
     <div class="bg-white rounded-lg shadow p-4 mb-6">
-      <div class="flex items-center gap-4">
+      <form onsubmit="handleSearchSubmit(event)" class="flex items-center gap-4">
         <label for="searchInput" class="text-sm font-medium text-gray-700">Search:</label>
         <input 
           type="text" 
@@ -65,17 +65,23 @@
           placeholder="Search by title, year, TMDB ID, or IMDB ID..." 
           class="flex-1 border rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           value="<%= search || '' %>"
-          onkeyup="handleSearch(event)"
         />
         <% if (search) { %>
           <button 
+            type="button"
             onclick="clearSearch()" 
             class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
           >
             Clear
           </button>
         <% } %>
-      </div>
+        <button 
+          type="submit"
+          class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm"
+        >
+          Search
+        </button>
+      </form>
     </div>
 
     <div class="bg-white rounded-lg shadow overflow-hidden">
@@ -207,14 +213,9 @@
     let searchTimeout = null;
 
     // Search functionality
-    function handleSearch(event) {
-      if (event.key === 'Enter') {
-        performSearch();
-      } else {
-        // Debounce search
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(performSearch, 500);
-      }
+    function handleSearchSubmit(event) {
+      event.preventDefault();
+      performSearch();
     }
 
     function performSearch() {

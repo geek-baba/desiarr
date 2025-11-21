@@ -76,6 +76,9 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             .prepare('SELECT id FROM radarr_movies WHERE radarr_id = ?')
             .get(movie.id) as { id: number } | undefined;
 
+          // Radarr API returns 'added' field (not 'dateAdded'), handle both for compatibility
+          const dateAdded = (movie as any).added || (movie as any).dateAdded || movie.dateAdded || null;
+          
           const movieData = {
             radarr_id: movie.id,
             tmdb_id: movie.tmdbId,
@@ -87,7 +90,7 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             movie_file: movie.movieFile ? JSON.stringify(movie.movieFile) : null,
             original_language: movie.originalLanguage?.name || null,
             images: movie.images ? JSON.stringify(movie.images) : null,
-            date_added: movie.dateAdded || null,
+            date_added: dateAdded,
             synced_at: new Date().toISOString(),
           };
 
