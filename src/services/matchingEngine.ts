@@ -61,6 +61,16 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
     // Log sample of items being processed
     if (rssItems.length > 0) {
       console.log(`[MATCHING ENGINE] Sample items: ${rssItems.slice(0, 5).map(i => `"${i.title}" (TMDB: ${i.tmdb_id || 'none'})`).join(', ')}`);
+      
+      // Check if Chocolate is in the list
+      const chocolateItems = rssItems.filter(i => i.title && i.title.toLowerCase().includes('chocolate'));
+      if (chocolateItems.length > 0) {
+        console.log(`[MATCHING ENGINE] Found ${chocolateItems.length} item(s) with "Chocolate" in title:`, chocolateItems.map(i => `"${i.title}" (ID: ${i.id}, TMDB: ${i.tmdb_id || 'none'})`).join(', '));
+      } else {
+        console.log(`[MATCHING ENGINE] No items found with "Chocolate" in title. Total items: ${rssItems.length}`);
+      }
+    } else {
+      console.log(`[MATCHING ENGINE] WARNING: No RSS items found to process!`);
     }
 
     for (const item of rssItems) {
