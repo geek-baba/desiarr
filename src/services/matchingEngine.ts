@@ -122,7 +122,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                 } else {
                   console.log(`  ⚠ Could not find TMDB ID for IMDB ${imdbId} - keeping original TMDB ID ${tmdbId}`);
                 }
-              } catch (error) {
+              } catch (error: any) {
                 console.log(`  ⚠ Failed to validate IMDB ${imdbId} - keeping original TMDB ID ${tmdbId}`);
               }
             } else if (tmdbImdbId === imdbId) {
@@ -130,7 +130,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             } else if (!tmdbImdbId) {
               console.log(`  ⚠ TMDB ${tmdbId} has no IMDB ID - cannot validate match`);
             }
-          } catch (error) {
+          } catch (error: any) {
             console.log(`  ⚠ Failed to validate TMDB/IMDB pair:`, error);
           }
         }
@@ -144,7 +144,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
               tmdbTitle = tmdbMovie.title;
               tmdbOriginalLanguage = tmdbMovie.original_language;
             }
-          } catch (error) {
+          } catch (error: any) {
             // Ignore - we still have TMDB ID which is what matters
           }
         }
@@ -161,7 +161,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             } else {
               needsAttention = true; // Have IMDB but no TMDB - won't work with Radarr
             }
-          } catch (error) {
+          } catch (error: any) {
             needsAttention = true;
           }
         } else if (!tmdbId && imdbId) {

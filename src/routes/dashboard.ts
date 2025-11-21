@@ -241,7 +241,7 @@ router.get('/', async (req: Request, res: Response) => {
                 const parsed = parseReleaseFromTitle(movieFile.relativePath);
                 radarrInfo.codec = parsed.codec;
                 radarrInfo.resolution = parsed.resolution || radarrInfo.resolution;
-                radarrInfo.sourceTag = parsed.source_tag || radarrInfo.sourceTag;
+                radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
                 radarrInfo.audio = parsed.audio;
               }
             }
