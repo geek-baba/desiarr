@@ -176,6 +176,10 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             radarrMovieTitle = syncedRadarrMovie.title;
             tmdbTitle = syncedRadarrMovie.title;
             tmdbOriginalLanguage = syncedRadarrMovie.original_language;
+            console.log(`  ✓ Found Radarr movie match: TMDB ID ${tmdbId} -> Radarr ID ${radarrMovieId} (${radarrMovieTitle})`);
+          } else {
+            console.log(`  ✗ No Radarr movie found for TMDB ID ${tmdbId} (${item.title})`);
+          }
 
             // Fetch Radarr history for this movie to get last download
             if (radarrMovieId) {
@@ -308,6 +312,9 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                   if (syncedRadarrMovie) {
                     radarrMovieId = syncedRadarrMovie.radarr_id;
                     radarrMovieTitle = syncedRadarrMovie.title;
+                    console.log(`  ✓ Found Radarr movie match after TMDB search: TMDB ID ${tmdbId} -> Radarr ID ${radarrMovieId} (${radarrMovieTitle})`);
+                  } else {
+                    console.log(`  ✗ No Radarr movie found for TMDB ID ${tmdbId} after TMDB search (${item.title})`);
                   }
                 }
               }
@@ -332,6 +339,16 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                     tmdbId = tmdbMovie.id;
                     tmdbTitle = tmdbMovie.title;
                     tmdbOriginalLanguage = tmdbMovie.original_language;
+                    
+                    // Check synced Radarr again with new TMDB ID
+                    const syncedRadarrMovie = getSyncedRadarrMovieByTmdbId(tmdbId);
+                    if (syncedRadarrMovie) {
+                      radarrMovieId = syncedRadarrMovie.radarr_id;
+                      radarrMovieTitle = syncedRadarrMovie.title;
+                      console.log(`  ✓ Found Radarr movie match after IMDB->TMDB lookup: TMDB ID ${tmdbId} -> Radarr ID ${radarrMovieId} (${radarrMovieTitle})`);
+                    } else {
+                      console.log(`  ✗ No Radarr movie found for TMDB ID ${tmdbId} after IMDB->TMDB lookup (${item.title})`);
+                    }
                   } else {
                     needsAttention = true; // Have IMDB but no TMDB
                   }
