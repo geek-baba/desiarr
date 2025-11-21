@@ -58,10 +58,9 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
       try {
         // Check if we've already processed this item (by guid)
         const existingRelease = releasesModel.getByGuid(item.guid);
-        if (existingRelease && (existingRelease.status === 'ADDED' || existingRelease.status === 'UPGRADED')) {
-          // Skip items that have already been added or upgraded
-          continue;
-        }
+        // Note: We still process items with ADDED/UPGRADED status to update metadata
+        // but we preserve their status at the end
+        const preserveStatus = existingRelease && (existingRelease.status === 'ADDED' || existingRelease.status === 'UPGRADED');
 
         // Check if release is allowed
         const parsed = {
@@ -379,7 +378,11 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           }
         }
 
-        // Create or update release
+        // Create or update release - ALWAYS create/update, even if IGNORED
+        // This ensures all RSS items appear in the dashboard
+        // Preserve ADDED/UPGRADED status if item was already processed
+        const finalStatus = preserveStatus ? existingRelease!.status : status;
+        
         const release: any = {
           guid: item.guid,
           title: item.title,
@@ -404,12 +407,23 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           existing_file_path: existingFilePath,
           existing_file_attributes: existingFileAttributes,
           radarr_history: radarrHistory,
-          status,
+          status: finalStatus,
           last_checked_at: new Date().toISOString(),
         };
 
         releasesModel.upsert(release);
         stats.processed++;
+        
+        // Update stats based on final status
+        if (status === 'NEW' || status === 'ATTENTION_NEEDED') {
+          stats.newReleases++;
+        } else if (status === 'UPGRADE_CANDIDATE') {
+          stats.upgradeCandidates++;
+        } else if (status === 'IGNORED') {
+          stats.ignored++;
+        } else if (radarrMovieId) {
+          stats.existing++;
+        }
       } catch (error: any) {
         stats.errors++;
         console.error(`Error processing RSS item ${item.guid}:`, error);
