@@ -177,6 +177,7 @@ router.get('/', async (req: Request, res: Response) => {
       add: any[];
       existing: any[];
       upgrade: any[];
+      ignored: any[];
     }> = [];
 
     for (const movieKey in releasesByMovie) {
