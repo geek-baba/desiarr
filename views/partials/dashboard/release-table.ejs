@@ -75,16 +75,16 @@
                 
                 <!-- Quality Attributes, Size, and Status Below Release Name -->
                 <div class="space-y-1">
-                  <!-- Quality Attributes -->
+                  <!-- Quality Attributes - Match Radarr Style -->
                   <div class="flex gap-1 flex-wrap items-center">
                     <% if (r.resolution) { %>
-                      <span class="badge badge-neutral text-xs"><%= r.resolution %></span>
+                      <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded text-xs"><%= r.resolution %></span>
                     <% } %>
                     <% if (r.codec) { %>
-                      <span class="badge badge-neutral text-xs"><%= r.codec %></span>
+                      <span class="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded text-xs"><%= r.codec %></span>
                     <% } %>
                     <% if (r.source_tag) { %>
-                      <span class="badge badge-neutral text-xs font-semibold" style="font-family: Arial, sans-serif;">
+                      <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded text-xs font-semibold" style="font-family: Arial, sans-serif;">
                         <% if (r.source_tag === 'AMZN') { %>
                           <span class="text-orange-600 dark:text-orange-400">AMZN</span>
                         <% } else if (r.source_tag === 'NF' || r.source_tag === 'Netflix') { %>
@@ -105,11 +105,14 @@
                       </span>
                     <% } %>
                     <% if (r.audio) { %>
-                      <span class="badge badge-info text-xs"><%= r.audio %></span>
+                      <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded text-xs"><%= r.audio %></span>
                     <% } %>
                     <% if (r.rss_size_mb) { %>
-                      <span class="badge badge-neutral text-xs">
-                        <%= typeof r.rss_size_mb === 'number' ? r.rss_size_mb.toFixed(2) : r.rss_size_mb %> MB
+                      <%
+                        const sizeGiB = typeof r.rss_size_mb === 'number' ? (r.rss_size_mb / 1024) : (parseFloat(r.rss_size_mb) / 1024);
+                      %>
+                      <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs">
+                        <%= sizeGiB.toFixed(2) %> GiB
                       </span>
                     <% } %>
                   </div>
