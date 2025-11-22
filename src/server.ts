@@ -27,6 +27,11 @@ app.use('/settings', settingsRouter);
 app.use('/data', dataRouter);
 app.use('/api/logs', logsRouter);
 
+// Redirect /logs to /data/logs for convenience
+app.get('/logs', (req, res) => {
+  res.redirect('/data/logs');
+});
+
 // Scheduled sync jobs
 let radarrSyncInterval: NodeJS.Timeout | null = null;
 let rssSyncInterval: NodeJS.Timeout | null = null;
