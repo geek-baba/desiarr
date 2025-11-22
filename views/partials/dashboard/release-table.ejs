@@ -29,6 +29,8 @@
       allReleases.push({ ...r, releaseType: 'ignored', rowClass: 'bg-gray-50 dark:bg-gray-800' });
     });
   }
+  
+  // Ensure movie.radarrInfo is available (passed from parent)
 %>
 
 <% if (allReleases.length === 0) { %>
@@ -42,6 +44,7 @@
           <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Release Name</th>
           <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Attributes</th>
           <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Size</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Radarr Data</th>
           <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
           <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
         </tr>
@@ -98,6 +101,49 @@
                 <%= typeof r.rss_size_mb === 'number' ? r.rss_size_mb.toFixed(2) : r.rss_size_mb %> MB
               <% } else { %>
                 -
+              <% } %>
+            </td>
+            <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+              <% if (movie.radarrInfo && (r.releaseType === 'existing' || r.releaseType === 'upgrade')) { %>
+                <div class="space-y-1">
+                  <% if (movie.radarrInfo.fileName) { %>
+                    <div class="text-xs font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title="<%= movie.radarrInfo.fileName %>">
+                      <%= movie.radarrInfo.fileName %>
+                    </div>
+                  <% } %>
+                  <div class="flex gap-1 flex-wrap">
+                    <% if (movie.radarrInfo.resolution) { %>
+                      <span class="badge badge-neutral text-xs"><%= movie.radarrInfo.resolution %></span>
+                    <% } %>
+                    <% if (movie.radarrInfo.codec) { %>
+                      <span class="badge badge-neutral text-xs"><%= movie.radarrInfo.codec %></span>
+                    <% } %>
+                    <% if (movie.radarrInfo.sourceTag) { %>
+                      <span class="badge badge-neutral text-xs"><%= movie.radarrInfo.sourceTag %></span>
+                    <% } %>
+                    <% if (movie.radarrInfo.audio) { %>
+                      <span class="badge badge-info text-xs"><%= movie.radarrInfo.audio %></span>
+                    <% } %>
+                    <% if (movie.radarrInfo.sizeMb) { %>
+                      <span class="badge badge-neutral text-xs"><%= typeof movie.radarrInfo.sizeMb === 'number' ? movie.radarrInfo.sizeMb.toFixed(2) : movie.radarrInfo.sizeMb %> MB</span>
+                    <% } %>
+                  </div>
+                  <% if (r.releaseType === 'upgrade' && r.radarr_existing_quality_score !== null && r.new_quality_score !== null) { %>
+                    <div class="text-xs mt-1">
+                      <span class="text-gray-600 dark:text-gray-400">Score: </span>
+                      <span class="text-gray-700 dark:text-gray-300"><%= r.radarr_existing_quality_score.toFixed(2) %></span>
+                      <span class="mx-1">→</span>
+                      <span class="text-green-600 dark:text-green-400 font-semibold"><%= r.new_quality_score.toFixed(2) %></span>
+                      <span class="text-blue-600 dark:text-blue-400 ml-1">(Δ<%= (r.new_quality_score - r.radarr_existing_quality_score).toFixed(2) %>)</span>
+                    </div>
+                  <% } %>
+                </div>
+              <% } else if (r.releaseType === 'ignored' && r.radarr_movie_id && movie.radarrInfo) { %>
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                  Below upgrade thresholds
+                </div>
+              <% } else { %>
+                <span class="text-gray-400 dark:text-gray-500 text-xs">-</span>
               <% } %>
             </td>
             <td class="px-3 py-2 text-sm">

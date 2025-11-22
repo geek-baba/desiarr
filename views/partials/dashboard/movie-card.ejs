@@ -81,13 +81,11 @@
             href="https://www.imdb.com/title/<%= movie.imdbId %>" 
             target="_blank" 
             rel="noreferrer" 
-            class="icon-btn" 
+            class="icon-btn inline-flex items-center justify-center" 
             aria-label="Open IMDB"
             title="View on IMDB"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 3h7v7M10 14L21 3M21 21H3V3"/>
-            </svg>
+            <span class="text-[10px] font-bold text-yellow-600 dark:text-yellow-400" style="font-family: Arial, sans-serif;">IMDb</span>
           </a>
         <% } %>
 
@@ -97,13 +95,11 @@
             href="https://www.themoviedb.org/movie/<%= movie.tmdbId %>" 
             target="_blank" 
             rel="noreferrer" 
-            class="icon-btn" 
+            class="icon-btn inline-flex items-center justify-center" 
             aria-label="Open TMDB"
             title="View on TMDB"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="9"/>
-            </svg>
+            <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400" style="font-family: Arial, sans-serif;">TMDb</span>
           </a>
         <% } %>
 
@@ -113,13 +109,11 @@
             href="<%= radarrBaseUrl %>/movie/<%= movie.radarrMovieId %>" 
             target="_blank" 
             rel="noreferrer" 
-            class="icon-btn" 
+            class="icon-btn inline-flex items-center justify-center" 
             aria-label="View in Radarr"
             title="View in Radarr"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
+            <span class="text-[10px] font-bold text-[#3C85C6]" style="font-family: Arial, sans-serif;">Radarr</span>
           </a>
         <% } %>
       </div>
