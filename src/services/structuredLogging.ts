@@ -132,17 +132,25 @@ export function log(
 }
 
 // Helper functions for common log levels
+type LogOptions = {
+  details?: any;
+  filePath?: string;
+  releaseTitle?: string;
+  jobId?: string;
+  error?: Error;
+};
+
 export const logger = {
-  debug: (source: LogSource, message: string, options?: Parameters<typeof log>[2]) => {
+  debug: (source: LogSource, message: string, options?: LogOptions) => {
     log('DEBUG', source, message, options);
   },
-  info: (source: LogSource, message: string, options?: Parameters<typeof log>[2]) => {
+  info: (source: LogSource, message: string, options?: LogOptions) => {
     log('INFO', source, message, options);
   },
-  warn: (source: LogSource, message: string, options?: Parameters<typeof log>[2]) => {
+  warn: (source: LogSource, message: string, options?: LogOptions) => {
     log('WARN', source, message, options);
   },
-  error: (source: LogSource, message: string, options?: Parameters<typeof log>[2]) => {
+  error: (source: LogSource, message: string, options?: LogOptions) => {
     log('ERROR', source, message, options);
   },
 };

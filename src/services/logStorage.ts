@@ -43,47 +43,55 @@ function addLog(level: LogEntry['level'], ...args: any[]) {
   // Also write to structured logs database
   try {
     // Dynamic import to avoid circular dependencies
-    import('./structuredLogging').then(({ logger }) => {
-    const structuredLevel = level === 'error' ? 'ERROR' : 
-                           level === 'warn' ? 'WARN' :
-                           level === 'info' ? 'INFO' : 'DEBUG';
-    
-    // Try to infer source from message
-    let source: LogSource = 'system';
-    const msgLower = message.toLowerCase();
-    if (msgLower.includes('radarr') || msgLower.includes('sync')) {
-      source = msgLower.includes('rss') ? 'rss-sync' : 'radarr-sync';
-    } else if (msgLower.includes('matching') || msgLower.includes('match')) {
-      source = 'matching-engine';
-    } else if (msgLower.includes('tmdb')) {
-      source = 'tmdb';
-    } else if (msgLower.includes('imdb')) {
-      source = 'imdb';
-    } else if (msgLower.includes('parse') || msgLower.includes('parser')) {
-      source = 'parser';
-    } else if (msgLower.includes('score') || msgLower.includes('scoring')) {
-      source = 'scoring';
-    } else if (msgLower.includes('dashboard')) {
-      source = 'dashboard';
-    } else if (msgLower.includes('api')) {
-      source = 'api';
-    }
+    import('./structuredLogging').then((module) => {
+      const { logger } = module;
+      const structuredLevel = level === 'error' ? 'ERROR' : 
+                             level === 'warn' ? 'WARN' :
+                             level === 'info' ? 'INFO' : 'DEBUG';
+      
+      // Try to infer source from message
+      let source: LogSource = 'system';
+      const msgLower = message.toLowerCase();
+      if (msgLower.includes('radarr') || msgLower.includes('sync')) {
+        source = msgLower.includes('rss') ? 'rss-sync' : 'radarr-sync';
+      } else if (msgLower.includes('matching') || msgLower.includes('match')) {
+        source = 'matching-engine';
+      } else if (msgLower.includes('tmdb')) {
+        source = 'tmdb';
+      } else if (msgLower.includes('imdb')) {
+        source = 'imdb';
+      } else if (msgLower.includes('parse') || msgLower.includes('parser')) {
+        source = 'parser';
+      } else if (msgLower.includes('score') || msgLower.includes('scoring')) {
+        source = 'scoring';
+      } else if (msgLower.includes('dashboard')) {
+        source = 'dashboard';
+      } else if (msgLower.includes('api')) {
+        source = 'api';
+      }
 
-    // Extract details if message contains structured data
-    let details: any = undefined;
-    const lastArg = args[args.length - 1];
-    if (typeof lastArg === 'object' && lastArg !== null && !(lastArg instanceof Error)) {
-      details = lastArg;
-    }
+      // Extract details if message contains structured data
+      let details: any = undefined;
+      const lastArg = args[args.length - 1];
+      if (typeof lastArg === 'object' && lastArg !== null && !(lastArg instanceof Error)) {
+        details = lastArg;
+      }
 
-      logger[structuredLevel.toLowerCase() as 'debug' | 'info' | 'warn' | 'error'](
-        source,
-        message,
-        {
-          details,
-          error: lastArg instanceof Error ? lastArg : undefined,
-        }
-      );
+      const options = {
+        details,
+        error: lastArg instanceof Error ? lastArg : undefined,
+      };
+
+      // Call the appropriate logger method based on level
+      if (structuredLevel === 'ERROR') {
+        logger.error(source, message, options);
+      } else if (structuredLevel === 'WARN') {
+        logger.warn(source, message, options);
+      } else if (structuredLevel === 'INFO') {
+        logger.info(source, message, options);
+      } else {
+        logger.debug(source, message, options);
+      }
     }).catch(() => {
       // Silently fail - don't break console logging
     });

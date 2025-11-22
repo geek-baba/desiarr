@@ -78,14 +78,15 @@ router.get('/', (req: Request, res: Response) => {
     }
 
     // Order by timestamp DESC (newest first)
+    const limit = query.limit || 100;
     sql += ' ORDER BY timestamp DESC LIMIT ?';
-    params.push(query.limit + 1); // Fetch one extra to check if there's more
+    params.push(limit + 1); // Fetch one extra to check if there's more
 
     const rows = db.prepare(sql).all(params) as any[];
 
     // Check if there are more results
-    const hasMore = rows.length > query.limit;
-    const logs = hasMore ? rows.slice(0, query.limit) : rows;
+    const hasMore = rows.length > limit;
+    const logs = hasMore ? rows.slice(0, limit) : rows;
 
     // Parse JSON details
     const processedLogs = logs.map(log => ({
