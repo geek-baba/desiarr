@@ -46,3 +46,26 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Badge variants for dashboard */
+.badge-neutral { 
+  @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800; 
+}
+
+.badge-info { 
+  @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-blue-500/20 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20; 
+}
+
+.badge-success { 
+  @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-green-500/20 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20; 
+}
+
+.badge-warning { 
+  @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium border border-orange-500/20 text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20; 
+}
+
+/* Table compact styling */
+.table-compact th, 
+.table-compact td { 
+  @apply py-1.5; 
+}
+

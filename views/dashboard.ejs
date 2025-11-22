@@ -182,7 +182,7 @@
               <% if (newMoviesByPeriod[period.key] && newMoviesByPeriod[period.key].length > 0) { %>
                 <div id="new-period-<%= period.key %>" class="new-movies-section <%= index === firstNewIndex ? '' : 'hidden' %>">
                   <% newMoviesByPeriod[period.key].forEach(movie => { %>
-                    <%- include('partials/movie-card', { movie, radarrBaseUrl }) %>
+                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
                   <% }); %>
                 </div>
               <% } %>
@@ -228,7 +228,7 @@
               <% if (existingMoviesByPeriod[period.key] && existingMoviesByPeriod[period.key].length > 0) { %>
                 <div id="existing-period-<%= period.key %>" class="existing-movies-section <%= index === firstExistingIndex ? '' : 'hidden' %>">
                   <% existingMoviesByPeriod[period.key].forEach(movie => { %>
-                    <%- include('partials/movie-card', { movie, radarrBaseUrl }) %>
+                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
                   <% }); %>
                 </div>
               <% } %>
@@ -238,11 +238,11 @@
 
         <!-- Unmatched Items Section -->
         <% if (hasUnmatched) { %>
-          <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
-            <% unmatchedItems.forEach(movie => { %>
-              <%- include('partials/movie-card', { movie, radarrBaseUrl }) %>
-            <% }); %>
-          </div>
+        <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
+          <% unmatchedItems.forEach(movie => { %>
+            <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
+          <% }); %>
+        </div>
         <% } %>
 
 
@@ -626,7 +626,7 @@
         clearSearchBtn.classList.add('hidden');
         searchResultsCount.classList.add('hidden');
         // Restore normal tab behavior - show all cards and restore tab visibility
-        document.querySelectorAll('.movie-card-container').forEach(card => {
+        document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
           card.style.display = '';
         });
         // Restore normal tab sections visibility
@@ -650,7 +650,7 @@
       });
       
       // Get all movie card containers
-      const movieCards = document.querySelectorAll('.movie-card-container');
+      const movieCards = document.querySelectorAll('article.card[data-movie-id]');
       let visibleCount = 0;
       
       movieCards.forEach(card => {
@@ -710,7 +710,7 @@
       searchResultsCount.classList.add('hidden');
       
       // Show all movie cards
-      document.querySelectorAll('.movie-card-container').forEach(card => {
+      document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
         card.style.display = '';
       });
       
@@ -755,6 +755,24 @@
           timeZoneName: 'short'
         };
         lastRefreshElement.textContent = utcDate.toLocaleString(undefined, options);
+      }
+    });
+
+    // Copy-to-clipboard functionality for release links
+    document.addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('.copy-link');
+      if (!copyBtn) return;
+      
+      const url = copyBtn.dataset.url;
+      const title = copyBtn.dataset.title;
+      const textToCopy = url || title || '';
+      
+      if (textToCopy) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          showToast('Copied to clipboard!', 'success', 2000);
+        }).catch(() => {
+          showToast('Failed to copy', 'error', 2000);
+        });
       }
     });
 

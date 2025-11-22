@@ -1,0 +1,195 @@
+<%
+  // Combine all release arrays into one array with type metadata
+  const allReleases = [];
+  
+  // Add releases (green)
+  if (movie.add && movie.add.length > 0) {
+    movie.add.forEach(r => {
+      allReleases.push({ ...r, releaseType: 'add', rowClass: 'bg-green-50 dark:bg-green-900/10' });
+    });
+  }
+  
+  // Existing releases (blue)
+  if (movie.existing && movie.existing.length > 0) {
+    movie.existing.forEach(r => {
+      allReleases.push({ ...r, releaseType: 'existing', rowClass: 'bg-blue-50 dark:bg-blue-900/10' });
+    });
+  }
+  
+  // Upgrade releases (orange)
+  if (movie.upgrade && movie.upgrade.length > 0) {
+    movie.upgrade.forEach(r => {
+      allReleases.push({ ...r, releaseType: 'upgrade', rowClass: 'bg-orange-50 dark:bg-orange-900/10' });
+    });
+  }
+  
+  // Ignored releases (gray)
+  if (movie.ignored && movie.ignored.length > 0) {
+    movie.ignored.forEach(r => {
+      allReleases.push({ ...r, releaseType: 'ignored', rowClass: 'bg-gray-50 dark:bg-gray-800' });
+    });
+  }
+%>
+
+<% if (allReleases.length === 0) { %>
+  <div class="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">No releases found.</div>
+<% } else { %>
+  <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+      <thead class="bg-gray-50 dark:bg-gray-700">
+        <tr>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Source</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Release Name</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Attributes</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Size</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+          <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+        <% allReleases.forEach(r => { %>
+          <tr class="<%= r.rowClass %> hover:opacity-80 transition-opacity">
+            <td class="px-3 py-2 text-sm">
+              <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feedName || r.source_site || 'Unknown' %></div>
+              <div class="text-xs text-gray-500 dark:text-gray-400"><%= new Date(r.published_at).toLocaleString() %></div>
+            </td>
+            <td class="px-3 py-2 text-sm">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-gray-800 dark:text-gray-200 truncate max-w-[34ch]" title="<%= r.title %>"><%= r.title %></span>
+                <% if (r.link) { %>
+                  <button 
+                    class="copy-link icon-btn p-1" 
+                    data-url="<%= r.link %>" 
+                    data-title="<%= r.title %>"
+                    aria-label="Copy release link"
+                    title="Copy link"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                    </svg>
+                  </button>
+                <% } %>
+              </div>
+            </td>
+            <td class="px-3 py-2 text-sm">
+              <div class="flex gap-1 flex-wrap">
+                <% if (r.resolution) { %>
+                  <span class="badge badge-neutral"><%= r.resolution %></span>
+                <% } %>
+                <% if (r.codec) { %>
+                  <span class="badge badge-neutral"><%= r.codec %></span>
+                <% } %>
+                <% if (r.source_tag) { %>
+                  <span class="badge badge-neutral"><%= r.source_tag %></span>
+                <% } %>
+                <% if (r.audio) { %>
+                  <span class="badge badge-info"><%= r.audio %></span>
+                <% } %>
+              </div>
+              <% if (r.audio_languages) { %>
+                <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  Languages: <%= JSON.parse(r.audio_languages).join(', ') %>
+                </div>
+              <% } %>
+            </td>
+            <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+              <% if (r.rss_size_mb) { %>
+                <%= typeof r.rss_size_mb === 'number' ? r.rss_size_mb.toFixed(2) : r.rss_size_mb %> MB
+              <% } else { %>
+                -
+              <% } %>
+            </td>
+            <td class="px-3 py-2 text-sm">
+              <% if (r.releaseType === 'add') { %>
+                <% if (r.status === 'ATTENTION_NEEDED') { %>
+                  <span class="badge badge-warning" title="No TMDB match">ATTENTION NEEDED</span>
+                <% } else { %>
+                  <span class="badge badge-success">NEW</span>
+                <% } %>
+              <% } else if (r.releaseType === 'existing') { %>
+                <span class="badge badge-info">EXISTING</span>
+                <% if (r.status === 'IGNORED') { %>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">(Below upgrade thresholds)</div>
+                <% } %>
+              <% } else if (r.releaseType === 'upgrade') { %>
+                <span class="badge badge-warning">UPGRADE</span>
+                <% if (r.radarr_existing_quality_score !== null && r.new_quality_score !== null) { %>
+                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Score: <%= r.radarr_existing_quality_score.toFixed(2) %> → 
+                    <span class="font-semibold text-green-600 dark:text-green-400"><%= r.new_quality_score.toFixed(2) %></span>
+                    <span class="text-blue-600 dark:text-blue-400">(Δ<%= (r.new_quality_score - r.radarr_existing_quality_score).toFixed(2) %>)</span>
+                  </div>
+                <% } %>
+              <% } else if (r.releaseType === 'ignored') { %>
+                <span class="badge badge-neutral">IGNORED</span>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <% if (r.radarr_movie_id) { %>
+                    (Below upgrade thresholds)
+                  <% } else { %>
+                    (Doesn't meet quality requirements)
+                  <% } %>
+                </div>
+              <% } %>
+            </td>
+            <td class="px-3 py-2 text-sm text-right">
+              <% if (r.releaseType === 'add') { %>
+                <button 
+                  onclick="addMovie(<%= r.id %>)" 
+                  class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                >
+                  Add to Radarr
+                </button>
+                <button 
+                  onclick="ignoreRelease(<%= r.id %>)" 
+                  class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs ml-1 transition-colors"
+                >
+                  Ignore
+                </button>
+              <% } else if (r.releaseType === 'upgrade') { %>
+                <button 
+                  onclick="upgradeMovie(<%= r.id %>)" 
+                  class="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                >
+                  Upgrade
+                </button>
+                <button 
+                  onclick="ignoreRelease(<%= r.id %>)" 
+                  class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs ml-1 transition-colors"
+                >
+                  Ignore
+                </button>
+              <% } else if (r.releaseType === 'existing') { %>
+                <button 
+                  onclick="ignoreRelease(<%= r.id %>)" 
+                  class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                >
+                  Ignore
+                </button>
+              <% } else if (r.releaseType === 'ignored' && !r.radarr_movie_id && movie.tmdbId) { %>
+                <button 
+                  onclick="addMovie(<%= r.id %>)" 
+                  class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                >
+                  Add to Radarr
+                </button>
+              <% } %>
+              <% if (r.link) { %>
+                <a 
+                  href="<%= r.link %>" 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  class="text-blue-600 dark:text-blue-400 hover:underline text-xs ml-2"
+                  aria-label="View release on source"
+                >
+                  View
+                </a>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<% } %>
+
