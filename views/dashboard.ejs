@@ -64,6 +64,21 @@
       </div>
     </div>
 
+    <% 
+      // Define these variables BEFORE the search box so they can be used in the condition
+      const hasNewMovies = newMoviesByPeriod && (
+        (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
+        (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
+        (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
+      );
+      const hasExistingMovies = existingMoviesByPeriod && (
+        (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
+        (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
+        (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
+      );
+      const hasUnmatched = unmatchedItems && unmatchedItems.length > 0;
+    %>
+
     <!-- Search Box -->
     <% if (hasNewMovies || hasExistingMovies || hasUnmatched) { %>
       <div class="mb-6">
@@ -93,20 +108,6 @@
         <p id="searchResultsCount" class="text-sm text-gray-600 mt-2 hidden"></p>
       </div>
     <% } %>
-
-    <% 
-      const hasNewMovies = newMoviesByPeriod && (
-        (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
-        (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
-        (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
-      );
-      const hasExistingMovies = existingMoviesByPeriod && (
-        (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
-        (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
-        (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
-      );
-      const hasUnmatched = unmatchedItems && unmatchedItems.length > 0;
-    %>
 
     <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
       <p class="text-gray-600">No releases found. Go to Settings to add RSS feeds and sync data.</p>
