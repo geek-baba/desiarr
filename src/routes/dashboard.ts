@@ -680,8 +680,11 @@ router.get('/', async (req: Request, res: Response) => {
     const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
     // Unmatched and Ignored items don't need time period grouping
 
-    // Get Radarr base URL for links
-    const radarrBaseUrl = config.radarr.apiUrl.replace('/api/v3', '');
+    // Get Radarr base URL for links from settings (not config/env)
+    const allSettings = settingsModel.getAll();
+    const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value || '';
+    // Remove /api/v3 suffix if present to get base URL
+    const radarrBaseUrl = radarrApiUrl ? radarrApiUrl.replace(/\/api\/v3\/?$/, '') : '';
 
     // Get last refresh time (matching engine last run)
     const lastRefreshResult = db.prepare("SELECT value FROM app_settings WHERE key = 'matching_last_run'").get() as { value: string } | undefined;
