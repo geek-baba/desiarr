@@ -53,106 +53,109 @@
               <div class="text-xs text-gray-500 dark:text-gray-400"><%= new Date(r.published_at).toLocaleString() %></div>
             </td>
             <td class="px-3 py-2 text-sm">
-              <div class="flex items-center gap-2">
-                <span class="font-mono text-gray-800 dark:text-gray-200 truncate max-w-[34ch]" title="<%= r.title %>"><%= r.title %></span>
-                <% if (r.link) { %>
-                  <button 
-                    class="copy-link icon-btn p-1" 
-                    data-url="<%= r.link %>" 
-                    data-title="<%= r.title %>"
-                    aria-label="Copy release link"
-                    title="Copy link"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                    </svg>
-                  </button>
-                <% } %>
-              </div>
-            </td>
-            <td class="px-3 py-2 text-sm">
-              <div class="flex gap-1 flex-wrap items-center">
-                <% if (r.resolution) { %>
-                  <div class="flex items-center gap-1 badge badge-neutral">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                      <path d="M3 9h18M9 3v18"/>
-                    </svg>
-                    <span><%= r.resolution %></span>
-                  </div>
-                <% } %>
-                <% if (r.codec) { %>
-                  <div class="flex items-center gap-1 badge badge-neutral">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
-                    <span><%= r.codec %></span>
-                  </div>
-                <% } %>
-                <% if (r.source_tag) { %>
-                  <div class="flex items-center gap-1 badge badge-neutral">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                      <circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    <span><%= r.source_tag %></span>
-                  </div>
-                <% } %>
-                <% if (r.audio) { %>
-                  <div class="flex items-center gap-1 badge badge-info">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                    </svg>
-                    <span><%= r.audio %></span>
-                  </div>
-                <% } %>
-              </div>
-              <% if (r.audio_languages) { %>
-                <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Languages: <%= JSON.parse(r.audio_languages).join(', ') %>
-                </div>
-              <% } %>
-            </td>
-            <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
-              <% if (r.rss_size_mb) { %>
-                <%= typeof r.rss_size_mb === 'number' ? r.rss_size_mb.toFixed(2) : r.rss_size_mb %> MB
-              <% } else { %>
-                -
-              <% } %>
-            </td>
-            <td class="px-3 py-2 text-sm">
-              <% if (r.releaseType === 'add') { %>
-                <% if (r.status === 'ATTENTION_NEEDED') { %>
-                  <span class="badge badge-warning" title="No TMDB match">ATTENTION NEEDED</span>
-                <% } else { %>
-                  <span class="badge badge-success">NEW</span>
-                <% } %>
-              <% } else if (r.releaseType === 'existing') { %>
-                <span class="badge badge-info">EXISTING</span>
-                <% if (r.status === 'IGNORED') { %>
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">(Below upgrade thresholds)</div>
-                <% } %>
-              <% } else if (r.releaseType === 'upgrade') { %>
-                <span class="badge badge-warning">UPGRADE</span>
-                <% if (r.radarr_existing_quality_score !== null && r.new_quality_score !== null) { %>
-                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Score: <%= r.radarr_existing_quality_score.toFixed(2) %> → 
-                    <span class="font-semibold text-green-600 dark:text-green-400"><%= r.new_quality_score.toFixed(2) %></span>
-                    <span class="text-blue-600 dark:text-blue-400">(Δ<%= (r.new_quality_score - r.radarr_existing_quality_score).toFixed(2) %>)</span>
-                  </div>
-                <% } %>
-              <% } else if (r.releaseType === 'ignored') { %>
-                <span class="badge badge-neutral">IGNORED</span>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  <% if (r.radarr_movie_id) { %>
-                    (Below upgrade thresholds)
-                  <% } else { %>
-                    (Doesn't meet quality requirements)
+              <div>
+                <!-- Release File Name - Not Truncated -->
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="font-mono text-gray-800 dark:text-gray-200 break-all" title="<%= r.title %>"><%= r.title %></span>
+                  <% if (r.link) { %>
+                    <button 
+                      class="copy-link icon-btn p-1 flex-shrink-0" 
+                      data-url="<%= r.link %>" 
+                      data-title="<%= r.title %>"
+                      aria-label="Copy release link"
+                      title="Copy link"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                      </svg>
+                    </button>
                   <% } %>
                 </div>
-              <% } %>
+                
+                <!-- Quality Attributes, Size, and Status Below Release Name -->
+                <div class="space-y-1">
+                  <!-- Quality Attributes -->
+                  <div class="flex gap-1 flex-wrap items-center">
+                    <% if (r.resolution) { %>
+                      <span class="badge badge-neutral text-xs"><%= r.resolution %></span>
+                    <% } %>
+                    <% if (r.codec) { %>
+                      <span class="badge badge-neutral text-xs"><%= r.codec %></span>
+                    <% } %>
+                    <% if (r.source_tag) { %>
+                      <span class="badge badge-neutral text-xs font-semibold" style="font-family: Arial, sans-serif;">
+                        <% if (r.source_tag === 'AMZN') { %>
+                          <span class="text-orange-600 dark:text-orange-400">AMZN</span>
+                        <% } else if (r.source_tag === 'NF' || r.source_tag === 'Netflix') { %>
+                          <span class="text-red-600 dark:text-red-400">NF</span>
+                        <% } else if (r.source_tag === 'DSNP' || r.source_tag === 'Disney' || r.source_tag === 'Hotstar') { %>
+                          <span class="text-blue-600 dark:text-blue-400">DSNP</span>
+                        <% } else if (r.source_tag === 'ZEE5' || r.source_tag === 'Zee5') { %>
+                          <span class="text-purple-600 dark:text-purple-400">ZEE5</span>
+                        <% } else if (r.source_tag === 'JC' || r.source_tag === 'JioCinema') { %>
+                          <span class="text-green-600 dark:text-green-400">JC</span>
+                        <% } else if (r.source_tag === 'HS' || r.source_tag === 'Hotstar') { %>
+                          <span class="text-blue-600 dark:text-blue-400">HS</span>
+                        <% } else if (r.source_tag === 'SS') { %>
+                          <span class="text-indigo-600 dark:text-indigo-400">SS</span>
+                        <% } else { %>
+                          <%= r.source_tag %>
+                        <% } %>
+                      </span>
+                    <% } %>
+                    <% if (r.audio) { %>
+                      <span class="badge badge-info text-xs"><%= r.audio %></span>
+                    <% } %>
+                    <% if (r.rss_size_mb) { %>
+                      <span class="badge badge-neutral text-xs">
+                        <%= typeof r.rss_size_mb === 'number' ? r.rss_size_mb.toFixed(2) : r.rss_size_mb %> MB
+                      </span>
+                    <% } %>
+                  </div>
+                  
+                  <!-- Status -->
+                  <div>
+                    <% if (r.releaseType === 'add') { %>
+                      <% if (r.status === 'ATTENTION_NEEDED') { %>
+                        <span class="badge badge-warning text-xs" title="No TMDB match">ATTENTION NEEDED</span>
+                      <% } else { %>
+                        <span class="badge badge-success text-xs">NEW</span>
+                      <% } %>
+                    <% } else if (r.releaseType === 'existing') { %>
+                      <span class="badge badge-info text-xs">EXISTING</span>
+                      <% if (r.status === 'IGNORED') { %>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(Below upgrade thresholds)</span>
+                      <% } %>
+                    <% } else if (r.releaseType === 'upgrade') { %>
+                      <span class="badge badge-warning text-xs">UPGRADE</span>
+                      <% if (r.radarr_existing_quality_score !== null && r.new_quality_score !== null) { %>
+                        <span class="text-xs text-gray-600 dark:text-gray-400 ml-1">
+                          Score: <%= r.radarr_existing_quality_score.toFixed(2) %> → 
+                          <span class="font-semibold text-green-600 dark:text-green-400"><%= r.new_quality_score.toFixed(2) %></span>
+                          <span class="text-blue-600 dark:text-blue-400">(Δ<%= (r.new_quality_score - r.radarr_existing_quality_score).toFixed(2) %>)</span>
+                        </span>
+                      <% } %>
+                    <% } else if (r.releaseType === 'ignored') { %>
+                      <span class="badge badge-neutral text-xs">IGNORED</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">
+                        <% if (r.radarr_movie_id) { %>
+                          (Below upgrade thresholds)
+                        <% } else { %>
+                          (Doesn't meet quality requirements)
+                        <% } %>
+                      </span>
+                    <% } %>
+                  </div>
+                  
+                  <!-- Audio Languages -->
+                  <% if (r.audio_languages) { %>
+                    <div class="text-xs text-gray-600 dark:text-gray-400">
+                      Languages: <%= JSON.parse(r.audio_languages).join(', ') %>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
             </td>
             <td class="px-3 py-2 text-sm text-right">
               <% if (r.releaseType === 'add') { %>
