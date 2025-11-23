@@ -1,13 +1,13 @@
 <header class="sticky top-0 z-30 bg-[var(--surface)] dark:bg-brand-surfaceDark border-b border-[var(--border)] shadow-header">
-  <div class="h-16 px-4 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <button id="openSidebar" class="icon-btn lg:hidden" aria-label="Open sidebar" type="button">
+  <div class="h-16 px-4 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-2 flex-1 min-w-0">
+      <button id="openSidebar" class="icon-btn lg:hidden flex-shrink-0" aria-label="Open sidebar" type="button">
         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
       </button>
 
-      <div class="relative flex-1" style="min-width: 300px; max-width: 600px;">
+      <div class="relative flex-1 min-w-0" style="max-width: 800px;">
         <input 
           id="globalSearch" 
           type="search" 
@@ -32,7 +32,7 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 flex-shrink-0">
       <% if (typeof lastRefresh !== 'undefined') { %>
         <div class="text-sm text-gray-600 dark:text-gray-400">
           <% if (lastRefresh) { %>
