@@ -265,7 +265,9 @@
             
             // If global search is active, filter immediately
             if (isGlobalSearchActive) {
-              filterLogsClientSide();
+              const globalSearch = document.getElementById('globalSearch');
+              const searchTerm = globalSearch ? globalSearch.value.trim().toLowerCase() : '';
+              filterLogsClientSide(searchTerm);
             } else {
               renderLogs(data.logs);
               renderPagination(data.pagination);
@@ -445,12 +447,16 @@
     // Setup global search for instant filtering
     function setupGlobalSearch() {
       const globalSearch = document.getElementById('globalSearch');
-      if (!globalSearch) return;
+      if (!globalSearch) {
+        // Retry if global search not ready yet
+        setTimeout(setupGlobalSearch, 100);
+        return;
+      }
 
       let searchTimeout = null;
 
       globalSearch.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.trim().toLowerCase();
+        const searchTerm = e.target.value.trim();
         
         // Clear existing timeout
         if (searchTimeout) {
@@ -463,7 +469,7 @@
           // Small delay to avoid filtering on every keystroke
           searchTimeout = setTimeout(() => {
             filterLogsClientSide(searchTerm);
-          }, 100);
+          }, 150);
         } else {
           // Clear search - show all loaded logs
           isGlobalSearchActive = false;
@@ -490,10 +496,17 @@
           if (searchTimeout) {
             clearTimeout(searchTimeout);
           }
-          const searchTerm = e.target.value.trim().toLowerCase();
+          const searchTerm = e.target.value.trim();
           if (searchTerm) {
             isGlobalSearchActive = true;
             filterLogsClientSide(searchTerm);
+          } else {
+            isGlobalSearchActive = false;
+            if (allLoadedLogs.length > 0) {
+              renderLogs(allLoadedLogs);
+            } else {
+              loadLogs(1);
+            }
           }
         }
       });
@@ -501,11 +514,34 @@
 
     // Instant client-side filtering
     function filterLogsClientSide(searchTerm = '') {
-      if (!searchTerm && allLoadedLogs.length === 0) {
-        loadLogs(1);
-        return;
+      // If no search term provided, get it from global search input
+      if (!searchTerm) {
+        const globalSearch = document.getElementById('globalSearch');
+        if (globalSearch) {
+          searchTerm = globalSearch.value.trim().toLowerCase();
+        }
       }
 
+      // If still no search term and no logs loaded, load logs
+      if (!searchTerm) {
+        if (allLoadedLogs.length === 0) {
+          loadLogs(1);
+          return;
+        } else {
+          // Show all logs if search is cleared
+          renderLogs(allLoadedLogs);
+          renderPagination({
+            page: 1,
+            limit: 50,
+            total: allLoadedLogs.length,
+            totalPages: Math.ceil(allLoadedLogs.length / 50),
+            hasMore: false,
+          });
+          return;
+        }
+      }
+
+      // Filter logs
       const term = searchTerm.toLowerCase();
       const filtered = allLoadedLogs.filter(log => {
         const message = (log.message || '').toLowerCase();
@@ -524,12 +560,14 @@
       if (filtered.length === 0) {
         document.getElementById('noLogs').classList.remove('hidden');
         document.getElementById('logsTableBody').innerHTML = '';
+        document.getElementById('pagination').innerHTML = 
+          `<span class="text-sm text-gray-600 dark:text-gray-400">No logs found matching "${searchTerm}"</span>`;
       } else {
         document.getElementById('noLogs').classList.add('hidden');
         renderLogs(filtered);
-        // Hide pagination for client-side filtered results
+        // Show filtered results info
         document.getElementById('pagination').innerHTML = 
-          `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${filtered.length} of ${allLoadedLogs.length} logs (instant search)</span>`;
+          `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${filtered.length} of ${allLoadedLogs.length} logs matching "${searchTerm}" (instant search)</span>`;
       }
     }
 
