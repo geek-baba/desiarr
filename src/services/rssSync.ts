@@ -34,6 +34,9 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
     lastSyncAt: new Date(),
   };
 
+  // Track if Brave search is rate limited to skip it for remaining items
+  let braveRateLimited = false;
+
   try {
     console.log('Starting RSS feeds sync...');
     syncProgress.start('rss', 0);
@@ -260,7 +263,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               }
 
               // Step 2c: If still no TMDB ID, try Brave Search as fallback for TMDB
-              if (!tmdbId && cleanTitle && braveApiKey) {
+              if (!tmdbId && cleanTitle && braveApiKey && !braveRateLimited) {
                 try {
                   const braveTmdbId = await braveClient.searchForTmdbId(cleanTitle, year || undefined);
                   if (braveTmdbId) {
@@ -280,8 +283,13 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                       }
                     }
                   }
-                } catch (error) {
-                  console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+                } catch (error: any) {
+                  if (error?.message === 'BRAVE_RATE_LIMITED') {
+                    braveRateLimited = true;
+                    console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for remaining items.`);
+                  } else {
+                    console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+                  }
                 }
               }
 
@@ -318,7 +326,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               }
 
               // Step 3b: If still no TMDB ID, try Brave Search for IMDB as last resort
-              if (!tmdbId && !imdbId && cleanTitle && braveApiKey) {
+              if (!tmdbId && !imdbId && cleanTitle && braveApiKey && !braveRateLimited) {
                 try {
                   const braveImdbId = await braveClient.searchForImdbId(cleanTitle, year || undefined);
                   if (braveImdbId) {
@@ -340,8 +348,13 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                       }
                     }
                   }
-                } catch (error) {
-                  console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+                } catch (error: any) {
+                  if (error?.message === 'BRAVE_RATE_LIMITED') {
+                    braveRateLimited = true;
+                    console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for remaining items.`);
+                  } else {
+                    console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+                  }
                 }
               }
             }
@@ -573,6 +586,9 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
     errors: 0,
   };
 
+  // Track if Brave search is rate limited to skip it for remaining items
+  let braveRateLimited = false;
+
   try {
     console.log('Starting backfill of missing TMDB/IMDB IDs for existing RSS items...');
     
@@ -757,7 +773,7 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
           }
 
           // Step 2b: Try Brave Search for IMDB ID
-          if (!imdbId && cleanTitle && braveApiKey) {
+          if (!imdbId && cleanTitle && braveApiKey && !braveRateLimited) {
             try {
               const braveImdbId = await braveClient.searchForImdbId(cleanTitle, year || undefined);
               if (braveImdbId) {
@@ -774,8 +790,13 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
                   }
                 }
               }
-            } catch (error) {
-              console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+            } catch (error: any) {
+              if (error?.message === 'BRAVE_RATE_LIMITED') {
+                braveRateLimited = true;
+                console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for remaining items.`);
+              } else {
+                console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+              }
             }
           }
 
@@ -841,7 +862,7 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
           }
 
           // Step 3c: Try Brave Search for TMDB ID
-          if (!tmdbId && cleanTitle && braveApiKey) {
+          if (!tmdbId && cleanTitle && braveApiKey && !braveRateLimited) {
             try {
               const braveTmdbId = await braveClient.searchForTmdbId(cleanTitle, year || undefined);
               if (braveTmdbId) {
@@ -858,8 +879,13 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
                   }
                 }
               }
-            } catch (error) {
-              console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+            } catch (error: any) {
+              if (error?.message === 'BRAVE_RATE_LIMITED') {
+                braveRateLimited = true;
+                console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for remaining items.`);
+              } else {
+                console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+              }
             }
           }
         }

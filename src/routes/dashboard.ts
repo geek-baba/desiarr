@@ -292,60 +292,63 @@ router.get('/', async (req: Request, res: Response) => {
             }
             
             // Get last download from history stored in releases
-            const releaseWithHistory = releases.find(r => r.radarr_history);
-            if (releaseWithHistory && releaseWithHistory.radarr_history) {
-              try {
-                const history = JSON.parse(releaseWithHistory.radarr_history);
-                if (Array.isArray(history) && history.length > 0) {
-                  // Find the most recent download event
-                  const downloadEvents = history.filter((h: any) => 
-                    h.eventType === 'downloadFolderImported' || 
-                    h.eventType === 'grabbed' ||
-                    h.eventType === 'downloadCompleted'
-                  );
-                  if (downloadEvents.length > 0) {
-                    // Sort by date, most recent first
-                    downloadEvents.sort((a: any, b: any) => 
-                      new Date(b.date).getTime() - new Date(a.date).getTime()
+            // Only if radarrInfo was successfully created
+            if (radarrInfo) {
+              const releaseWithHistory = releases.find(r => r.radarr_history);
+              if (releaseWithHistory && releaseWithHistory.radarr_history) {
+                try {
+                  const history = JSON.parse(releaseWithHistory.radarr_history);
+                  if (Array.isArray(history) && history.length > 0) {
+                    // Find the most recent download event
+                    const downloadEvents = history.filter((h: any) => 
+                      h.eventType === 'downloadFolderImported' || 
+                      h.eventType === 'grabbed' ||
+                      h.eventType === 'downloadCompleted'
                     );
-                    const lastDownload = downloadEvents[0];
-                    radarrInfo.lastDownload = {
-                      sourceTitle: lastDownload.sourceTitle || null,
-                      date: lastDownload.date || null,
-                      releaseGroup: lastDownload.data?.releaseGroup || null,
-                    };
-                    
-                    // Parse lastDownload.sourceTitle to extract metadata if missing
-                    if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
-                        !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
-                        !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
-                        !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
-                      try {
-                        const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
-                        // Only use parsed values if current values are missing/unknown
-                        if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
-                          radarrInfo.resolution = parsed.resolution;
+                    if (downloadEvents.length > 0) {
+                      // Sort by date, most recent first
+                      downloadEvents.sort((a: any, b: any) => 
+                        new Date(b.date).getTime() - new Date(a.date).getTime()
+                      );
+                      const lastDownload = downloadEvents[0];
+                      radarrInfo.lastDownload = {
+                        sourceTitle: lastDownload.sourceTitle || null,
+                        date: lastDownload.date || null,
+                        releaseGroup: lastDownload.data?.releaseGroup || null,
+                      };
+                      
+                      // Parse lastDownload.sourceTitle to extract metadata if missing
+                      if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
+                          !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
+                          !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
+                          !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
+                        try {
+                          const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
+                          // Only use parsed values if current values are missing/unknown
+                          if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
+                            radarrInfo.resolution = parsed.resolution;
+                          }
+                          if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
+                            radarrInfo.codec = parsed.codec;
+                          }
+                          if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
+                            radarrInfo.sourceTag = parsed.sourceTag;
+                          }
+                          if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
+                            radarrInfo.audio = parsed.audio;
+                          }
+                          if (!radarrInfo.sizeMb && parsed.sizeMb) {
+                            radarrInfo.sizeMb = parsed.sizeMb;
+                          }
+                        } catch (e) {
+                          console.error('Error parsing lastDownload.sourceTitle:', e);
                         }
-                        if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
-                          radarrInfo.codec = parsed.codec;
-                        }
-                        if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
-                          radarrInfo.sourceTag = parsed.sourceTag;
-                        }
-                        if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
-                          radarrInfo.audio = parsed.audio;
-                        }
-                        if (!radarrInfo.sizeMb && parsed.sizeMb) {
-                          radarrInfo.sizeMb = parsed.sizeMb;
-                        }
-                      } catch (e) {
-                        console.error('Error parsing lastDownload.sourceTitle:', e);
                       }
                     }
                   }
+                } catch (e) {
+                  console.error('Error parsing radarr_history:', e);
                 }
-              } catch (e) {
-                console.error('Error parsing radarr_history:', e);
               }
             }
           } catch (e) {
@@ -717,17 +720,39 @@ router.post('/build-match', async (req: Request, res: Response) => {
         // Step 1: Sync RSS feeds
         console.log('Step 1: Syncing RSS feeds...');
         syncProgress.update('Step 1: Syncing RSS feeds...', 0);
-        await syncRssFeeds();
+        try {
+          await syncRssFeeds();
+        } catch (error: any) {
+          console.error('RSS sync error:', error);
+          const errorMsg = error?.message || error?.toString() || 'Unknown error';
+          syncProgress.update(`Step 1 failed: ${errorMsg}`, 0, 0, 1);
+          throw new Error(`RSS sync failed: ${errorMsg}`);
+        }
         
         // Step 2: Sync Radarr
         console.log('Step 2: Syncing Radarr movies...');
         syncProgress.update('Step 2: Syncing Radarr movies...', 0);
-        await syncRadarrMovies();
+        try {
+          await syncRadarrMovies();
+        } catch (error: any) {
+          console.error('Radarr sync error:', error);
+          const errorMsg = error?.message || error?.toString() || 'Unknown error';
+          syncProgress.update(`Step 2 failed: ${errorMsg}`, 0, 0, 1);
+          throw new Error(`Radarr sync failed: ${errorMsg}`);
+        }
         
         // Step 3: Run matching engine
         console.log('Step 3: Running matching engine...');
         syncProgress.update('Step 3: Running matching engine...', 0);
-        const stats = await runMatchingEngine();
+        let stats;
+        try {
+          stats = await runMatchingEngine();
+        } catch (error: any) {
+          console.error('Matching engine error:', error);
+          const errorMsg = error?.message || error?.toString() || 'Unknown error';
+          syncProgress.update(`Step 3 failed: ${errorMsg}`, 0, 0, 1);
+          throw new Error(`Matching engine failed: ${errorMsg}`);
+        }
         
         syncProgress.update('Build & Match completed successfully', stats.processed || 0, stats.processed || 0, stats.errors || 0);
         syncProgress.complete();
@@ -741,7 +766,10 @@ router.post('/build-match', async (req: Request, res: Response) => {
       } catch (error: any) {
         console.error('Build & Match error in background task:', error);
         const errorMessage = error?.message || error?.toString() || 'Unknown error';
-        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        // Include step information if available
+        const currentStep = syncProgress.get()?.currentStep || '';
+        const finalMessage = currentStep ? `${currentStep}. ${errorMessage}` : `Error: ${errorMessage}`;
+        syncProgress.update(finalMessage, 0, 0, 1);
         syncProgress.complete();
         
         // Keep error visible for 30 seconds

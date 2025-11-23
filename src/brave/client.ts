@@ -86,6 +86,13 @@ class BraveClient {
 
       return [];
     } catch (error: any) {
+      // Handle rate limiting (429) gracefully
+      if (error?.response?.status === 429 || error?.response?.data?.error?.code === 'RATE_LIMITED') {
+        const errorData = error?.response?.data?.error || {};
+        console.warn(`⚠️ Brave API rate limit exceeded (429). Plan: ${errorData.meta?.plan || 'unknown'}, Rate limit: ${errorData.meta?.rate_limit || 'unknown'}/sec. Skipping Brave search for this request.`);
+        // Throw a specific error that callers can catch to skip Brave search
+        throw new Error('BRAVE_RATE_LIMITED');
+      }
       console.error('Brave search error:', error?.response?.data || error?.message || error);
       return [];
     }

@@ -678,8 +678,12 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
               }
             }
           }
-        } catch (error) {
-          console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+        } catch (error: any) {
+          if (error?.message === 'BRAVE_RATE_LIMITED') {
+            console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for this item.`);
+          } else {
+            console.log(`    ✗ Failed to find IMDB ID via Brave for "${cleanTitle}":`, error);
+          }
         }
       }
 
@@ -762,8 +766,12 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
               }
             }
           }
-        } catch (error) {
-          console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+        } catch (error: any) {
+          if (error?.message === 'BRAVE_RATE_LIMITED') {
+            console.log(`    ⚠️ Brave API rate limit reached. Skipping Brave search for this item.`);
+          } else {
+            console.log(`    ✗ Failed to find TMDB ID via Brave for "${cleanTitle}":`, error);
+          }
         }
       }
     }
