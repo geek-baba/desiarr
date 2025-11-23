@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
 import { feedsModel } from '../models/feeds';
-import radarrClient from '../radarr/client';
-import tmdbClient from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 import { config } from '../config';
 import { Release } from '../types/Release';
-import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from '../services/radarrSync';
+import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId, syncRadarrMovies } from '../services/radarrSync';
+import { syncRssFeeds } from '../services/rssSync';
 import { runMatchingEngine } from '../services/matchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
@@ -83,14 +82,7 @@ function buildDisplayTitle(release: Release): string {
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    // Get TMDB API key from settings
-    const settings = settingsModel.getAll();
-    const tmdbApiKey = settings.find(s => s.key === 'tmdb_api_key')?.value;
-    if (tmdbApiKey) {
-      tmdbClient.setApiKey(tmdbApiKey);
-    }
-
-    // Get all releases
+    // Get all releases (dashboard now uses only synced data, no real-time API calls)
     const allReleases = releasesModel.getAll();
     const feeds = feedsModel.getAll();
     
@@ -190,24 +182,13 @@ router.get('/', async (req: Request, res: Response) => {
                             releases.find(r => r.tmdb_id) || 
                             releases[0];
       
-      // Ensure we have the proper title from TMDB/Radarr if we have IDs
+      // Ensure we have the proper title from synced Radarr data if we have IDs
       // This ensures we use the actual movie title instead of the release filename
       if (primaryRelease.tmdb_id && !primaryRelease.tmdb_title) {
-        // Try to get title from synced Radarr data first
+        // Get title from synced Radarr data
         const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
         if (syncedMovie && syncedMovie.title) {
           primaryRelease.tmdb_title = syncedMovie.title;
-        } else if (tmdbApiKey) {
-          // If not in Radarr, fetch directly from TMDB API
-          try {
-            const tmdbMovie = await tmdbClient.getMovie(primaryRelease.tmdb_id);
-            if (tmdbMovie && tmdbMovie.title) {
-              primaryRelease.tmdb_title = tmdbMovie.title;
-            }
-          } catch (error) {
-            // Silently fail - will fall back to release title
-            console.error(`Error fetching TMDB title for ID ${primaryRelease.tmdb_id}:`, error);
-          }
         }
       }
       
@@ -420,83 +401,57 @@ router.get('/', async (req: Request, res: Response) => {
       // Get all releases for this movie group
       const groupReleases = releasesByMovie[movieGroup.movieKey] || [];
       
-      // Get movie metadata if we have TMDB ID or Radarr movie ID
-      if (movieGroup.tmdbId || movieGroup.radarrMovieId) {
+      // Get movie metadata from synced Radarr data (no real-time API calls)
+      // First, check if any release in the group has a stored TMDB poster URL
+      const releaseWithPoster = groupReleases.find((r: any) => r.tmdb_poster_url);
+      if (releaseWithPoster?.tmdb_poster_url) {
+        movieGroup.posterUrl = releaseWithPoster.tmdb_poster_url;
+      }
+      
+      // If no poster from releases, try synced Radarr data
+      if (!movieGroup.posterUrl && (movieGroup.tmdbId || movieGroup.radarrMovieId)) {
         try {
-          let movie: any = null;
+          let syncedMovie: any = null;
           if (movieGroup.radarrMovieId) {
-            // Use synced Radarr data instead of real-time API call
-            const syncedMovie = getSyncedRadarrMovieByRadarrId(movieGroup.radarrMovieId);
-            if (syncedMovie && syncedMovie.movie_file) {
-              try {
-                movie = { movieFile: JSON.parse(syncedMovie.movie_file) };
-              } catch (error) {
-                console.error('Error parsing synced movie file:', error);
-              }
-            }
+            syncedMovie = getSyncedRadarrMovieByRadarrId(movieGroup.radarrMovieId);
           } else if (movieGroup.tmdbId) {
-            // Use synced Radarr data instead of real-time API call
-            const syncedMovie = getSyncedRadarrMovieByTmdbId(movieGroup.tmdbId);
-            if (syncedMovie && syncedMovie.movie_file) {
-              try {
-                movie = { movieFile: JSON.parse(syncedMovie.movie_file) };
-              } catch (error) {
-                console.error('Error parsing synced movie file:', error);
-              }
-            }
+            syncedMovie = getSyncedRadarrMovieByTmdbId(movieGroup.tmdbId);
           }
           
-          if (movie) {
-            if (movie.id) {
-              movieGroup.radarrMovieId = movie.id;
-
-              // Propagate Radarr linkage to releases so UI can show them under "Existing"
-              for (const release of groupReleases) {
-                if (!release.radarr_movie_id) {
-                  release.radarr_movie_id = movie.id;
-                  release.radarr_movie_title = movie.title;
+          if (syncedMovie) {
+            // Get poster URL from synced Radarr images (stored as JSON)
+            if (syncedMovie.images) {
+              try {
+                const images = JSON.parse(syncedMovie.images);
+                if (Array.isArray(images) && images.length > 0) {
+                  const poster = images.find((img: any) => img.coverType === 'poster');
+                  if (poster) {
+                    movieGroup.posterUrl = poster.remoteUrl || poster.url;
+                  }
                 }
-              }
-
-              // If we previously categorized them as "Add", move them to "Existing"
-              if (movieGroup.add.length > 0) {
-                movieGroup.existing.push(...movieGroup.add);
-                movieGroup.add = [];
-              }
-            }
-
-            // Get poster URL (Radarr provides images array)
-            if (movie.images && movie.images.length > 0) {
-              const poster = movie.images.find((img: any) => img.coverType === 'poster');
-              if (poster) {
-                movieGroup.posterUrl = poster.remoteUrl || poster.url;
+              } catch (error) {
+                console.error('Error parsing synced Radarr images:', error);
               }
             }
             
-            // Get IMDB ID (prefer from Radarr, but also check releases)
-            if (movie.imdbId) {
-              movieGroup.imdbId = movie.imdbId;
-            } else if (!movieGroup.imdbId) {
-              // If not in Radarr, use IMDB ID from releases
-              const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
-              if (releaseWithImdb?.imdb_id) {
-                movieGroup.imdbId = releaseWithImdb.imdb_id;
-              }
+            // Get IMDB ID from synced data
+            if (syncedMovie.imdb_id && !movieGroup.imdbId) {
+              movieGroup.imdbId = syncedMovie.imdb_id;
             }
             
-            // Get TMDB ID (already have it, but ensure it's set)
-            if (movie.tmdbId) {
-              movieGroup.tmdbId = movie.tmdbId;
+            // Get original language from synced data
+            if (syncedMovie.original_language && !movieGroup.originalLanguage) {
+              movieGroup.originalLanguage = syncedMovie.original_language;
             }
             
-            // Get original language
-            if (movie.originalLanguage) {
-              movieGroup.originalLanguage = movie.originalLanguage.name || movie.originalLanguage;
+            // Ensure TMDB ID is set
+            if (syncedMovie.tmdb_id && !movieGroup.tmdbId) {
+              movieGroup.tmdbId = syncedMovie.tmdb_id;
             }
           }
         } catch (error) {
           // Silently fail - just don't add metadata
-          console.error(`Error fetching movie metadata for ${movieGroup.movieTitle}:`, error);
+          console.error(`Error getting synced movie metadata for ${movieGroup.movieTitle}:`, error);
         }
       }
       
@@ -505,60 +460,6 @@ router.get('/', async (req: Request, res: Response) => {
         const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
         if (releaseWithImdb?.imdb_id) {
           movieGroup.imdbId = releaseWithImdb.imdb_id;
-        }
-      }
-      
-      // If we have TMDB ID but no poster, fetch directly from TMDB
-      if (movieGroup.tmdbId && !movieGroup.posterUrl && tmdbApiKey) {
-        try {
-          const tmdbMovie = await tmdbClient.getMovie(movieGroup.tmdbId);
-          if (tmdbMovie && tmdbMovie.poster_path) {
-            const posterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path);
-            movieGroup.posterUrl = posterUrl ?? undefined;
-            console.log(`  Fetched poster from TMDB for movie ID ${movieGroup.tmdbId}`);
-          }
-          // Also update IMDB ID and language if missing
-          if (!movieGroup.imdbId && tmdbMovie?.imdb_id) {
-            movieGroup.imdbId = tmdbMovie.imdb_id;
-          }
-          if (!movieGroup.originalLanguage && tmdbMovie?.original_language) {
-            movieGroup.originalLanguage = tmdbMovie.original_language;
-          }
-        } catch (error) {
-          console.error(`Error fetching TMDB movie ${movieGroup.tmdbId} for poster:`, error);
-        }
-      }
-      
-      // If we still don't have TMDB ID or poster, try TMDB API search
-      if ((!movieGroup.tmdbId || !movieGroup.posterUrl) && tmdbApiKey) {
-        try {
-          // Get a release to extract title and year for search
-          const searchRelease = movieGroup.add[0] || movieGroup.existing[0] || movieGroup.upgrade[0];
-          if (searchRelease) {
-            const searchTitle = searchRelease.tmdb_title || 
-                              searchRelease.radarr_movie_title || 
-                              searchRelease.title.split(/\s+\d{4}/)[0];
-            const searchYear = searchRelease.year;
-            
-            const tmdbMovie = await tmdbClient.searchMovie(searchTitle, searchYear);
-            if (tmdbMovie) {
-              if (!movieGroup.tmdbId) {
-                movieGroup.tmdbId = tmdbMovie.id;
-              }
-              if (!movieGroup.posterUrl && tmdbMovie.poster_path) {
-                const posterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path);
-                movieGroup.posterUrl = posterUrl ?? undefined;
-              }
-              if (!movieGroup.imdbId && tmdbMovie.imdb_id) {
-                movieGroup.imdbId = tmdbMovie.imdb_id;
-              }
-              if (!movieGroup.originalLanguage && tmdbMovie.original_language) {
-                movieGroup.originalLanguage = tmdbMovie.original_language;
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Error searching TMDB for ${movieGroup.movieTitle}:`, error);
         }
       }
       
@@ -794,6 +695,75 @@ router.post('/refresh', async (req: Request, res: Response) => {
 
 // Get refresh progress
 router.get('/refresh/progress', (req: Request, res: Response) => {
+  const progress = syncProgress.get();
+  res.json(progress || { isRunning: false });
+});
+
+// Build & Match endpoint - runs full sync cycle (RSS sync, Radarr sync, matching engine)
+router.post('/build-match', async (req: Request, res: Response) => {
+  try {
+    // Check if sync is already running
+    const current = syncProgress.get();
+    if (current && current.isRunning) {
+      return res.json({ success: false, message: 'Sync is already in progress' });
+    }
+
+    // Start full sync cycle in background
+    (async () => {
+      try {
+        console.log('=== Starting Build & Match (full sync cycle) ===');
+        syncProgress.start('full', 0);
+        
+        // Step 1: Sync RSS feeds
+        console.log('Step 1: Syncing RSS feeds...');
+        syncProgress.update('Step 1: Syncing RSS feeds...', 0);
+        await syncRssFeeds();
+        
+        // Step 2: Sync Radarr
+        console.log('Step 2: Syncing Radarr movies...');
+        syncProgress.update('Step 2: Syncing Radarr movies...', 0);
+        await syncRadarrMovies();
+        
+        // Step 3: Run matching engine
+        console.log('Step 3: Running matching engine...');
+        syncProgress.update('Step 3: Running matching engine...', 0);
+        const stats = await runMatchingEngine();
+        
+        syncProgress.update('Build & Match completed successfully', stats.processed || 0, stats.processed || 0, stats.errors || 0);
+        syncProgress.complete();
+        
+        console.log('=== Build & Match completed ===');
+        
+        // Clear progress after 5 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 5000);
+      } catch (error: any) {
+        console.error('Build & Match error in background task:', error);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        syncProgress.complete();
+        
+        // Keep error visible for 30 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 30000);
+      }
+    })();
+
+    res.json({ success: true, message: 'Build & Match started' });
+  } catch (error: any) {
+    console.error('Start Build & Match error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start Build & Match',
+      message: error?.message || 'Unknown error'
+    });
+  }
+});
+
+// Get Build & Match progress
+router.get('/build-match/progress', (req: Request, res: Response) => {
   const progress = syncProgress.get();
   res.json(progress || { isRunning: false });
 });

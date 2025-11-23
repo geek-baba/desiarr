@@ -46,12 +46,24 @@
     <%- include('partials/app-header', { lastRefresh: typeof lastRefresh !== 'undefined' ? lastRefresh : null }) %>
     
     <main class="p-4 lg:p-6">
-      <div class="mb-6">
-        <div id="progressContainer" class="hidden flex-1 max-w-md mb-4">
-          <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-            <div id="progressBar" class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+      <!-- Sync & Match Button and Progress -->
+      <div class="mb-6 flex items-center gap-4">
+        <button 
+          id="syncMatchBtn" 
+          class="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          type="button"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+          <span id="syncMatchBtnText">Sync & Match</span>
+        </button>
+        <div id="syncProgressContainer" class="hidden flex-1 max-w-2xl">
+          <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+            <div id="syncProgressBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
           </div>
-          <div id="progressText" class="text-xs text-gray-600 dark:text-gray-400 mt-1"></div>
+          <div id="syncProgressText" class="text-sm text-gray-700 dark:text-gray-300 mt-2 font-medium"></div>
+          <div id="syncProgressError" class="hidden text-sm text-red-600 dark:text-red-400 mt-2"></div>
         </div>
       </div>
 
@@ -829,6 +841,99 @@
 
     // Expose filterMovies to window immediately after definition
     window.filterMovies = filterMovies;
+
+    // Sync & Match button functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const syncMatchBtn = document.getElementById('syncMatchBtn');
+      const syncMatchBtnText = document.getElementById('syncMatchBtnText');
+      const syncProgressContainer = document.getElementById('syncProgressContainer');
+      const syncProgressBar = document.getElementById('syncProgressBar');
+      const syncProgressText = document.getElementById('syncProgressText');
+      const syncProgressError = document.getElementById('syncProgressError');
+      let progressInterval = null;
+
+      function updateProgress() {
+        fetch('/dashboard/build-match/progress')
+          .then(res => res.json())
+          .then(data => {
+            if (!data || !data.isRunning) {
+              // Sync completed
+              if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+              }
+              syncMatchBtn.disabled = false;
+              syncMatchBtnText.textContent = 'Sync & Match';
+              
+              // Show completion message for 3 seconds, then hide
+              if (data.progress === 100 || !data.isRunning) {
+                syncProgressText.textContent = 'Sync & Match completed successfully!';
+                setTimeout(() => {
+                  syncProgressContainer.classList.add('hidden');
+                  // Reload page to show updated data
+                  window.location.reload();
+                }, 2000);
+              }
+              return;
+            }
+
+            // Update progress display
+            syncProgressContainer.classList.remove('hidden');
+            syncProgressError.classList.add('hidden');
+            syncProgressBar.style.width = `${data.progress || 0}%`;
+            
+            // Build progress text
+            let progressText = data.currentStep || 'Processing...';
+            if (data.total > 0) {
+              progressText += ` (${data.processed || 0}/${data.total})`;
+            }
+            if (data.errors > 0) {
+              progressText += ` - ${data.errors} error${data.errors > 1 ? 's' : ''}`;
+            }
+            syncProgressText.textContent = progressText;
+          })
+          .catch(error => {
+            console.error('Error fetching progress:', error);
+            syncProgressError.textContent = 'Error fetching progress. Please refresh the page.';
+            syncProgressError.classList.remove('hidden');
+          });
+      }
+
+      syncMatchBtn?.addEventListener('click', function() {
+        if (syncMatchBtn.disabled) return;
+        
+        // Disable button and show loading state
+        syncMatchBtn.disabled = true;
+        syncMatchBtnText.textContent = 'Starting...';
+        syncProgressContainer.classList.remove('hidden');
+        syncProgressError.classList.add('hidden');
+        syncProgressBar.style.width = '0%';
+        syncProgressText.textContent = 'Initializing...';
+
+        // Start sync
+        fetch('/dashboard/build-match', { method: 'POST' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              // Start polling for progress
+              updateProgress();
+              progressInterval = setInterval(updateProgress, 1000);
+            } else {
+              syncMatchBtn.disabled = false;
+              syncMatchBtnText.textContent = 'Sync & Match';
+              syncProgressError.textContent = data.message || 'Failed to start sync';
+              syncProgressError.classList.remove('hidden');
+            }
+          })
+          .catch(error => {
+            console.error('Error starting sync:', error);
+            syncMatchBtn.disabled = false;
+            syncMatchBtnText.textContent = 'Sync & Match';
+            syncProgressError.textContent = 'Failed to start sync. Please try again.';
+            syncProgressError.classList.remove('hidden');
+          });
+      });
+    });
   </script>
 </body>
 </html>

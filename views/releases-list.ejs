@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" class="<%= typeof theme !== 'undefined' && theme === 'dark' ? 'dark' : '' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Releases — desiarr</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <%- include('partials/app-sidebar', { currentPage: 'releases' }) %>
+  
+  <div class="lg:pl-64">
+    <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', hideRefresh: true }) %>
+    
+    <main class="p-4 lg:p-6">
+      <div class="mb-6">
+        <div class="flex justify-between items-center">
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">All Releases</h1>
+          <div class="text-sm text-gray-600 dark:text-gray-400">
+            Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> releases
+          </div>
+        </div>
+      </div>
+
+      <% if (releases.length === 0) { %>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+          <p class="text-gray-600 dark:text-gray-400">
+            <% if (typeof search !== 'undefined' && search) { %>
+              No releases found matching "<%= search %>"
+            <% } else { %>
+              No releases found. Go to Settings to add RSS feeds and sync data.
+            <% } %>
+          </p>
+        </div>
+      <% } else { %>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Source</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Release Name</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Status</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Published</th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <% releases.forEach(r => { %>
+                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <td class="px-4 py-3 text-sm">
+                      <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feedName || r.source_site || 'Unknown' %></div>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <div>
+                        <!-- Release File Name - Not Truncated -->
+                        <div class="flex items-center gap-2 mb-2">
+                          <span class="font-mono text-gray-800 dark:text-gray-200 break-all" title="<%= r.title %>"><%= r.title %></span>
+                          <% if (r.link) { %>
+                            <button 
+                              class="copy-link icon-btn p-1 flex-shrink-0" 
+                              data-url="<%= r.link %>" 
+                              data-title="<%= r.title %>"
+                              aria-label="Copy release link"
+                              title="Copy link"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                              </svg>
+                            </button>
+                          <% } %>
+                        </div>
+                        
+                        <!-- Quality Attributes, Size Below Release Name -->
+                        <div class="space-y-1">
+                          <!-- Quality Attributes - Match Radarr Style -->
+                          <div class="flex gap-1 flex-wrap items-center">
+                            <% if (r.resolution) { %>
+                              <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded text-xs"><%= r.resolution %></span>
+                            <% } %>
+                            <% if (r.codec) { %>
+                              <span class="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded text-xs"><%= r.codec %></span>
+                            <% } %>
+                            <% if (r.source_tag) { %>
+                              <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded text-xs font-semibold" style="font-family: Arial, sans-serif;">
+                                <% if (r.source_tag === 'AMZN') { %>
+                                  <span class="text-orange-600 dark:text-orange-400">AMZN</span>
+                                <% } else if (r.source_tag === 'NF' || r.source_tag === 'Netflix') { %>
+                                  <span class="text-red-600 dark:text-red-400">NF</span>
+                                <% } else if (r.source_tag === 'DSNP' || r.source_tag === 'Disney' || r.source_tag === 'Hotstar') { %>
+                                  <span class="text-blue-600 dark:text-blue-400">DSNP</span>
+                                <% } else if (r.source_tag === 'ZEE5' || r.source_tag === 'Zee5') { %>
+                                  <span class="text-purple-600 dark:text-purple-400">ZEE5</span>
+                                <% } else if (r.source_tag === 'JC' || r.source_tag === 'JioCinema') { %>
+                                  <span class="text-green-600 dark:text-green-400">JC</span>
+                                <% } else if (r.source_tag === 'HS' || r.source_tag === 'Hotstar') { %>
+                                  <span class="text-blue-600 dark:text-blue-400">HS</span>
+                                <% } else if (r.source_tag === 'SS') { %>
+                                  <span class="text-indigo-600 dark:text-indigo-400">SS</span>
+                                <% } else { %>
+                                  <%= r.source_tag %>
+                                <% } %>
+                              </span>
+                            <% } %>
+                            <% if (r.audio) { %>
+                              <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded text-xs"><%= r.audio %></span>
+                            <% } %>
+                            <% if (r.rss_size_mb) { %>
+                              <%
+                                const sizeGiB = typeof r.rss_size_mb === 'number' ? (r.rss_size_mb / 1024) : (parseFloat(r.rss_size_mb) / 1024);
+                              %>
+                              <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs">
+                                <%= sizeGiB.toFixed(2) %> GiB
+                              </span>
+                            <% } %>
+                          </div>
+                          
+                          <!-- Movie Title (if available) -->
+                          <% if (r.tmdb_title || r.radarr_movie_title) { %>
+                            <div class="text-xs text-gray-600 dark:text-gray-400">
+                              Movie: <span class="font-medium"><%= r.radarr_movie_title || r.tmdb_title %></span>
+                              <% if (r.year) { %>
+                                (<%= r.year %>)
+                              <% } %>
+                            </div>
+                          <% } %>
+                          
+                          <!-- Audio Languages -->
+                          <% if (r.audio_languages) { %>
+                            <div class="text-xs text-gray-600 dark:text-gray-400">
+                              Languages: <%= JSON.parse(r.audio_languages).join(', ') %>
+                            </div>
+                          <% } %>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <% if (r.status === 'NEW') { %>
+                        <span class="badge badge-success text-xs">NEW</span>
+                      <% } else if (r.status === 'ATTENTION_NEEDED') { %>
+                        <span class="badge badge-warning text-xs">ATTENTION NEEDED</span>
+                      <% } else if (r.status === 'EXISTING' || r.status === 'IGNORED' && r.radarr_movie_id) { %>
+                        <span class="badge badge-info text-xs">EXISTING</span>
+                      <% } else if (r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED') { %>
+                        <span class="badge badge-warning text-xs">UPGRADE</span>
+                      <% } else if (r.status === 'IGNORED') { %>
+                        <span class="badge badge-neutral text-xs">IGNORED</span>
+                      <% } else { %>
+                        <span class="text-xs text-gray-500 dark:text-gray-400"><%= r.status %></span>
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                      <%= new Date(r.published_at).toLocaleString() %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-right">
+                      <% if (r.link) { %>
+                        <a 
+                          href="<%= r.link %>" 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          class="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                          aria-label="View release on source"
+                        >
+                          View
+                        </a>
+                      <% } %>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <% } %>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+  <script>
+    // Copy-to-clipboard functionality for release links
+    document.addEventListener('click', (e) => {
+      const copyBtn = e.target.closest('.copy-link');
+      if (!copyBtn) return;
+      
+      const url = copyBtn.dataset.url;
+      const title = copyBtn.dataset.title;
+      const textToCopy = url || title || '';
+      
+      if (textToCopy) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+          // Simple toast notification
+          const toast = document.createElement('div');
+          toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+          toast.textContent = 'Copied to clipboard!';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2000);
+        }).catch(() => {
+          const toast = document.createElement('div');
+          toast.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+          toast.textContent = 'Failed to copy';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2000);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+

@@ -73,6 +73,7 @@ export const releasesModel = {
                   tmdb_id = ?,
                   tmdb_title = ?,
                   tmdb_original_language = ?,
+                  tmdb_poster_url = ?,
                   imdb_id = ?,
                   is_dubbed = ?,
                   audio_languages = ?,
@@ -103,6 +104,7 @@ export const releasesModel = {
                 release.tmdb_id || null,
                 release.tmdb_title || null,
                 release.tmdb_original_language || null,
+                release.tmdb_poster_url || null,
                 release.imdb_id || null,
                 release.is_dubbed ? 1 : 0,
                 release.audio_languages || null,
@@ -123,11 +125,11 @@ export const releasesModel = {
         INSERT INTO releases (
           guid, title, normalized_title, year, source_site, feed_id, link,
           resolution, source_tag, codec, audio, rss_size_mb, existing_size_mb,
-          published_at, tmdb_id, tmdb_title, tmdb_original_language, imdb_id, is_dubbed,
+          published_at, tmdb_id, tmdb_title, tmdb_original_language, tmdb_poster_url, imdb_id, is_dubbed,
           audio_languages, radarr_movie_id, radarr_movie_title,
           radarr_existing_quality_score, new_quality_score, status,
           existing_file_path, existing_file_attributes, radarr_history
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         release.guid,
         release.title,
@@ -146,6 +148,7 @@ export const releasesModel = {
         release.tmdb_id || null,
         release.tmdb_title || null,
         release.tmdb_original_language || null,
+        release.tmdb_poster_url || null,
         release.imdb_id || null,
         release.is_dubbed ? 1 : 0,
         release.audio_languages || null,

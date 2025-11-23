@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getSyncedRadarrMovies, getLastRadarrSync, syncRadarrMovies } from '../services/radarrSync';
 import { getSyncedRssItems, getSyncedRssItemsByFeed, getLastRssSync, syncRssFeeds, backfillMissingIds } from '../services/rssSync';
 import { feedsModel } from '../models/feeds';
+import { releasesModel } from '../models/releases';
 import { syncProgress } from '../services/syncProgress';
 import { logStorage } from '../services/logStorage';
 import db from '../db';
@@ -12,6 +13,72 @@ import braveClient from '../brave/client';
 import { settingsModel } from '../models/settings';
 
 const router = Router();
+
+// All Releases page - flattened list of all releases
+router.get('/releases', (req: Request, res: Response) => {
+  try {
+    const search = (req.query.search as string) || '';
+    const allReleases = releasesModel.getAll();
+    const feeds = feedsModel.getAll();
+    
+    // Get feed names for display
+    const feedMap: { [key: number]: string } = {};
+    for (const feed of feeds) {
+      if (feed.id) {
+        feedMap[feed.id] = feed.name;
+      }
+    }
+    
+    // Filter releases by search term if provided
+    let filteredReleases = allReleases;
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      filteredReleases = allReleases.filter(release => {
+        const title = (release.title || '').toLowerCase();
+        const normalizedTitle = (release.normalized_title || '').toLowerCase();
+        const tmdbTitle = (release.tmdb_title || '').toLowerCase();
+        const radarrTitle = (release.radarr_movie_title || '').toLowerCase();
+        const status = (release.status || '').toLowerCase();
+        const resolution = (release.resolution || '').toLowerCase();
+        const sourceTag = (release.source_tag || '').toLowerCase();
+        const codec = (release.codec || '').toLowerCase();
+        
+        return title.includes(searchLower) ||
+               normalizedTitle.includes(searchLower) ||
+               tmdbTitle.includes(searchLower) ||
+               radarrTitle.includes(searchLower) ||
+               status.includes(searchLower) ||
+               resolution.includes(searchLower) ||
+               sourceTag.includes(searchLower) ||
+               codec.includes(searchLower);
+      });
+    }
+    
+    // Add feed names to releases
+    const releasesWithFeedNames = filteredReleases.map(release => ({
+      ...release,
+      feedName: feedMap[release.feed_id] || 'Unknown Feed',
+    }));
+    
+    // Sort by published_at (newest first)
+    releasesWithFeedNames.sort((a, b) => {
+      const dateA = new Date(a.published_at).getTime();
+      const dateB = new Date(b.published_at).getTime();
+      return dateB - dateA;
+    });
+    
+    res.render('releases-list', {
+      releases: releasesWithFeedNames,
+      totalReleases: allReleases.length,
+      filteredCount: releasesWithFeedNames.length,
+      search,
+      hideRefresh: true,
+    });
+  } catch (error) {
+    console.error('All Releases page error:', error);
+    res.status(500).send('Internal server error');
+  }
+});
 
 // Radarr Data page
 router.get('/radarr', (req: Request, res: Response) => {

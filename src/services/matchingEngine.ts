@@ -97,6 +97,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         let tmdbId = item.tmdb_id;
         let tmdbTitle: string | undefined;
         let tmdbOriginalLanguage: string | undefined;
+        let tmdbPosterUrl: string | undefined;
         let imdbId: string | undefined = item.imdb_id;
         let needsAttention = false;
         let radarrMovieId: number | undefined;
@@ -149,7 +150,13 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
             }
             
             // After validation/correction, check Radarr again with the (possibly corrected) TMDB ID
+            // Also extract poster URL if we have TMDB movie data
             if (tmdbId) {
+              // If we fetched TMDB movie during validation, extract poster URL
+              if (tmdbMovie && tmdbMovie.poster_path && !tmdbPosterUrl) {
+                tmdbPosterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path) || undefined;
+              }
+              
               const syncedRadarrMovie = getSyncedRadarrMovieByTmdbId(tmdbId);
               if (syncedRadarrMovie) {
                 radarrMovieId = syncedRadarrMovie.radarr_id;
@@ -168,10 +175,16 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         if (tmdbId && tmdbApiKey && !imdbId) {
           try {
             const tmdbMovie = await tmdbClient.getMovie(tmdbId);
-            if (tmdbMovie && tmdbMovie.imdb_id) {
-              imdbId = tmdbMovie.imdb_id;
+            if (tmdbMovie) {
+              if (tmdbMovie.imdb_id) {
+                imdbId = tmdbMovie.imdb_id;
+              }
               tmdbTitle = tmdbMovie.title;
               tmdbOriginalLanguage = tmdbMovie.original_language;
+              // Extract poster URL
+              if (tmdbMovie.poster_path) {
+                tmdbPosterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path) || undefined;
+              }
             }
           } catch (error: any) {
             // Ignore - we still have TMDB ID which is what matters
@@ -187,6 +200,10 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
               tmdbId = tmdbMovie.id;
               tmdbTitle = tmdbMovie.title;
               tmdbOriginalLanguage = tmdbMovie.original_language;
+              // Extract poster URL
+              if (tmdbMovie.poster_path) {
+                tmdbPosterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path) || undefined;
+              }
               
               // Check synced Radarr with new TMDB ID
               const syncedRadarrMovie = getSyncedRadarrMovieByTmdbId(tmdbId);
@@ -338,6 +355,10 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                 tmdbId = tmdbMovie.id;
                 tmdbTitle = tmdbMovie.title;
                 tmdbOriginalLanguage = tmdbMovie.original_language;
+                // Extract poster URL
+                if (tmdbMovie.poster_path) {
+                  tmdbPosterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path) || undefined;
+                }
 
                 // Extract IMDB ID from TMDB movie (primary source)
                 if (!imdbId && tmdbMovie.imdb_id) {
@@ -377,6 +398,10 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
                     tmdbId = tmdbMovie.id;
                     tmdbTitle = tmdbMovie.title;
                     tmdbOriginalLanguage = tmdbMovie.original_language;
+                    // Extract poster URL
+                    if (tmdbMovie.poster_path) {
+                      tmdbPosterUrl = tmdbClient.getPosterUrl(tmdbMovie.poster_path) || undefined;
+                    }
                     
                     // Check synced Radarr again with new TMDB ID
                     const syncedRadarrMovie = getSyncedRadarrMovieByTmdbId(tmdbId);
@@ -484,6 +509,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           tmdb_id: tmdbId,
           tmdb_title: tmdbTitle,
           tmdb_original_language: tmdbOriginalLanguage,
+          tmdb_poster_url: tmdbPosterUrl,
           imdb_id: imdbId,
           radarr_movie_id: radarrMovieId,
           radarr_movie_title: radarrMovieTitle,

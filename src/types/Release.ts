@@ -21,6 +21,7 @@ export interface Release {
   tmdb_id?: number;
   tmdb_title?: string;
   tmdb_original_language?: string;
+  tmdb_poster_url?: string;
   imdb_id?: string;
   is_dubbed?: boolean;
   audio_languages?: string;
