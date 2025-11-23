@@ -494,10 +494,15 @@
           searchTimeout = setTimeout(() => {
             // Ensure logs are loaded before filtering
             if (allLoadedLogs.length === 0) {
+              // Load logs first, then filter
               loadLogs(1).then(() => {
-                filterLogsClientSide(searchTerm);
+                // Small delay to ensure allLoadedLogs is populated
+                setTimeout(() => {
+                  filterLogsClientSide(searchTerm);
+                }, 50);
               });
             } else {
+              // Filter immediately if logs are already loaded
               filterLogsClientSide(searchTerm);
             }
           }, 150);
@@ -587,6 +592,8 @@
 
       // Filter logs - search across all relevant fields
       const filtered = allLoadedLogs.filter(log => {
+        if (!log) return false;
+        
         const message = String(log.message || '').toLowerCase();
         const source = String(log.source || '').toLowerCase();
         const level = String(log.level || '').toLowerCase();
