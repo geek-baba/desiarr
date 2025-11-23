@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>All Releases — desiarr</title>
+  <title>Releases — desiarr</title>
   <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/css/app.css">
@@ -16,8 +16,7 @@
     
     <main class="p-4 lg:p-6">
       <div class="mb-6">
-        <div class="flex justify-between items-center">
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">All Releases</h1>
+        <div class="flex justify-end items-center">
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> releases
           </div>
@@ -40,8 +39,10 @@
             <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Source</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Poster</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Movie</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Release Name</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Source</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Status</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Published</th>
                   <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
@@ -50,8 +51,33 @@
               <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 <% releases.forEach(r => { %>
                   <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <td class="px-4 py-3">
+                      <% if (r.posterUrl) { %>
+                        <img 
+                          src="<%= r.posterUrl %>" 
+                          alt="<%= (r.tmdb_title || r.radarr_movie_title || r.title) %> poster" 
+                          class="w-16 h-24 object-cover rounded-lg shadow"
+                          loading="lazy"
+                        />
+                      <% } else { %>
+                        <div class="w-16 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg shadow flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs text-center p-1">
+                          No Poster
+                        </div>
+                      <% } %>
+                    </td>
                     <td class="px-4 py-3 text-sm">
-                      <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feedName || r.source_site || 'Unknown' %></div>
+                      <div class="font-semibold text-gray-900 dark:text-gray-100">
+                        <%= r.radarr_movie_title || r.tmdb_title || 'Unknown Movie' %>
+                      </div>
+                      <% if (r.year) { %>
+                        <div class="text-xs text-gray-500 dark:text-gray-400"><%= r.year %></div>
+                      <% } %>
+                      <% if (r.tmdb_id) { %>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">TMDB: <%= r.tmdb_id %></div>
+                      <% } %>
+                      <% if (r.imdb_id) { %>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">IMDB: <%= r.imdb_id %></div>
+                      <% } %>
                     </td>
                     <td class="px-4 py-3 text-sm">
                       <div>
@@ -136,6 +162,9 @@
                           <% } %>
                         </div>
                       </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feedName || r.source_site || 'Unknown' %></div>
                     </td>
                     <td class="px-4 py-3 text-sm">
                       <% if (r.status === 'NEW') { %>

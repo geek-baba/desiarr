@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { getSyncedRadarrMovies, getLastRadarrSync, syncRadarrMovies } from '../services/radarrSync';
+import { getSyncedRadarrMovies, getLastRadarrSync, syncRadarrMovies, getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from '../services/radarrSync';
 import { getSyncedRssItems, getSyncedRssItemsByFeed, getLastRssSync, syncRssFeeds, backfillMissingIds } from '../services/rssSync';
 import { feedsModel } from '../models/feeds';
 import { releasesModel } from '../models/releases';
@@ -14,7 +14,7 @@ import { settingsModel } from '../models/settings';
 
 const router = Router();
 
-// All Releases page - flattened list of all releases
+// Releases page - flattened list of all releases with TMDB metadata
 router.get('/releases', (req: Request, res: Response) => {
   try {
     const search = (req.query.search as string) || '';
@@ -54,23 +54,55 @@ router.get('/releases', (req: Request, res: Response) => {
       });
     }
     
-    // Add feed names to releases
-    const releasesWithFeedNames = filteredReleases.map(release => ({
-      ...release,
-      feedName: feedMap[release.feed_id] || 'Unknown Feed',
-    }));
+    // Enrich releases with metadata (posters, etc.)
+    const enrichedReleases = filteredReleases.map(release => {
+      const enriched: any = {
+        ...release,
+        feedName: feedMap[release.feed_id] || 'Unknown Feed',
+        posterUrl: undefined,
+      };
+      
+      // Get poster URL from release's tmdb_poster_url first
+      if (release.tmdb_poster_url) {
+        enriched.posterUrl = release.tmdb_poster_url;
+      } else if (release.tmdb_id || release.radarr_movie_id) {
+        // Fall back to synced Radarr data
+        let syncedMovie: any = null;
+        if (release.radarr_movie_id) {
+          syncedMovie = getSyncedRadarrMovieByRadarrId(release.radarr_movie_id);
+        } else if (release.tmdb_id) {
+          syncedMovie = getSyncedRadarrMovieByTmdbId(release.tmdb_id);
+        }
+        
+        if (syncedMovie && syncedMovie.images) {
+          try {
+            const images = JSON.parse(syncedMovie.images);
+            if (Array.isArray(images) && images.length > 0) {
+              const poster = images.find((img: any) => img.coverType === 'poster');
+              if (poster) {
+                enriched.posterUrl = poster.remoteUrl || poster.url;
+              }
+            }
+          } catch (error) {
+            // Ignore parsing errors
+          }
+        }
+      }
+      
+      return enriched;
+    });
     
     // Sort by published_at (newest first)
-    releasesWithFeedNames.sort((a, b) => {
+    enrichedReleases.sort((a, b) => {
       const dateA = new Date(a.published_at).getTime();
       const dateB = new Date(b.published_at).getTime();
       return dateB - dateA;
     });
     
     res.render('releases-list', {
-      releases: releasesWithFeedNames,
+      releases: enrichedReleases,
       totalReleases: allReleases.length,
-      filteredCount: releasesWithFeedNames.length,
+      filteredCount: enrichedReleases.length,
       search,
       hideRefresh: true,
     });
