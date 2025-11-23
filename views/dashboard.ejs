@@ -641,9 +641,8 @@
     }
 
     // Search functionality
+    // Define and expose filterMovies to window immediately
     function filterMovies() {
-      // Expose to window for global access
-      window.filterMovies = filterMovies;
       // Use global search from header
       const searchInput = document.getElementById('globalSearch');
       const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -809,6 +808,8 @@
       }
     });
 
+    // Expose filterMovies to window immediately after definition
+    window.filterMovies = filterMovies;
   </script>
 </body>
 </html>

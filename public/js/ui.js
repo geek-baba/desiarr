@@ -99,35 +99,29 @@
         // Mark as connected
         globalSearch.dataset.dashboardConnected = 'true';
         
-        // Create a handler that tries multiple ways to call filterMovies
+        // Create a handler that calls filterMovies
         function triggerFilter() {
-          // Try window.filterMovies first
+          // Wait for function to be available, then call it
           if (typeof window.filterMovies === 'function') {
-            console.log('Calling window.filterMovies');
-            window.filterMovies();
-            return;
-          }
-          
-          // Try to find it in the global scope
-          const filterFunc = window['filterMovies'];
-          if (typeof filterFunc === 'function') {
-            console.log('Calling filterMovies from window object');
-            filterFunc();
-            return;
-          }
-          
-          // Try to call it directly by evaluating (last resort)
-          try {
-            if (typeof eval('filterMovies') === 'function') {
-              console.log('Calling filterMovies via eval');
-              eval('filterMovies()');
-              return;
+            try {
+              window.filterMovies();
+            } catch (error) {
+              console.error('Error calling filterMovies:', error);
             }
-          } catch (e) {
-            // Ignore eval errors
+          } else {
+            // Function not ready yet, try again after a short delay
+            setTimeout(() => {
+              if (typeof window.filterMovies === 'function') {
+                try {
+                  window.filterMovies();
+                } catch (error) {
+                  console.error('Error calling filterMovies (delayed):', error);
+                }
+              } else {
+                console.warn('filterMovies function not available after delay');
+              }
+            }, 100);
           }
-          
-          console.warn('filterMovies function not found');
         }
         
         // Attach listeners
