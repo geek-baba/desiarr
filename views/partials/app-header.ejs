@@ -42,14 +42,16 @@
           <% } %>
         </div>
       <% } %>
-      <button 
-        id="refreshBtn" 
-        class="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm"
-        type="button"
-        aria-label="Refresh page"
-      >
-        Refresh
-      </button>
+      <% if (typeof hideRefresh === 'undefined' || !hideRefresh) { %>
+        <button 
+          id="refreshBtn" 
+          class="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm"
+          type="button"
+          aria-label="Refresh page"
+        >
+          Refresh
+        </button>
+      <% } %>
       <%- include('dark-mode-toggle') %>
     </div>
   </div>

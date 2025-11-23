@@ -41,14 +41,13 @@
   <%- include('partials/app-sidebar', { currentPage: 'rss' }) %>
   
   <div class="lg:pl-64">
-    <%- include('partials/app-header', { currentSearch: '' }) %>
+    <%- include('partials/app-header', { currentSearch: '', hideRefresh: true }) %>
     
     <main class="p-4 lg:p-6">
     <div class="mb-6">
       <div class="flex justify-between items-center mb-4">
         <div>
-          <h2 class="text-2xl font-bold">RSS Feed Items</h2>
-          <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
             Last synced: <span id="lastSyncText"><%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %></span>
           </p>
         </div>
@@ -132,25 +131,6 @@
       <% }); %>
     </div>
 
-    <!-- Search Bar -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-      <div class="flex items-center gap-4">
-        <label for="searchInput" class="text-sm font-medium text-gray-700 dark:text-gray-300">Search:</label>
-        <input 
-          type="text" 
-          id="searchInput" 
-          placeholder="Search by title, feed, year, TMDB ID, or IMDB ID..." 
-          class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-          onkeyup="filterTable()"
-        />
-        <button 
-          onclick="clearSearch()" 
-          class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm"
-        >
-          Clear
-        </button>
-      </div>
-    </div>
 
     <!-- Items Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
@@ -301,10 +281,10 @@
   <script>
     let progressInterval = null;
 
-    // Search/Filter functionality
+    // Search/Filter functionality - uses global search
     function filterTable() {
-      const searchInput = document.getElementById('searchInput');
-      const searchTerm = searchInput.value.toLowerCase().trim();
+      const searchInput = document.getElementById('globalSearch');
+      const searchTerm = (searchInput?.value || '').toLowerCase().trim();
       const rows = document.querySelectorAll('.item-row');
       
       if (!searchTerm) {
@@ -332,11 +312,8 @@
       });
     }
 
-    function clearSearch() {
-      document.getElementById('searchInput').value = '';
-      filterTable();
-      document.getElementById('searchInput').focus();
-    }
+    // Expose filterTable to window for global search integration
+    window.filterTable = filterTable;
 
     // Toast Notification System
     function startBackfill() {

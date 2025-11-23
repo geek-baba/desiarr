@@ -219,19 +219,23 @@
     // RSS Data page - filter table client-side
     else if (path === '/data/rss') {
       // Wait for RSS page scripts to load
-      setTimeout(() => {
-        search.addEventListener('input', (e) => {
-          // Update the local search input if it exists
-          const rssSearchInput = document.getElementById('searchInput');
-          if (rssSearchInput) {
-            rssSearchInput.value = e.target.value;
-          }
-          // Trigger RSS filter if function exists
-          if (typeof window.filterTable === 'function') {
+      function setupRssSearch() {
+        if (typeof window.filterTable === 'function') {
+          search.addEventListener('input', () => {
+            window.filterTable();
+          });
+          search.addEventListener('keyup', () => {
+            window.filterTable();
+          });
+          // Trigger initial filter if there's a search term
+          if (search.value) {
             window.filterTable();
           }
-        });
-      }, 100);
+        } else {
+          setTimeout(setupRssSearch, 100);
+        }
+      }
+      setupRssSearch();
     }
     // Logs page - URL-based filter (both old and new routes, including log-explorer)
     else if (path === '/data/logs' || path === '/data/logs-old' || path.includes('/logs')) {
