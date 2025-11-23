@@ -73,9 +73,9 @@
         <p class="text-gray-600 dark:text-gray-400">No releases found. Go to Settings to add RSS feeds and sync data.</p>
       <% } else { %>
         
-        <!-- Top-level Tabs -->
-        <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-          <nav class="flex space-x-8" aria-label="Main Sections">
+        <!-- Top-level Tabs - Modern Design -->
+        <div class="mb-6">
+          <nav class="flex gap-2" aria-label="Main Sections">
             <% 
               const mainTabs = [
                 { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
@@ -90,9 +90,18 @@
                 <button 
                   onclick="showMainSection('<%= tab.key %>')" 
                   id="main-tab-<%= tab.key %>"
-                  class="<%= index === firstVisibleTab ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600' %> py-4 px-1 border-b-2 font-medium text-sm"
+                  class="<%= index === firstVisibleTab 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+                    px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
                 >
-                  <%= tab.label %> (<%= tab.count %>)
+                  <span><%= tab.label %></span>
+                  <span class="<%= index === firstVisibleTab 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' %> 
+                    px-2 py-0.5 rounded-full text-xs font-semibold min-w-[1.75rem] text-center">
+                    <%= tab.count %>
+                  </span>
                 </button>
               <% } %>
             <% }); %>
@@ -102,9 +111,9 @@
         <!-- New Movies Section -->
         <% if (hasNewMovies) { %>
           <div id="main-section-new" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
-            <!-- Time Period Tabs for New Movies -->
-            <div class="mb-4 border-b border-gray-200 dark:border-gray-700">
-              <nav class="flex space-x-8" aria-label="Time Periods">
+            <!-- Time Period Tabs for New Movies - Modern Design -->
+            <div class="mb-4">
+              <nav class="flex gap-2" aria-label="Time Periods">
                 <% const newPeriods = [
                   { key: 'today', label: 'Today', count: newMoviesByPeriod.today?.length || 0 },
                   { key: 'yesterday', label: 'Yesterday', count: newMoviesByPeriod.yesterday?.length || 0 },
@@ -123,9 +132,18 @@
                     <button 
                       onclick="showNewMoviesPeriod('<%= period.key %>')" 
                       id="new-tab-<%= period.key %>"
-                      class="<%= index === firstNewIndex ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600' %> py-2 px-1 border-b-2 font-medium text-sm"
+                      class="<%= index === firstNewIndex 
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                        px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
                     >
-                      <%= period.label %> (<%= period.count %>)
+                      <span><%= period.label %></span>
+                      <span class="<%= index === firstNewIndex 
+                        ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                        px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                        <%= period.count %>
+                      </span>
                     </button>
                   <% } %>
                 <% }); %>
