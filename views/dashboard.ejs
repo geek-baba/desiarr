@@ -705,8 +705,9 @@
       const clearSearchBtn = document.getElementById('clearSearchBtn');
       const searchResultsCount = document.getElementById('searchResultsCount');
       
-      searchInput.value = '';
-      clearSearchBtn.style.display = 'none';
+      if (searchInput) searchInput.value = '';
+      if (globalSearch) globalSearch.value = '';
+      if (clearSearchBtn) clearSearchBtn.style.display = 'none';
       clearSearchBtn.classList.add('hidden');
       searchResultsCount.classList.add('hidden');
       
