@@ -18,7 +18,9 @@
       <div class="flex justify-between items-center mb-4">
         <div>
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            Last synced: <%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %>
+            Last synced: <span id="lastSyncTime" data-utc="<%= lastSync ? (typeof lastSync === 'string' ? lastSync : lastSync.toISOString()) : '' %>">
+              <%= lastSync ? (typeof lastSync === 'string' ? new Date(lastSync).toLocaleString() : lastSync.toLocaleString()) : 'Never' %>
+            </span>
           </p>
         </div>
         <div class="flex items-center gap-4">
@@ -382,6 +384,25 @@
       syncIcon.classList.remove('animate-spin');
       progressContainer.classList.add('hidden');
     }
+
+    // Format last sync time on page load
+    window.addEventListener('load', () => {
+      const lastSyncElement = document.getElementById('lastSyncTime');
+      if (lastSyncElement && lastSyncElement.dataset.utc) {
+        const utcDate = new Date(lastSyncElement.dataset.utc);
+        const options: Intl.DateTimeFormatOptions = {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+          timeZoneName: 'short'
+        };
+        lastSyncElement.textContent = utcDate.toLocaleString(undefined, options);
+      }
+    });
 
     // Check for existing sync on page load (only once, don't auto-poll)
     window.addEventListener('load', async () => {
