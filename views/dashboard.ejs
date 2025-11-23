@@ -642,6 +642,8 @@
 
     // Search functionality
     function filterMovies() {
+      // Expose to window for global access
+      window.filterMovies = filterMovies;
       // Use global search from header
       const searchInput = document.getElementById('globalSearch');
       const clearSearchBtn = document.getElementById('clearSearchBtn');

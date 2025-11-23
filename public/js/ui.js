@@ -83,48 +83,72 @@
     
     // Dashboard page - filter movies client-side
     if (path === '/' || path === '/dashboard') {
-      // Use a simpler, more direct approach
-      function attachDashboardSearch() {
+      // Use event delegation and direct function call
+      function setupDashboardSearch() {
         const globalSearch = document.getElementById('globalSearch');
         if (!globalSearch) {
-          setTimeout(attachDashboardSearch, 50);
+          setTimeout(setupDashboardSearch, 50);
           return;
         }
         
-        // Check if filterMovies exists, if not, attach a listener that will check on each event
-        globalSearch.addEventListener('input', function() {
-          if (typeof window.filterMovies === 'function') {
-            window.filterMovies();
-          } else {
-            console.warn('filterMovies not available, retrying...');
-            // Try again after a short delay
-            setTimeout(() => {
-              if (typeof window.filterMovies === 'function') {
-                window.filterMovies();
-              }
-            }, 100);
-          }
-        });
+        // Remove any existing listeners by using a flag or one-time setup
+        if (globalSearch.dataset.dashboardConnected === 'true') {
+          return; // Already connected
+        }
         
-        globalSearch.addEventListener('keyup', function() {
-          if (typeof window.filterMovies === 'function') {
-            window.filterMovies();
-          }
-        });
+        // Mark as connected
+        globalSearch.dataset.dashboardConnected = 'true';
         
-        console.log('Dashboard search listeners attached');
+        // Create a handler that tries multiple ways to call filterMovies
+        function triggerFilter() {
+          // Try window.filterMovies first
+          if (typeof window.filterMovies === 'function') {
+            console.log('Calling window.filterMovies');
+            window.filterMovies();
+            return;
+          }
+          
+          // Try to find it in the global scope
+          const filterFunc = window['filterMovies'];
+          if (typeof filterFunc === 'function') {
+            console.log('Calling filterMovies from window object');
+            filterFunc();
+            return;
+          }
+          
+          // Try to call it directly by evaluating (last resort)
+          try {
+            if (typeof eval('filterMovies') === 'function') {
+              console.log('Calling filterMovies via eval');
+              eval('filterMovies()');
+              return;
+            }
+          } catch (e) {
+            // Ignore eval errors
+          }
+          
+          console.warn('filterMovies function not found');
+        }
+        
+        // Attach listeners
+        globalSearch.addEventListener('input', triggerFilter);
+        globalSearch.addEventListener('keyup', triggerFilter);
+        globalSearch.addEventListener('change', triggerFilter);
+        
+        console.log('Dashboard search listeners attached to:', globalSearch);
       }
       
-      // Try multiple times to ensure connection
-      attachDashboardSearch();
-      setTimeout(attachDashboardSearch, 100);
-      setTimeout(attachDashboardSearch, 300);
-      setTimeout(attachDashboardSearch, 500);
+      // Try multiple times
+      setupDashboardSearch();
+      setTimeout(setupDashboardSearch, 100);
+      setTimeout(setupDashboardSearch, 300);
+      setTimeout(setupDashboardSearch, 500);
+      setTimeout(setupDashboardSearch, 1000);
       
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', attachDashboardSearch);
+        document.addEventListener('DOMContentLoaded', setupDashboardSearch);
       }
-      window.addEventListener('load', attachDashboardSearch);
+      window.addEventListener('load', setupDashboardSearch);
     }
     // Radarr Data page - URL-based search
     else if (path === '/data/radarr') {
