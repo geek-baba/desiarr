@@ -83,31 +83,54 @@
     
     // Dashboard page - filter movies client-side
     if (path === '/' || path === '/dashboard') {
-      // Wait for dashboard scripts to load, then connect search
+      // Use a more robust approach - check multiple times and use event delegation
+      let retryCount = 0;
+      const maxRetries = 20; // Try for up to 2 seconds
+      
       function connectDashboardSearch() {
         const globalSearch = document.getElementById('globalSearch');
-        if (globalSearch && typeof window.filterMovies === 'function') {
-          // Add input event listener
-          globalSearch.addEventListener('input', () => {
-            window.filterMovies();
-          });
+        if (globalSearch) {
+          // Remove any existing listeners by cloning the element
+          const newSearch = globalSearch.cloneNode(true);
+          globalSearch.parentNode.replaceChild(newSearch, globalSearch);
+          const freshSearch = document.getElementById('globalSearch');
           
-          // Also trigger on keyup for immediate feedback
-          globalSearch.addEventListener('keyup', () => {
-            window.filterMovies();
-          });
+          if (typeof window.filterMovies === 'function') {
+            // Add input event listener
+            freshSearch.addEventListener('input', function() {
+              console.log('Dashboard search input triggered:', this.value);
+              window.filterMovies();
+            });
+            
+            // Also trigger on keyup for immediate feedback
+            freshSearch.addEventListener('keyup', function() {
+              console.log('Dashboard search keyup triggered:', this.value);
+              window.filterMovies();
+            });
+            
+            console.log('Dashboard search connected successfully');
+          } else {
+            retryCount++;
+            if (retryCount < maxRetries) {
+              setTimeout(connectDashboardSearch, 100);
+            } else {
+              console.warn('Dashboard filterMovies function not found after', maxRetries, 'retries');
+            }
+          }
         } else {
-          // If function not ready yet, try again
-          setTimeout(connectDashboardSearch, 100);
+          retryCount++;
+          if (retryCount < maxRetries) {
+            setTimeout(connectDashboardSearch, 100);
+          }
         }
       }
       
-      // Start connecting after a short delay to ensure dashboard scripts are loaded
+      // Start connecting - try immediately and also on load
+      connectDashboardSearch();
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', connectDashboardSearch);
-      } else {
-        setTimeout(connectDashboardSearch, 200);
       }
+      window.addEventListener('load', connectDashboardSearch);
     }
     // Radarr Data page - URL-based search
     else if (path === '/data/radarr') {
@@ -202,8 +225,8 @@
         });
       }, 100);
     }
-    // Logs page - URL-based filter (both old and new routes)
-    else if (path === '/data/logs' || path === '/data/logs-old') {
+    // Logs page - URL-based filter (both old and new routes, including log-explorer)
+    else if (path === '/data/logs' || path === '/data/logs-old' || path.includes('/logs')) {
       let searchTimeout = null;
       
       // Populate search from URL on page load
