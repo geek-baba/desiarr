@@ -96,34 +96,28 @@
       </div>
     </div>
 
-    <!-- Feed Filter -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
-      <div class="flex items-center gap-4">
-        <label class="text-sm font-medium">Filter by Feed:</label>
-        <select 
-          onchange="window.location.href = '/data/rss' + (this.value ? '?feedId=' + this.value : '')"
-          class="border rounded px-3 py-2"
-        >
-          <option value="">All Feeds</option>
-          <% feeds.forEach(function(feed) { %>
-            <option value="<%= feed.id %>" <%= selectedFeedId === feed.id ? 'selected' : '' %>>
-              <% 
-                const feedStats = itemsByFeed.find(function(f) { return f.feedId === feed.id; });
-                const itemCount = feedStats ? feedStats.itemCount : 0;
-              %>
-              <%= feed.name %> (<%= itemCount %> items)
-            </option>
-          <% }); %>
-        </select>
-      </div>
-    </div>
-
-    <!-- Feed Summary -->
+    <!-- Feed Summary Cards (Clickable Filters) -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <!-- All Feeds Card -->
+      <div 
+        onclick="window.location.href = '/data/rss'"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= !selectedFeedId ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
+      >
+        <h3 class="font-semibold mb-2 text-gray-900 dark:text-gray-100">All Feeds</h3>
+        <div class="text-sm text-gray-600 dark:text-gray-400">
+          <div>Items: <span class="font-semibold"><%= totalItems %></span></div>
+          <div>Last sync: <%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %></div>
+        </div>
+      </div>
+      
+      <!-- Individual Feed Cards -->
       <% itemsByFeed.forEach(feed => { %>
-        <div class="bg-white rounded-lg shadow p-4">
-          <h3 class="font-semibold mb-2"><%= feed.feedName %></h3>
-          <div class="text-sm text-gray-600">
+        <div 
+          onclick="window.location.href = '/data/rss?feedId=<%= feed.feedId %>'"
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= selectedFeedId === feed.feedId ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
+        >
+          <h3 class="font-semibold mb-2 text-gray-900 dark:text-gray-100"><%= feed.feedName %></h3>
+          <div class="text-sm text-gray-600 dark:text-gray-400">
             <div>Items: <span class="font-semibold"><%= feed.itemCount %></span></div>
             <div>Last sync: <%= new Date(feed.lastSync).toLocaleString() %></div>
           </div>
