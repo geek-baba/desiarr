@@ -610,8 +610,8 @@
 
     // Search functionality
     function filterMovies() {
-      // Support both dashboard search input and global search
-      const searchInput = document.getElementById('searchInput') || document.getElementById('globalSearch');
+      // Use global search from header
+      const searchInput = document.getElementById('globalSearch');
       const clearSearchBtn = document.getElementById('clearSearchBtn');
       const searchResultsCount = document.getElementById('searchResultsCount');
       const query = searchInput.value.trim().toLowerCase();
@@ -699,15 +699,12 @@
     }
     
     function clearSearch() {
-      // Clear both search inputs
-      const searchInput = document.getElementById('searchInput');
+      // Clear global search
       const globalSearch = document.getElementById('globalSearch');
-      const clearSearchBtn = document.getElementById('clearSearchBtn');
       const searchResultsCount = document.getElementById('searchResultsCount');
       
-      if (searchInput) searchInput.value = '';
       if (globalSearch) globalSearch.value = '';
-      if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+      if (searchResultsCount) searchResultsCount.classList.add('hidden');
       clearSearchBtn.classList.add('hidden');
       searchResultsCount.classList.add('hidden');
       
