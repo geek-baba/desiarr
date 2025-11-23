@@ -187,7 +187,9 @@ router.get('/rss/sync/progress', (req: Request, res: Response) => {
 // Log Explorer page (new)
 router.get('/logs', (req: Request, res: Response) => {
   try {
-    res.render('log-explorer');
+    res.render('log-explorer', {
+      hideRefresh: true
+    });
   } catch (error) {
     console.error('Log Explorer page error:', error);
     res.status(500).send('Internal server error');
