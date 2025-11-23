@@ -276,10 +276,18 @@
             if (searchTerm) {
               // There's a search term, activate global search and filter
               isGlobalSearchActive = true;
-              // Small delay to ensure allLoadedLogs is set
+              // Wait a bit longer to ensure allLoadedLogs is fully populated
               setTimeout(() => {
-                filterLogsClientSide(searchTerm);
-              }, 50);
+                // Double-check allLoadedLogs is populated
+                if (allLoadedLogs.length > 0) {
+                  filterLogsClientSide(searchTerm);
+                } else {
+                  // Retry after a bit more time
+                  setTimeout(() => {
+                    filterLogsClientSide(searchTerm);
+                  }, 200);
+                }
+              }, 100);
             } else if (isGlobalSearchActive) {
               // Global search was active but term was cleared
               isGlobalSearchActive = false;
@@ -482,6 +490,12 @@
       }
 
       let searchTimeout = null;
+      let isInitializing = true;
+
+      // Wait for initial log load to complete
+      setTimeout(() => {
+        isInitializing = false;
+      }, 1000);
 
       globalSearch.addEventListener('input', (e) => {
         const searchTerm = e.target.value.trim();
@@ -496,15 +510,26 @@
           isGlobalSearchActive = true;
           // Small delay to avoid filtering on every keystroke
           searchTimeout = setTimeout(() => {
-            // Ensure logs are loaded before filtering
-            if (allLoadedLogs.length === 0) {
-              // Load logs first, then filter
-              loadLogs(1).then(() => {
-                // Small delay to ensure allLoadedLogs is populated
-                setTimeout(() => {
+            // Wait for logs to be loaded if still initializing
+            if (isInitializing || allLoadedLogs.length === 0) {
+              // Wait a bit more for logs to load, then filter
+              const checkInterval = setInterval(() => {
+                if (!isInitializing && allLoadedLogs.length > 0) {
+                  clearInterval(checkInterval);
                   filterLogsClientSide(searchTerm);
-                }, 50);
-              });
+                } else if (!isInitializing && allLoadedLogs.length === 0) {
+                  // Logs still not loaded, force load
+                  clearInterval(checkInterval);
+                  loadLogs(1).then(() => {
+                    setTimeout(() => {
+                      filterLogsClientSide(searchTerm);
+                    }, 100);
+                  });
+                }
+              }, 100);
+              
+              // Stop checking after 5 seconds
+              setTimeout(() => clearInterval(checkInterval), 5000);
             } else {
               // Filter immediately if logs are already loaded
               filterLogsClientSide(searchTerm);
@@ -588,8 +613,23 @@
       if (allLoadedLogs.length === 0) {
         // Load logs first, then filter
         loadLogs(1).then(() => {
-          // After logs are loaded, filter them
-          setTimeout(() => filterLogsClientSide(searchTerm), 100);
+          // Wait a bit to ensure allLoadedLogs is populated
+          setTimeout(() => {
+            if (allLoadedLogs.length > 0) {
+              filterLogsClientSide(searchTerm);
+            } else {
+              // Still no logs, show message
+              const tbody = document.getElementById('logsTableBody');
+              const noLogsDiv = document.getElementById('noLogs');
+              const paginationDiv = document.getElementById('pagination');
+              if (tbody) tbody.innerHTML = '';
+              if (noLogsDiv) noLogsDiv.classList.remove('hidden');
+              if (paginationDiv) {
+                paginationDiv.innerHTML = 
+                  `<span class="text-sm text-gray-600 dark:text-gray-400">Loading logs...</span>`;
+              }
+            }
+          }, 200);
         });
         return;
       }
