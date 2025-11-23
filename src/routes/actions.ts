@@ -43,16 +43,14 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       });
     }
 
-    // Allow adding if status is NEW or ATTENTION_NEEDED (both are "new" movies not in Radarr)
-    if (release.status !== 'NEW' && release.status !== 'ATTENTION_NEEDED') {
-      return res.status(400).json({ 
-        error: `Release is not in NEW or ATTENTION_NEEDED status (current status: ${release.status})` 
-      });
-    }
+    // Note: We allow adding movies regardless of release status (NEW, ATTENTION_NEEDED, or IGNORED)
+    // The release status only indicates whether the release meets quality requirements, not whether
+    // the movie itself can be added to Radarr. Users should be able to manually add movies even
+    // if the release was marked as IGNORED.
 
-    // For ATTENTION_NEEDED releases, we might not have a TMDB ID, so allow adding without it
+    // For ATTENTION_NEEDED or IGNORED releases, we might not have a TMDB ID, so allow adding without it
     // The Radarr lookup will try to find it
-    if (!release.tmdb_id && release.status !== 'ATTENTION_NEEDED') {
+    if (!release.tmdb_id && release.status !== 'ATTENTION_NEEDED' && release.status !== 'IGNORED') {
       return res.status(400).json({ error: 'TMDB ID not found' });
     }
 
