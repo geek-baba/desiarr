@@ -226,9 +226,9 @@
 
     // Load logs
     async function loadLogs(page = 1, append = false) {
-      // Don't load from server if global search is active
+      // Don't load from server if global search is active and we're appending
       if (isGlobalSearchActive && append) {
-        return;
+        return Promise.resolve();
       }
 
       currentPage = page;
@@ -237,16 +237,22 @@
       
       if (!append) {
         document.getElementById('logsTableBody').innerHTML = '';
-        allLoadedLogs = [];
+        // Only clear logs if not using global search
+        if (!isGlobalSearchActive) {
+          allLoadedLogs = [];
+        }
       }
 
       const params = new URLSearchParams();
       params.append('page', page.toString());
       params.append('limit', '200'); // Load more for client-side filtering
       
-      Object.entries(currentFilters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
+      // Don't apply server-side filters when using global search
+      if (!isGlobalSearchActive) {
+        Object.entries(currentFilters).forEach(([key, value]) => {
+          if (value) params.append(key, value);
+        });
+      }
 
       try {
         const response = await fetch(`/api/logs?${params}`);
@@ -266,7 +272,7 @@
             // If global search is active, filter immediately
             if (isGlobalSearchActive) {
               const globalSearch = document.getElementById('globalSearch');
-              const searchTerm = globalSearch ? globalSearch.value.trim().toLowerCase() : '';
+              const searchTerm = globalSearch ? globalSearch.value.trim() : '';
               filterLogsClientSide(searchTerm);
             } else {
               renderLogs(data.logs);
@@ -279,6 +285,8 @@
       } finally {
         document.getElementById('loadingIndicator').classList.add('hidden');
       }
+      
+      return Promise.resolve();
     }
 
     // Render logs
@@ -468,7 +476,14 @@
           isGlobalSearchActive = true;
           // Small delay to avoid filtering on every keystroke
           searchTimeout = setTimeout(() => {
-            filterLogsClientSide(searchTerm);
+            // Ensure logs are loaded before filtering
+            if (allLoadedLogs.length === 0) {
+              loadLogs(1).then(() => {
+                filterLogsClientSide(searchTerm);
+              });
+            } else {
+              filterLogsClientSide(searchTerm);
+            }
           }, 150);
         } else {
           // Clear search - show all loaded logs
@@ -518,12 +533,15 @@
       if (!searchTerm) {
         const globalSearch = document.getElementById('globalSearch');
         if (globalSearch) {
-          searchTerm = globalSearch.value.trim().toLowerCase();
+          searchTerm = globalSearch.value.trim();
         }
       }
 
-      // If still no search term and no logs loaded, load logs
-      if (!searchTerm) {
+      // Normalize search term
+      const term = searchTerm.toLowerCase().trim();
+
+      // If no search term, show all logs
+      if (!term) {
         if (allLoadedLogs.length === 0) {
           loadLogs(1);
           return;
@@ -541,15 +559,25 @@
         }
       }
 
-      // Filter logs
-      const term = searchTerm.toLowerCase();
+      // Check if we have logs to filter
+      if (allLoadedLogs.length === 0) {
+        // Load logs first, then filter
+        loadLogs(1).then(() => {
+          // After logs are loaded, filter them
+          setTimeout(() => filterLogsClientSide(searchTerm), 100);
+        });
+        return;
+      }
+
+      // Filter logs - search across all relevant fields
       const filtered = allLoadedLogs.filter(log => {
-        const message = (log.message || '').toLowerCase();
-        const source = (log.source || '').toLowerCase();
-        const level = (log.level || '').toLowerCase();
-        const releaseTitle = (log.releaseTitle || '').toLowerCase();
-        const jobId = (log.jobId || '').toLowerCase();
+        const message = String(log.message || '').toLowerCase();
+        const source = String(log.source || '').toLowerCase();
+        const level = String(log.level || '').toLowerCase();
+        const releaseTitle = String(log.releaseTitle || '').toLowerCase();
+        const jobId = String(log.jobId || '').toLowerCase();
         
+        // Check if search term appears in any field
         return message.includes(term) ||
                source.includes(term) ||
                level.includes(term) ||
@@ -557,6 +585,7 @@
                jobId.includes(term);
       });
 
+      // Update UI with filtered results
       if (filtered.length === 0) {
         document.getElementById('noLogs').classList.remove('hidden');
         document.getElementById('logsTableBody').innerHTML = '';
