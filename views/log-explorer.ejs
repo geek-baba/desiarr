@@ -665,11 +665,47 @@
       tbody.innerHTML = '';
       
       if (filtered.length === 0) {
-        if (noLogsDiv) noLogsDiv.classList.remove('hidden');
-        if (paginationDiv) {
-          paginationDiv.innerHTML = 
-            `<span class="text-sm text-gray-600 dark:text-gray-400">No logs found matching "${searchTerm}"</span>`;
-        }
+        // No matches in loaded logs - try server-side search
+        // This handles cases where matching logs aren't in the first 200 loaded logs
+        const params = new URLSearchParams();
+        params.append('page', '1');
+        params.append('limit', '200');
+        params.append('search', searchTerm);
+        
+        document.getElementById('loadingIndicator').classList.remove('hidden');
+        
+        fetch(`/api/logs?${params}`)
+          .then(response => response.json())
+          .then(data => {
+            document.getElementById('loadingIndicator').classList.add('hidden');
+            
+            if (data.success && data.logs.length > 0) {
+              // Found logs via server-side search
+              allLoadedLogs = data.logs; // Update loaded logs with search results
+              if (noLogsDiv) noLogsDiv.classList.add('hidden');
+              renderLogs(data.logs);
+              if (paginationDiv) {
+                paginationDiv.innerHTML = 
+                  `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${data.logs.length} of ${data.pagination.total} logs matching "${searchTerm}" (server search)</span>`;
+              }
+            } else {
+              // No logs found even with server-side search
+              if (noLogsDiv) noLogsDiv.classList.remove('hidden');
+              if (paginationDiv) {
+                paginationDiv.innerHTML = 
+                  `<span class="text-sm text-gray-600 dark:text-gray-400">No logs found matching "${searchTerm}"</span>`;
+              }
+            }
+          })
+          .catch(error => {
+            console.error('Error searching logs:', error);
+            document.getElementById('loadingIndicator').classList.add('hidden');
+            if (noLogsDiv) noLogsDiv.classList.remove('hidden');
+            if (paginationDiv) {
+              paginationDiv.innerHTML = 
+                `<span class="text-sm text-gray-600 dark:text-gray-400">Error searching logs</span>`;
+            }
+          });
       } else {
         if (noLogsDiv) noLogsDiv.classList.add('hidden');
         // Render ONLY the filtered logs - this is critical
