@@ -37,6 +37,7 @@ router.get('/radarr', (req: Request, res: Response) => {
       totalPages,
       total,
       search,
+      hideRefresh: true,
     });
   } catch (error) {
     console.error('Radarr data page error:', error);
