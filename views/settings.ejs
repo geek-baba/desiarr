@@ -46,12 +46,12 @@
     <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Settings</h2>
 
     <!-- Tab Navigation -->
-    <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-      <nav class="flex space-x-1" role="tablist">
+    <div class="mb-6">
+      <nav class="flex flex-wrap gap-2" role="tablist">
         <button
           id="tab-rss"
           onclick="switchTab('rss')"
-          class="tab-button active px-6 py-3 text-sm font-medium rounded-t-lg transition-all duration-200 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 bg-blue-500 text-white shadow-sm hover:bg-blue-600 active-tab"
           role="tab"
           aria-selected="true"
         >
@@ -60,7 +60,7 @@
         <button
           id="tab-api"
           onclick="switchTab('api')"
-          class="tab-button px-6 py-3 text-sm font-medium rounded-t-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
           role="tab"
           aria-selected="false"
         >
@@ -69,7 +69,7 @@
         <button
           id="tab-quality"
           onclick="switchTab('quality')"
-          class="tab-button px-6 py-3 text-sm font-medium rounded-t-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
           role="tab"
           aria-selected="false"
         >
@@ -81,7 +81,6 @@
     <!-- RSS Feeds Section -->
     <div id="section-rss" class="tab-content">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-      <h3 class="text-xl font-semibold mb-4">RSS Feeds</h3>
       <div class="mb-4">
         <button onclick="showAddFeedModal()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
           Add Feed
@@ -122,9 +121,7 @@
     <!-- API Configuration Section -->
     <div id="section-api" class="tab-content hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-      <h3 class="text-xl font-semibold mb-4">API Configuration</h3>
-      
-      <div class="bg-purple-50 border border-purple-200 rounded p-4 mb-4">
+      <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded p-4 mb-4">
         <h4 class="font-semibold mb-2">Radarr API Configuration</h4>
         <p class="text-sm text-purple-800 mb-3">
           Required: Configure your Radarr instance API URL and API key. 
@@ -230,7 +227,6 @@
     <!-- Quality Settings Section -->
     <div id="section-quality" class="tab-content hidden">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-xl font-semibold mb-4">Quality Settings</h3>
       <form id="qualityForm" onsubmit="saveQualitySettings(event)">
         <!-- Resolution Rules -->
         <div class="mb-6">
