@@ -215,22 +215,34 @@
   <script>
     let currentPage = 1;
     let currentFilters = {};
+    let allLoadedLogs = []; // Store all logs for instant client-side filtering
+    let isGlobalSearchActive = false; // Track if global search is being used
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       loadLogs();
+      setupGlobalSearch();
     });
 
     // Load logs
-    async function loadLogs(page = 1) {
+    async function loadLogs(page = 1, append = false) {
+      // Don't load from server if global search is active
+      if (isGlobalSearchActive && append) {
+        return;
+      }
+
       currentPage = page;
       document.getElementById('loadingIndicator').classList.remove('hidden');
       document.getElementById('noLogs').classList.add('hidden');
-      document.getElementById('logsTableBody').innerHTML = '';
+      
+      if (!append) {
+        document.getElementById('logsTableBody').innerHTML = '';
+        allLoadedLogs = [];
+      }
 
       const params = new URLSearchParams();
       params.append('page', page.toString());
-      params.append('limit', '50');
+      params.append('limit', '200'); // Load more for client-side filtering
       
       Object.entries(currentFilters).forEach(([key, value]) => {
         if (value) params.append(key, value);
@@ -241,11 +253,23 @@
         const data = await response.json();
 
         if (data.success) {
-          if (data.logs.length === 0) {
+          if (data.logs.length === 0 && !append) {
             document.getElementById('noLogs').classList.remove('hidden');
           } else {
-            renderLogs(data.logs);
-            renderPagination(data.pagination);
+            // Store logs for client-side filtering
+            if (append) {
+              allLoadedLogs = [...allLoadedLogs, ...data.logs];
+            } else {
+              allLoadedLogs = data.logs;
+            }
+            
+            // If global search is active, filter immediately
+            if (isGlobalSearchActive) {
+              filterLogsClientSide();
+            } else {
+              renderLogs(data.logs);
+              renderPagination(data.pagination);
+            }
           }
         }
       } catch (error) {
@@ -418,8 +442,100 @@
       document.getElementById('drawerOverlay').classList.add('hidden');
     }
 
-    // Apply filters
+    // Setup global search for instant filtering
+    function setupGlobalSearch() {
+      const globalSearch = document.getElementById('globalSearch');
+      if (!globalSearch) return;
+
+      let searchTimeout = null;
+
+      globalSearch.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.trim().toLowerCase();
+        
+        // Clear existing timeout
+        if (searchTimeout) {
+          clearTimeout(searchTimeout);
+        }
+
+        // If search term exists, use instant client-side filtering
+        if (searchTerm) {
+          isGlobalSearchActive = true;
+          // Small delay to avoid filtering on every keystroke
+          searchTimeout = setTimeout(() => {
+            filterLogsClientSide(searchTerm);
+          }, 100);
+        } else {
+          // Clear search - show all loaded logs
+          isGlobalSearchActive = false;
+          if (allLoadedLogs.length > 0) {
+            renderLogs(allLoadedLogs);
+            renderPagination({
+              page: 1,
+              limit: 50,
+              total: allLoadedLogs.length,
+              totalPages: Math.ceil(allLoadedLogs.length / 50),
+              hasMore: false,
+            });
+          } else {
+            // Reload from server if no logs in memory
+            loadLogs(1);
+          }
+        }
+      });
+
+      // Handle Enter key for immediate search
+      globalSearch.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (searchTimeout) {
+            clearTimeout(searchTimeout);
+          }
+          const searchTerm = e.target.value.trim().toLowerCase();
+          if (searchTerm) {
+            isGlobalSearchActive = true;
+            filterLogsClientSide(searchTerm);
+          }
+        }
+      });
+    }
+
+    // Instant client-side filtering
+    function filterLogsClientSide(searchTerm = '') {
+      if (!searchTerm && allLoadedLogs.length === 0) {
+        loadLogs(1);
+        return;
+      }
+
+      const term = searchTerm.toLowerCase();
+      const filtered = allLoadedLogs.filter(log => {
+        const message = (log.message || '').toLowerCase();
+        const source = (log.source || '').toLowerCase();
+        const level = (log.level || '').toLowerCase();
+        const releaseTitle = (log.releaseTitle || '').toLowerCase();
+        const jobId = (log.jobId || '').toLowerCase();
+        
+        return message.includes(term) ||
+               source.includes(term) ||
+               level.includes(term) ||
+               releaseTitle.includes(term) ||
+               jobId.includes(term);
+      });
+
+      if (filtered.length === 0) {
+        document.getElementById('noLogs').classList.remove('hidden');
+        document.getElementById('logsTableBody').innerHTML = '';
+      } else {
+        document.getElementById('noLogs').classList.add('hidden');
+        renderLogs(filtered);
+        // Hide pagination for client-side filtered results
+        document.getElementById('pagination').innerHTML = 
+          `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${filtered.length} of ${allLoadedLogs.length} logs (instant search)</span>`;
+      }
+    }
+
+    // Apply filters (server-side with Apply button)
     function applyFilters() {
+      isGlobalSearchActive = false; // Disable global search when using filters
       const dateFrom = document.getElementById('dateFromFilter').value;
       const dateTo = document.getElementById('dateToFilter').value;
       
@@ -439,11 +555,13 @@
       });
       
       updateActiveFilters();
+      allLoadedLogs = []; // Clear client-side cache
       loadLogs(1);
     }
 
     // Clear filters
     function clearFilters() {
+      isGlobalSearchActive = false;
       document.getElementById('searchInput').value = '';
       document.getElementById('levelFilter').value = '';
       document.getElementById('sourceFilter').value = '';
@@ -451,8 +569,16 @@
       document.getElementById('dateFromFilter').value = '';
       document.getElementById('dateToFilter').value = '';
       document.getElementById('errorOnlyFilter').checked = false;
+      
+      // Clear global search too
+      const globalSearch = document.getElementById('globalSearch');
+      if (globalSearch) {
+        globalSearch.value = '';
+      }
+      
       currentFilters = {};
       updateActiveFilters();
+      allLoadedLogs = []; // Clear client-side cache
       loadLogs(1);
     }
 

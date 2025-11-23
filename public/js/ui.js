@@ -237,35 +237,24 @@
       }
       setupRssSearch();
     }
-    // Logs page - URL-based filter (both old and new routes, including log-explorer)
-    else if (path === '/data/logs' || path === '/data/logs-old' || path.includes('/logs')) {
+    // Logs page - instant client-side filtering via global search
+    // The log-explorer.ejs handles its own global search for instant filtering
+    // This is just for backward compatibility with old logs page
+    else if (path === '/data/logs' || path === '/data/logs-old') {
+      // Old logs page - keep URL-based filtering
       let searchTimeout = null;
       
-      // Populate search from URL on page load
       const urlParams = new URLSearchParams(window.location.search);
       const filterParam = urlParams.get('filter');
       if (filterParam && search) {
         search.value = filterParam;
-        // Also update local filter input if it exists
-        const logsFilterInput = document.getElementById('filterInput');
-        if (logsFilterInput) {
-          logsFilterInput.value = filterParam;
-        }
       }
       
       search.addEventListener('input', (e) => {
-        // Clear existing timeout
         if (searchTimeout) {
           clearTimeout(searchTimeout);
         }
         
-        // Update local filter input if it exists
-        const logsFilterInput = document.getElementById('filterInput');
-        if (logsFilterInput) {
-          logsFilterInput.value = e.target.value;
-        }
-        
-        // Debounce the search (wait 500ms after user stops typing)
         searchTimeout = setTimeout(() => {
           const searchTerm = e.target.value.trim();
           const url = new URL(window.location.href);
@@ -280,7 +269,6 @@
         }, 500);
       });
 
-      // Handle Enter key for immediate search
       search.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -300,19 +288,19 @@
         }
       });
       
-      // Clear search function for logs
       window.clearGlobalSearch = function() {
         if (search) {
           search.value = '';
-        }
-        const logsFilterInput = document.getElementById('filterInput');
-        if (logsFilterInput) {
-          logsFilterInput.value = '';
         }
         const url = new URL(window.location.href);
         url.searchParams.delete('filter');
         window.location.href = url.toString();
       };
+    }
+    // Log explorer page - handled by page's own script for instant filtering
+    else if (path.includes('/logs')) {
+      // The log-explorer.ejs page handles its own global search
+      // No need to do anything here - the page script will handle it
     }
     // Settings page - no search functionality needed
     else if (path === '/settings') {
