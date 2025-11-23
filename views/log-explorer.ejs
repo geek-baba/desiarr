@@ -610,19 +610,31 @@
         return matches;
       });
 
-      // Update UI with filtered results - IMPORTANT: Only show filtered logs
-      document.getElementById('noLogs').classList.add('hidden');
+      // CRITICAL: Update UI with filtered results - ONLY show filtered logs
+      const tbody = document.getElementById('logsTableBody');
+      const noLogsDiv = document.getElementById('noLogs');
+      const paginationDiv = document.getElementById('pagination');
+      
+      if (!tbody) return;
+      
+      // Clear the table first
+      tbody.innerHTML = '';
+      
       if (filtered.length === 0) {
-        document.getElementById('noLogs').classList.remove('hidden');
-        document.getElementById('logsTableBody').innerHTML = '';
-        document.getElementById('pagination').innerHTML = 
-          `<span class="text-sm text-gray-600 dark:text-gray-400">No logs found matching "${searchTerm}"</span>`;
+        if (noLogsDiv) noLogsDiv.classList.remove('hidden');
+        if (paginationDiv) {
+          paginationDiv.innerHTML = 
+            `<span class="text-sm text-gray-600 dark:text-gray-400">No logs found matching "${searchTerm}"</span>`;
+        }
       } else {
-        // Render ONLY the filtered logs
+        if (noLogsDiv) noLogsDiv.classList.add('hidden');
+        // Render ONLY the filtered logs - this is critical
         renderLogs(filtered);
         // Show filtered results info
-        document.getElementById('pagination').innerHTML = 
-          `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${filtered.length} of ${allLoadedLogs.length} logs matching "${searchTerm}" (instant search)</span>`;
+        if (paginationDiv) {
+          paginationDiv.innerHTML = 
+            `<span class="text-sm text-gray-600 dark:text-gray-400">Showing ${filtered.length} of ${allLoadedLogs.length} logs matching "${searchTerm}" (instant search)</span>`;
+        }
       }
     }
 
