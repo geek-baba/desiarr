@@ -390,7 +390,7 @@
       const lastSyncElement = document.getElementById('lastSyncTime');
       if (lastSyncElement && lastSyncElement.dataset.utc) {
         const utcDate = new Date(lastSyncElement.dataset.utc);
-        const options: Intl.DateTimeFormatOptions = {
+        const options = {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
