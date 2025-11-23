@@ -793,36 +793,6 @@
       }
     }
 
-    async function runBackfillRadarr() {
-      showConfirm('Backfill Radarr links for all releases missing them?', async () => {
-        const button = document.getElementById('backfillRadarrButton');
-        const statusEl = document.getElementById('backfillRadarrStatus');
-
-        button.disabled = true;
-        button.textContent = 'Running...';
-        statusEl.textContent = 'Backfilling...';
-        statusEl.className = 'text-sm text-gray-600';
-
-        try {
-          const res = await fetch('/settings/maintenance/backfill-radarr', { method: 'POST' });
-          const data = await res.json();
-          if (data.success) {
-            const summary = data.summary;
-            statusEl.textContent = `Updated ${summary.updated}/${summary.totalCandidates} releases. Not found: ${summary.notFound}, Errors: ${summary.errors.length}`;
-            statusEl.className = 'text-sm text-green-600';
-          } else {
-            statusEl.textContent = 'Error: ' + (data.error || 'Unknown error');
-            statusEl.className = 'text-sm text-red-600';
-          }
-        } catch (error) {
-          statusEl.textContent = 'Error: ' + error.message;
-          statusEl.className = 'text-sm text-red-600';
-        } finally {
-          button.disabled = false;
-          button.textContent = 'Backfill Radarr Links';
-        }
-      });
-    }
   </script>
   <script src="/js/ui.js"></script>
 </body>
