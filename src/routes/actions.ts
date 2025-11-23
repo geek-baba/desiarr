@@ -48,10 +48,11 @@ router.post('/:id/add', async (req: Request, res: Response) => {
     // the movie itself can be added to Radarr. Users should be able to manually add movies even
     // if the release was marked as IGNORED.
 
-    // For ATTENTION_NEEDED or IGNORED releases, we might not have a TMDB ID, so allow adding without it
-    // The Radarr lookup will try to find it
-    if (!release.tmdb_id && release.status !== 'ATTENTION_NEEDED' && release.status !== 'IGNORED') {
-      return res.status(400).json({ error: 'TMDB ID not found' });
+    // TMDB ID is required - Radarr cannot add a movie without a TMDB ID
+    if (!release.tmdb_id) {
+      return res.status(400).json({ 
+        error: 'TMDB ID is required to add movie to Radarr. Please ensure the release has a valid TMDB ID.' 
+      });
     }
 
     const { qualityProfileId, rootFolderPath } = req.body;
@@ -62,31 +63,14 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       });
     }
 
-    // Lookup movie - try TMDB ID first if available, otherwise use title
-    let movie = null;
+    // Lookup movie by TMDB ID (required for Radarr)
+    let movie = await radarrClient.lookupMovieByTmdbId(release.tmdb_id);
     
-    if (release.tmdb_id) {
-      // Lookup movie by TMDB ID directly (more reliable than title search)
-      movie = await radarrClient.lookupMovieByTmdbId(release.tmdb_id);
-      
-      // Fallback to title lookup if TMDB ID lookup fails
-      if (!movie) {
-        console.log(`TMDB ID lookup failed for ${release.tmdb_id}, trying title lookup...`);
-        const lookupResults = await radarrClient.lookupMovie(release.tmdb_title || release.title);
-        movie = lookupResults.find((m) => m.tmdbId === release.tmdb_id) || null;
-      }
-    } else {
-      // For ATTENTION_NEEDED releases without TMDB ID, try title lookup
-      console.log(`No TMDB ID, trying title lookup for: ${release.tmdb_title || release.title}`);
+    // Fallback to title lookup if TMDB ID lookup fails
+    if (!movie) {
+      console.log(`TMDB ID lookup failed for ${release.tmdb_id}, trying title lookup...`);
       const lookupResults = await radarrClient.lookupMovie(release.tmdb_title || release.title);
-      if (lookupResults.length > 0) {
-        // Take the first result, or try to match by year if available
-        if (release.year) {
-          movie = lookupResults.find((m) => m.year === release.year) || lookupResults[0];
-        } else {
-          movie = lookupResults[0];
-        }
-      }
+      movie = lookupResults.find((m) => m.tmdbId === release.tmdb_id) || null;
     }
 
     if (!movie) {
