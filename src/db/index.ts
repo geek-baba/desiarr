@@ -62,22 +62,6 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_releases_tmdb_id ON releases(tmdb_id);
   CREATE INDEX IF NOT EXISTS idx_releases_radarr_movie_id ON releases(radarr_movie_id);
 
-  // Add poster_url column if it doesn't exist (migration)
-  // Check if column exists by trying to query it
-  try {
-    db.prepare('SELECT tmdb_poster_url FROM releases LIMIT 1').get();
-  } catch (error: any) {
-    // Column doesn't exist, add it
-    if (error && error.message && error.message.includes('no such column')) {
-      try {
-        db.exec('ALTER TABLE releases ADD COLUMN tmdb_poster_url TEXT');
-        console.log('Added tmdb_poster_url column to releases table');
-      } catch (alterError) {
-        console.error('Error adding tmdb_poster_url column:', alterError);
-      }
-    }
-  }
-
   CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -157,6 +141,22 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_logs_job_id ON structured_logs(job_id);
   CREATE INDEX IF NOT EXISTS idx_logs_message ON structured_logs(message);
 `);
+
+// Add poster_url column if it doesn't exist (migration)
+// Check if column exists by trying to query it
+try {
+  db.prepare('SELECT tmdb_poster_url FROM releases LIMIT 1').get();
+} catch (error: any) {
+  // Column doesn't exist, add it
+  if (error && error.message && error.message.includes('no such column')) {
+    try {
+      db.exec('ALTER TABLE releases ADD COLUMN tmdb_poster_url TEXT');
+      console.log('Added tmdb_poster_url column to releases table');
+    } catch (alterError) {
+      console.error('Error adding tmdb_poster_url column:', alterError);
+    }
+  }
+}
 
 // Migrate existing databases - add new columns if they don't exist
 try {
