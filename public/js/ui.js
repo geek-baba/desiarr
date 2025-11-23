@@ -240,7 +240,7 @@
     // Logs page - instant client-side filtering via global search
     // The log-explorer.ejs handles its own global search for instant filtering
     // This is just for backward compatibility with old logs page
-    else if (path === '/data/logs' || path === '/data/logs-old') {
+    else if (path === '/data/logs-old') {
       // Old logs page - keep URL-based filtering
       let searchTimeout = null;
       
@@ -297,6 +297,7 @@
         window.location.href = url.toString();
       };
     }
+    // /data/logs is handled by log-explorer.ejs setupGlobalSearch() for instant client-side filtering
     // Log explorer page - handled by page's own script for instant filtering
     else if (path.includes('/logs')) {
       // The log-explorer.ejs page handles its own global search

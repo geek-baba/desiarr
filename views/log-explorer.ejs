@@ -269,20 +269,24 @@
               allLoadedLogs = data.logs;
             }
             
-            // If global search is active, filter immediately
-            if (isGlobalSearchActive) {
-              const globalSearch = document.getElementById('globalSearch');
-              const searchTerm = globalSearch ? globalSearch.value.trim() : '';
-              if (searchTerm) {
-                // Filter the newly loaded logs
+            // Check if global search has a value (either active or on initial load)
+            const globalSearch = document.getElementById('globalSearch');
+            const searchTerm = globalSearch ? globalSearch.value.trim() : '';
+            
+            if (searchTerm) {
+              // There's a search term, activate global search and filter
+              isGlobalSearchActive = true;
+              // Small delay to ensure allLoadedLogs is set
+              setTimeout(() => {
                 filterLogsClientSide(searchTerm);
-              } else {
-                // No search term, show all logs
-                isGlobalSearchActive = false;
-                renderLogs(data.logs);
-                renderPagination(data.pagination);
-              }
+              }, 50);
+            } else if (isGlobalSearchActive) {
+              // Global search was active but term was cleared
+              isGlobalSearchActive = false;
+              renderLogs(data.logs);
+              renderPagination(data.pagination);
             } else {
+              // No search term, show all logs normally
               renderLogs(data.logs);
               renderPagination(data.pagination);
             }
