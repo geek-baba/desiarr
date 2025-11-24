@@ -66,7 +66,7 @@ class TvdbClient {
       return token;
     } catch (error: any) {
       console.error('TVDB authentication error:', error?.response?.data || error?.message || error);
-      throw new Error('Failed to authenticate with TVDB. Please verify API key and PIN.');
+      throw new Error('Failed to authenticate with TVDB. Please verify API key' + (this.userPin ? ' and PIN' : '') + '.');
     }
   }
 

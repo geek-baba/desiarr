@@ -754,8 +754,9 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
     const tvdbUserPin = allSettings.find(s => s.key === 'tvdb_user_pin')?.value;
     
-    if (!tvdbApiKey || !tvdbUserPin) {
-      return res.status(400).json({ success: false, error: 'TVDB API key and User PIN not configured' });
+    // TVDB v4 API: PIN is optional (only required for subscriber-supported API keys)
+    if (!tvdbApiKey) {
+      return res.status(400).json({ success: false, error: 'TVDB API key not configured' });
     }
 
     // Initialize TVDB client - update config and trigger authentication via a request
