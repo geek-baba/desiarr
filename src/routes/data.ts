@@ -14,6 +14,8 @@ import imdbClient from '../imdb/client';
 import braveClient from '../brave/client';
 import tvdbClient from '../tvdb/client';
 import { settingsModel } from '../models/settings';
+import { runMatchingEngine } from '../services/matchingEngine';
+import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 
 const router = Router();
 
@@ -1167,6 +1169,129 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to match RSS item: ' + (error?.message || 'Unknown error') 
     });
+  }
+});
+
+// Trigger Movie Matching Engine
+router.post('/releases/match', async (req: Request, res: Response) => {
+  try {
+    // Check if matching is already running
+    const current = syncProgress.get();
+    if (current && current.isRunning && current.type === 'matching') {
+      return res.json({ success: false, message: 'Movie matching engine is already running' });
+    }
+
+    // Start matching engine in background
+    (async () => {
+      try {
+        console.log('Starting movie matching engine from Movie Releases page...');
+        syncProgress.start('matching', 0);
+        syncProgress.update('Starting movie matching engine...', 0);
+        
+        const stats = await runMatchingEngine();
+        
+        syncProgress.update('Movie matching completed', stats.processed, stats.processed, stats.errors);
+        syncProgress.complete();
+        
+        console.log('Movie matching engine completed successfully');
+        
+        // Clear progress after 5 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 5000);
+      } catch (error: any) {
+        console.error('Movie matching engine error in background task:', error);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        syncProgress.complete();
+        
+        // Keep error visible for 30 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 30000);
+      }
+    })();
+
+    res.json({ success: true, message: 'Movie matching engine started' });
+  } catch (error: any) {
+    console.error('Start movie matching engine error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start movie matching engine',
+      message: error?.message || 'Unknown error'
+    });
+  }
+});
+
+// Trigger TV Matching Engine
+router.post('/tv-releases/match', async (req: Request, res: Response) => {
+  try {
+    // Check if matching is already running
+    const current = syncProgress.get();
+    if (current && current.isRunning && current.type === 'tv-matching') {
+      return res.json({ success: false, message: 'TV matching engine is already running' });
+    }
+
+    // Start TV matching engine in background
+    (async () => {
+      try {
+        console.log('Starting TV matching engine from TV Releases page...');
+        syncProgress.start('tv-matching', 0);
+        syncProgress.update('Starting TV matching engine...', 0);
+        
+        const stats = await runTvMatchingEngine();
+        
+        syncProgress.update('TV matching completed', stats.processed, stats.processed, stats.errors);
+        syncProgress.complete();
+        
+        console.log('TV matching engine completed successfully');
+        
+        // Clear progress after 5 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 5000);
+      } catch (error: any) {
+        console.error('TV matching engine error in background task:', error);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        syncProgress.complete();
+        
+        // Keep error visible for 30 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 30000);
+      }
+    })();
+
+    res.json({ success: true, message: 'TV matching engine started' });
+  } catch (error: any) {
+    console.error('Start TV matching engine error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start TV matching engine',
+      message: error?.message || 'Unknown error'
+    });
+  }
+});
+
+// Get matching engine progress
+router.get('/releases/match/progress', (req: Request, res: Response) => {
+  try {
+    const progress = syncProgress.get();
+    res.json({ success: true, progress });
+  } catch (error) {
+    console.error('Get matching engine progress error:', error);
+    res.status(500).json({ error: 'Failed to get progress' });
+  }
+});
+
+router.get('/tv-releases/match/progress', (req: Request, res: Response) => {
+  try {
+    const progress = syncProgress.get();
+    res.json({ success: true, progress });
+  } catch (error) {
+    console.error('Get TV matching engine progress error:', error);
+    res.status(500).json({ error: 'Failed to get progress' });
   }
 });
 

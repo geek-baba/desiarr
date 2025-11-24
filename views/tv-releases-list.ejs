@@ -16,10 +16,31 @@
     
     <main class="p-4 lg:p-6">
       <div class="mb-6">
-        <div class="flex justify-end items-center">
+        <div class="flex justify-between items-center">
+          <button 
+            id="startTvMatchingBtn"
+            onclick="startTvMatchingEngine()" 
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Start TV Matching Engine
+          </button>
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> TV releases
           </div>
+        </div>
+        <!-- Progress Bar -->
+        <div id="tvMatchingProgressContainer" class="mt-4 hidden">
+          <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+            <div id="tvMatchingProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between items-center text-sm">
+            <span id="tvMatchingProgressText" class="text-gray-600 dark:text-gray-400">Starting...</span>
+            <span id="tvMatchingProgressDetails" class="text-gray-500 dark:text-gray-500 text-xs"></span>
+          </div>
+          <div id="tvMatchingProgressError" class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"></div>
         </div>
       </div>
 
@@ -235,6 +256,88 @@
         });
       }
     });
+
+    // TV Matching Engine functionality
+    let tvMatchingProgressInterval = null;
+
+    async function startTvMatchingEngine() {
+      const btn = document.getElementById('startTvMatchingBtn');
+      const progressContainer = document.getElementById('tvMatchingProgressContainer');
+      const progressBar = document.getElementById('tvMatchingProgressBar');
+      const progressText = document.getElementById('tvMatchingProgressText');
+      const progressDetails = document.getElementById('tvMatchingProgressDetails');
+      const progressError = document.getElementById('tvMatchingProgressError');
+
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+      progressContainer.classList.remove('hidden');
+      progressError.classList.add('hidden');
+      progressBar.style.width = '0%';
+      progressText.textContent = 'Starting TV matching engine...';
+      progressDetails.textContent = '';
+
+      try {
+        const res = await fetch('/data/tv-releases/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to start TV matching engine');
+        }
+
+        // Start polling for progress
+        tvMatchingProgressInterval = setInterval(async () => {
+          try {
+            const progressRes = await fetch('/data/tv-releases/match/progress');
+            const progressData = await progressRes.json();
+            
+            if (progressData.success && progressData.progress) {
+              const p = progressData.progress;
+              
+              if (p.type === 'tv-matching') {
+                if (p.isRunning) {
+                  const percent = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+                  progressBar.style.width = percent + '%';
+                  progressText.textContent = p.message || 'Processing...';
+                  progressDetails.textContent = p.current > 0 ? `${p.current} / ${p.total}` : '';
+                } else {
+                  // Completed
+                  clearInterval(tvMatchingProgressInterval);
+                  tvMatchingProgressInterval = null;
+                  progressBar.style.width = '100%';
+                  progressText.textContent = 'TV matching completed!';
+                  progressDetails.textContent = '';
+                  btn.disabled = false;
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
+                  
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000);
+                }
+                
+                if (p.error) {
+                  progressError.textContent = p.error;
+                  progressError.classList.remove('hidden');
+                  clearInterval(tvMatchingProgressInterval);
+                  tvMatchingProgressInterval = null;
+                  btn.disabled = false;
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error polling progress:', error);
+          }
+        }, 1000);
+      } catch (error) {
+        progressError.textContent = 'Error: ' + error.message;
+        progressError.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
+      }
+    }
   </script>
 </body>
 </html>

@@ -16,10 +16,31 @@
     
     <main class="p-4 lg:p-6">
       <div class="mb-6">
-        <div class="flex justify-end items-center">
+        <div class="flex justify-between items-center">
+          <button 
+            id="startMatchingBtn"
+            onclick="startMatchingEngine()" 
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            Start Matching Engine
+          </button>
           <div class="text-sm text-gray-600 dark:text-gray-400">
             Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> releases
           </div>
+        </div>
+        <!-- Progress Bar -->
+        <div id="matchingProgressContainer" class="mt-4 hidden">
+          <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+            <div id="matchingProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between items-center text-sm">
+            <span id="matchingProgressText" class="text-gray-600 dark:text-gray-400">Starting...</span>
+            <span id="matchingProgressDetails" class="text-gray-500 dark:text-gray-500 text-xs"></span>
+          </div>
+          <div id="matchingProgressError" class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"></div>
         </div>
       </div>
 
@@ -235,6 +256,88 @@
         });
       }
     });
+
+    // Matching Engine functionality
+    let matchingProgressInterval = null;
+
+    async function startMatchingEngine() {
+      const btn = document.getElementById('startMatchingBtn');
+      const progressContainer = document.getElementById('matchingProgressContainer');
+      const progressBar = document.getElementById('matchingProgressBar');
+      const progressText = document.getElementById('matchingProgressText');
+      const progressDetails = document.getElementById('matchingProgressDetails');
+      const progressError = document.getElementById('matchingProgressError');
+
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+      progressContainer.classList.remove('hidden');
+      progressError.classList.add('hidden');
+      progressBar.style.width = '0%';
+      progressText.textContent = 'Starting matching engine...';
+      progressDetails.textContent = '';
+
+      try {
+        const res = await fetch('/data/releases/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'Failed to start matching engine');
+        }
+
+        // Start polling for progress
+        matchingProgressInterval = setInterval(async () => {
+          try {
+            const progressRes = await fetch('/data/releases/match/progress');
+            const progressData = await progressRes.json();
+            
+            if (progressData.success && progressData.progress) {
+              const p = progressData.progress;
+              
+              if (p.type === 'matching') {
+                if (p.isRunning) {
+                  const percent = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+                  progressBar.style.width = percent + '%';
+                  progressText.textContent = p.message || 'Processing...';
+                  progressDetails.textContent = p.current > 0 ? `${p.current} / ${p.total}` : '';
+                } else {
+                  // Completed
+                  clearInterval(matchingProgressInterval);
+                  matchingProgressInterval = null;
+                  progressBar.style.width = '100%';
+                  progressText.textContent = 'Matching completed!';
+                  progressDetails.textContent = '';
+                  btn.disabled = false;
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+                  
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000);
+                }
+                
+                if (p.error) {
+                  progressError.textContent = p.error;
+                  progressError.classList.remove('hidden');
+                  clearInterval(matchingProgressInterval);
+                  matchingProgressInterval = null;
+                  btn.disabled = false;
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error polling progress:', error);
+          }
+        }, 1000);
+      } catch (error) {
+        progressError.textContent = 'Error: ' + error.message;
+        progressError.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+      }
+    }
   </script>
 </body>
 </html>
