@@ -378,6 +378,37 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         };
 
         tvReleasesModel.upsert(tvRelease);
+        
+        // Also update rss_feed_items with the enriched IDs (unless manually overridden)
+        const rssItem = db.prepare('SELECT * FROM rss_feed_items WHERE guid = ?').get(item.guid) as any;
+        if (rssItem) {
+          // Only update if not manually set (respect manual overrides)
+          const updateFields: string[] = [];
+          const updateValues: any[] = [];
+          
+          if (enrichment.tvdbId && !rssItem.tvdb_id_manual) {
+            updateFields.push('tvdb_id = ?');
+            updateValues.push(enrichment.tvdbId);
+          }
+          if (enrichment.tmdbId && !rssItem.tmdb_id_manual) {
+            updateFields.push('tmdb_id = ?');
+            updateValues.push(enrichment.tmdbId);
+          }
+          if (enrichment.imdbId && !rssItem.imdb_id_manual) {
+            updateFields.push('imdb_id = ?');
+            updateValues.push(enrichment.imdbId);
+          }
+          
+          if (updateFields.length > 0) {
+            updateValues.push(item.guid);
+            db.prepare(`
+              UPDATE rss_feed_items 
+              SET ${updateFields.join(', ')}, updated_at = datetime('now')
+              WHERE guid = ?
+            `).run(...updateValues);
+          }
+        }
+        
         stats.processed++;
 
         console.log(`    ✓ Created/updated TV release: ${showName} ${season !== null ? `S${season}` : ''} (Status: ${finalStatus})`);
