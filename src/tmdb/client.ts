@@ -90,8 +90,14 @@ class TMDBClient {
       });
       
       return response.data;
-    } catch (error) {
-      console.error('TMDB get movie error:', error);
+    } catch (error: any) {
+      // 404 errors are expected when TMDB ID is invalid - handle gracefully
+      if (error?.response?.status === 404) {
+        console.log(`TMDB movie ${tmdbId} not found (404) - ID may be invalid or movie removed`);
+        return null;
+      }
+      // Log other errors (network issues, rate limits, etc.)
+      console.error('TMDB get movie error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
@@ -118,8 +124,14 @@ class TMDBClient {
       }
       
       return null;
-    } catch (error) {
-      console.error('TMDB find by IMDB ID error:', error);
+    } catch (error: any) {
+      // 404 errors are expected when IMDB ID doesn't map to a TMDB movie
+      if (error?.response?.status === 404) {
+        console.log(`TMDB movie not found for IMDB ID ${imdbId} (404) - may not exist in TMDB`);
+        return null;
+      }
+      // Log other errors
+      console.error('TMDB find by IMDB ID error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
@@ -145,8 +157,9 @@ class TMDBClient {
       });
       
       return response.data.results || [];
-    } catch (error) {
-      console.error('TMDB TV search error:', error);
+    } catch (error: any) {
+      // Log search errors (usually not 404s, but network/rate limit issues)
+      console.error('TMDB TV search error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
@@ -167,8 +180,14 @@ class TMDBClient {
       });
       
       return response.data;
-    } catch (error) {
-      console.error('TMDB get TV show error:', error);
+    } catch (error: any) {
+      // 404 errors are expected when TMDB ID is invalid - handle gracefully
+      if (error?.response?.status === 404) {
+        console.log(`TMDB TV show ${tmdbId} not found (404) - ID may be invalid or show removed`);
+        return null;
+      }
+      // Log other errors
+      console.error('TMDB get TV show error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
