@@ -206,6 +206,15 @@
                     <% } else { %>
                       <span>-</span>
                     <% } %>
+                    <% if ((item.feed_type || 'movie') === 'tv') { %>
+                      <button 
+                        onclick="overrideTvdbId(<%= item.id %>)" 
+                        class="bg-teal-500 hover:bg-teal-600 text-white px-2 py-1 rounded text-xs w-fit"
+                        title="Override/Update TVDB ID (will persist)"
+                      >
+                        Override
+                      </button>
+                    <% } %>
                   </div>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
@@ -299,28 +308,59 @@
 
   <!-- Override IMDB ID Modal -->
   <div id="overrideImdbModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-      <h3 class="text-xl font-semibold mb-4">Override IMDB ID</h3>
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Override IMDB ID</h3>
       <form id="overrideImdbForm" onsubmit="submitOverrideImdb(event)">
         <input type="hidden" id="overrideImdbItemId" name="itemId">
         <div class="mb-4">
-          <label for="imdbIdInput" class="block text-sm font-medium mb-2">IMDB ID:</label>
+          <label for="imdbIdInput" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">IMDB ID:</label>
           <input 
             type="text" 
             id="imdbIdInput" 
             name="imdbId" 
             required 
-            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
             placeholder="Enter IMDB ID (e.g., tt1234567)"
             pattern="^tt\d{7,}$"
           >
-          <p class="text-xs text-gray-500 mt-1">Format: tt1234567</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: tt1234567</p>
         </div>
         <div class="flex justify-end space-x-2">
           <button type="button" onclick="hideOverrideImdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
           <button type="submit" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Override TVDB ID Modal -->
+  <div id="overrideTvdbModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Override TVDB ID</h3>
+      <form id="overrideTvdbForm" onsubmit="submitOverrideTvdb(event)">
+        <input type="hidden" id="overrideTvdbItemId" name="itemId">
+        <div class="mb-4">
+          <label for="tvdbIdInput" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">TVDB ID:</label>
+          <input 
+            type="number" 
+            id="tvdbIdInput" 
+            name="tvdbId" 
+            required 
+            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Enter TVDB ID (e.g., 123456)"
+            min="1"
+          >
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter the TVDB series ID</p>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideOverrideTvdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+            Cancel
+          </button>
+          <button type="submit" class="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded">
             Save
           </button>
         </div>
@@ -468,6 +508,59 @@
     function hideOverrideImdbModal() {
       document.getElementById('overrideImdbModal').classList.add('hidden');
       currentOverrideItemId = null;
+    }
+
+    function overrideTvdbId(itemId) {
+      currentOverrideItemId = itemId;
+      document.getElementById('overrideTvdbItemId').value = itemId;
+      document.getElementById('tvdbIdInput').value = '';
+      document.getElementById('overrideTvdbModal').classList.remove('hidden');
+      document.getElementById('tvdbIdInput').focus();
+    }
+
+    function hideOverrideTvdbModal() {
+      document.getElementById('overrideTvdbModal').classList.add('hidden');
+      currentOverrideItemId = null;
+    }
+
+    async function submitOverrideTvdb(event) {
+      event.preventDefault();
+      const itemId = document.getElementById('overrideTvdbItemId').value;
+      const tvdbId = document.getElementById('tvdbIdInput').value;
+      const button = event.target.querySelector('button[type="submit"]');
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Saving...';
+
+      const id = parseInt(tvdbId, 10);
+      if (isNaN(id) || id <= 0) {
+        showToast('Invalid TVDB ID', 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/data/rss/override-tvdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tvdbId: id }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`TVDB ID updated to ${data.tvdbId} (${data.seriesName || 'Unknown'})${data.tmdbId ? ` - TMDB: ${data.tmdbId}` : ''}${data.imdbId ? ` - IMDB: ${data.imdbId}` : ''} - This will persist`, 'success');
+          hideOverrideTvdbModal();
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
 
     async function submitOverrideImdb(event) {

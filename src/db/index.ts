@@ -225,6 +225,16 @@ try {
     console.log('Added column: rss_feed_items.imdb_id_manual');
   }
   
+  if (!rssColumnNames.includes('tvdb_id')) {
+    db.exec('ALTER TABLE rss_feed_items ADD COLUMN tvdb_id INTEGER');
+    console.log('Added column: rss_feed_items.tvdb_id');
+  }
+  
+  if (!rssColumnNames.includes('tvdb_id_manual')) {
+    db.exec('ALTER TABLE rss_feed_items ADD COLUMN tvdb_id_manual INTEGER DEFAULT 0');
+    console.log('Added column: rss_feed_items.tvdb_id_manual');
+  }
+  
   // Check radarr_movies table for date_added column
   const radarrColumns = db.prepare("PRAGMA table_info(radarr_movies)").all() as any[];
   const radarrColumnNames = radarrColumns.map((c: any) => c.name);

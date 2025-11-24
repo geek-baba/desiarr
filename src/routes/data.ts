@@ -12,6 +12,7 @@ import { parseRSSItem } from '../rss/parseRelease';
 import tmdbClient from '../tmdb/client';
 import imdbClient from '../imdb/client';
 import braveClient from '../brave/client';
+import tvdbClient from '../tvdb/client';
 import { settingsModel } from '../models/settings';
 
 const router = Router();
@@ -426,14 +427,14 @@ router.get('/rss', (req: Request, res: Response) => {
     const feeds = feedsModel.getAll();
     const itemsByFeed = getSyncedRssItemsByFeed();
     
-    // Get items with feed type and TVDB ID (from tv_releases if available)
+    // Get items with feed type and TVDB ID (from rss_feed_items first, then tv_releases as fallback)
     let items: any[];
     if (feedId) {
       items = db.prepare(`
         SELECT 
           rss.*,
           f.feed_type,
-          tv.tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -445,7 +446,7 @@ router.get('/rss', (req: Request, res: Response) => {
         SELECT 
           rss.*,
           f.feed_type,
-          tv.tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -457,7 +458,7 @@ router.get('/rss', (req: Request, res: Response) => {
         SELECT 
           rss.*,
           f.feed_type,
-          tv.tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -719,6 +720,108 @@ router.post('/rss/override-tmdb/:id', async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false,
       error: 'Failed to override TMDB ID: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
+// Override TVDB ID for RSS item (TV feeds only)
+router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id, 10);
+    const { tvdbId } = req.body;
+    
+    if (!tvdbId || isNaN(parseInt(tvdbId, 10))) {
+      return res.status(400).json({ success: false, error: 'Valid TVDB ID is required' });
+    }
+
+    // Get the RSS item from database
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+
+    // Check if this is a TV feed
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    if (!feed || feed.feed_type !== 'tv') {
+      return res.status(400).json({ success: false, error: 'TVDB override is only available for TV feeds' });
+    }
+
+    // Get API keys
+    const allSettings = settingsModel.getAll();
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
+    const tvdbUserPin = allSettings.find(s => s.key === 'tvdb_user_pin')?.value;
+    
+    if (!tvdbApiKey || !tvdbUserPin) {
+      return res.status(400).json({ success: false, error: 'TVDB API key and User PIN not configured' });
+    }
+
+    // Initialize TVDB client
+    tvdbClient.loadCredentials(tvdbApiKey, tvdbUserPin);
+    await tvdbClient.authenticate();
+
+    // Verify the TVDB ID by fetching series details
+    const tvdbSeries = await tvdbClient.getSeries(parseInt(tvdbId, 10));
+    if (!tvdbSeries) {
+      return res.status(404).json({ success: false, error: 'TVDB ID not found' });
+    }
+
+    // Try to get TMDB and IMDB IDs from TVDB extended info
+    let tmdbId = item.tmdb_id;
+    let imdbId = item.imdb_id;
+    
+    try {
+      const tvdbExtended = await tvdbClient.getSeriesExtended(parseInt(tvdbId, 10));
+      if (tvdbExtended) {
+        // TVDB v4 structure - check for remoteIds
+        const remoteIds = (tvdbExtended as any).remoteIds || [];
+        const tmdbRemote = remoteIds.find((r: any) => r.source === 'tmdb' || r.source === 'themoviedb');
+        const imdbRemote = remoteIds.find((r: any) => r.source === 'imdb');
+        
+        if (tmdbRemote && tmdbRemote.id) {
+          tmdbId = parseInt(tmdbRemote.id, 10);
+        }
+        if (imdbRemote && imdbRemote.id) {
+          imdbId = imdbRemote.id;
+        }
+      }
+    } catch (error) {
+      console.log('Could not fetch extended TVDB info, continuing with TVDB ID only');
+    }
+
+    // Update the RSS item with the new TVDB ID and any found IDs, mark as manually set
+    db.prepare(`
+      UPDATE rss_feed_items 
+      SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, tvdb_id_manual = 1, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
+
+    // Also update tv_releases if it exists
+    const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
+    if (tvRelease) {
+      db.prepare(`
+        UPDATE tv_releases 
+        SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, last_checked_at = datetime('now')
+        WHERE guid = ?
+      `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, item.guid);
+    }
+
+    const seriesName = (tvdbSeries as any).name || (tvdbSeries as any).title || 'Unknown Series';
+    console.log(`Manually updated RSS item ${itemId} with TVDB ID ${tvdbId} (${seriesName})`);
+
+    res.json({ 
+      success: true, 
+      message: `TVDB ID updated to ${tvdbId} (${seriesName})`,
+      tvdbId: parseInt(tvdbId, 10),
+      tmdbId: tmdbId,
+      imdbId: imdbId,
+      seriesName: seriesName,
+    });
+  } catch (error: any) {
+    console.error('Override TVDB ID for RSS item error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to override TVDB ID: ' + (error?.message || 'Unknown error')
     });
   }
 });
