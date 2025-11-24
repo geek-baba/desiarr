@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en" class="<%= typeof theme !== 'undefined' && theme === 'dark' ? 'dark' : '' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sonarr Data — desiarr</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <%- include('partials/app-sidebar', { currentPage: 'sonarr' }) %>
+  
+  <div class="lg:pl-64">
+    <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', lastRefresh: typeof lastRefresh !== 'undefined' ? lastRefresh : null }) %>
+    
+    <main class="p-4 lg:p-6">
+    <div class="mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+        <div class="flex items-center gap-4">
+          <div class="text-right">
+            <div class="text-sm text-gray-600 dark:text-gray-400">
+              Total: <span class="font-semibold"><%= totalShows %></span> shows
+            </div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">
+              Monitored: <span class="font-semibold"><%= monitoredShows %></span>
+            </div>
+          </div>
+          <button 
+            id="syncButton"
+            onclick="startSync()" 
+            class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
+            <svg id="syncIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span id="syncButtonText">Sync Now</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Progress Bar -->
+      <div id="progressContainer" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <span id="progressStep" class="text-sm font-medium text-gray-700 dark:text-gray-300">Starting sync...</span>
+          <span id="progressPercent" class="text-sm text-gray-600 dark:text-gray-400">0%</span>
+        </div>
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+          <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <span id="progressStats">Processing...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Bar removed - using header global search instead -->
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TVDB ID</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Monitored</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Path</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Date Added</th>
+            </tr>
+          </thead>
+          <tbody id="showsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <% shows.forEach(show => { %>
+              <tr class="show-row hover:bg-gray-50 dark:hover:bg-gray-700" data-title="<%= (show.title || '').toLowerCase() %>" data-year="<%= show.year || '' %>" data-tvdb="<%= show.tvdb_id || '' %>" data-tmdb="<%= show.tmdb_id || '' %>" data-imdb="<%= (show.imdb_id || '').toLowerCase() %>">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><%= show.title %></td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= show.year || '-' %></td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <% if (show.tvdb_id) { %>
+                    <a href="https://www.thetvdb.com/series/<%= show.tvdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.tvdb_id %>
+                    </a>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <% if (show.tmdb_id) { %>
+                    <a href="https://www.themoviedb.org/tv/<%= show.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.tmdb_id %>
+                    </a>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <% if (show.imdb_id) { %>
+                    <a href="https://www.imdb.com/title/<%= show.imdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.imdb_id %>
+                    </a>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </td>
+                <td class="px-4 py-3 text-sm">
+                  <span class="<%= show.monitored ? 'text-green-600' : 'text-gray-400' %>">
+                    <%= show.monitored ? '✓' : '✗' %>
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600 font-mono text-xs">
+                  <%= show.path || '-' %>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <%= show.date_added ? new Date(show.date_added).toLocaleString() : '-' %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Pagination -->
+      <% if (totalPages > 1) { %>
+        <div class="bg-gray-50 px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div class="flex-1 flex justify-between sm:hidden">
+            <% if (currentPage > 1) { %>
+              <a href="?page=<%= currentPage - 1 %><%= search ? '&search=' + encodeURIComponent(search) : '' %>" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Previous
+              </a>
+            <% } else { %>
+              <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-300 bg-white cursor-not-allowed">
+                Previous
+              </span>
+            <% } %>
+            <% if (currentPage < totalPages) { %>
+              <a href="?page=<%= currentPage + 1 %><%= search ? '&search=' + encodeURIComponent(search) : '' %>" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Next
+              </a>
+            <% } else { %>
+              <span class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-300 bg-white cursor-not-allowed">
+                Next
+              </span>
+            <% } %>
+          </div>
+          <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm text-gray-700">
+                Showing <span class="font-medium"><%= ((currentPage - 1) * 50) + 1 %></span> to <span class="font-medium"><%= Math.min(currentPage * 50, total) %></span> of <span class="font-medium"><%= total %></span> results
+              </p>
+            </div>
+            <div>
+              <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <% if (currentPage > 1) { %>
+                  <a href="?page=<%= currentPage - 1 %><%= search ? '&search=' + encodeURIComponent(search) : '' %>" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                    Previous
+                  </a>
+                <% } else { %>
+                  <span class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-300 cursor-not-allowed">
+                    Previous
+                  </span>
+                <% } %>
+                
+                <% for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) { %>
+                  <% if (i === currentPage) { %>
+                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-blue-50 text-sm font-medium text-blue-600">
+                      <%= i %>
+                    </span>
+                  <% } else { %>
+                    <a href="?page=<%= i %><%= search ? '&search=' + encodeURIComponent(search) : '' %>" class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                      <%= i %>
+                    </a>
+                  <% } %>
+                <% } %>
+                
+                <% if (currentPage < totalPages) { %>
+                  <a href="?page=<%= currentPage + 1 %><%= search ? '&search=' + encodeURIComponent(search) : '' %>" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                    Next
+                  </a>
+                <% } else { %>
+                  <span class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-300 cursor-not-allowed">
+                    Next
+                  </span>
+                <% } %>
+              </nav>
+            </div>
+          </div>
+        </div>
+      <% } %>
+    </div>
+    </main>
+  </div>
+
+  <script>
+    let progressInterval = null;
+    let searchTimeout = null;
+    let backgroundPollInterval = null;
+
+    // Search functionality with debouncing
+    function handleSearchInput(event) {
+      // Clear existing timeout
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+      
+      // If Enter is pressed, search immediately
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        performSearch();
+        return;
+      }
+      
+      // Otherwise, debounce the search (wait 500ms after user stops typing)
+      searchTimeout = setTimeout(() => {
+        performSearch();
+      }, 500);
+    }
+
+    function performSearch() {
+      const searchInput = document.getElementById('searchInput');
+      const searchTerm = searchInput.value.trim();
+      const url = new URL(window.location.href);
+      
+      if (searchTerm) {
+        url.searchParams.set('search', searchTerm);
+        url.searchParams.set('page', '1'); // Reset to first page on search
+      } else {
+        url.searchParams.delete('search');
+        url.searchParams.set('page', '1');
+      }
+      
+      window.location.href = url.toString();
+    }
+
+    function clearSearch() {
+      // Clear the timeout if it exists
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+      
+      const url = new URL(window.location.href);
+      url.searchParams.delete('search');
+      url.searchParams.set('page', '1');
+      window.location.href = url.toString();
+    }
+
+    async function startSync() {
+      const button = document.getElementById('syncButton');
+      const buttonText = document.getElementById('syncButtonText');
+      const syncIcon = document.getElementById('syncIcon');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressStep = document.getElementById('progressStep');
+      const progressBar = document.getElementById('progressBar');
+      
+      // Disable button
+      button.disabled = true;
+      button.classList.add('opacity-50', 'cursor-not-allowed');
+      buttonText.textContent = 'Syncing...';
+      syncIcon.classList.add('animate-spin');
+      
+      // Show progress bar
+      progressContainer.classList.remove('hidden');
+      progressStep.textContent = 'Starting sync...';
+      progressBar.style.width = '0%';
+      
+      try {
+        const response = await fetch('/data/sonarr/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+          progressStep.textContent = 'Error: ' + (data.message || 'Failed to start sync');
+          progressStep.classList.add('text-red-600', 'font-semibold');
+          progressBar.classList.remove('bg-blue-600');
+          progressBar.classList.add('bg-red-600');
+          progressBar.style.width = '100%';
+          setTimeout(() => resetButton(), 5000);
+          return;
+        }
+        
+        // Start polling for progress immediately
+        progressInterval = setInterval(checkProgress, 500);
+        // Also check immediately
+        checkProgress();
+      } catch (error) {
+        console.error('Sync error:', error);
+        progressStep.textContent = 'Error starting sync: ' + (error.message || 'Unknown error');
+        progressStep.classList.add('text-red-600', 'font-semibold');
+        progressBar.classList.remove('bg-blue-600');
+        progressBar.classList.add('bg-red-600');
+        progressBar.style.width = '100%';
+        setTimeout(() => resetButton(), 5000);
+      }
+    }
+
+    async function checkProgress() {
+      try {
+        const response = await fetch('/data/sonarr/sync/progress');
+        const data = await response.json();
+        
+        if (data.progress) {
+          const progress = data.progress;
+          const progressBar = document.getElementById('progressBar');
+          const progressPercent = document.getElementById('progressPercent');
+          const progressStep = document.getElementById('progressStep');
+          const progressStats = document.getElementById('progressStats');
+          
+          progressBar.style.width = progress.progress + '%';
+          progressPercent.textContent = progress.progress + '%';
+          progressStep.textContent = progress.currentStep || 'Processing...';
+          
+          // Show error in red if there's an error
+          if (progress.currentStep && progress.currentStep.startsWith('Error:')) {
+            progressStep.classList.add('text-red-600', 'font-semibold');
+            progressBar.classList.remove('bg-blue-600');
+            progressBar.classList.add('bg-red-600');
+          } else {
+            progressStep.classList.remove('text-red-600', 'font-semibold');
+            progressBar.classList.remove('bg-red-600');
+            progressBar.classList.add('bg-blue-600');
+          }
+          
+          if (progress.total > 0) {
+            progressStats.textContent = `Processed: ${progress.processed} / ${progress.total}${progress.errors > 0 ? ` | Errors: ${progress.errors}` : ''}`;
+          } else if (progress.currentStep) {
+            progressStats.textContent = progress.currentStep;
+          }
+          
+          if (!progress.isRunning) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+            
+            // Stop background polling if it was running
+            if (backgroundPollInterval) {
+              clearInterval(backgroundPollInterval);
+              backgroundPollInterval = null;
+            }
+            
+            // If there was an error, don't reload immediately - let user see the error
+            if (progress.currentStep && progress.currentStep.startsWith('Error:')) {
+              // Keep error visible for 10 seconds, then allow manual reload
+              setTimeout(() => {
+                resetButton();
+              }, 10000);
+            } else {
+              // Success - reload after 2 seconds to show updated timestamp (only if we were actively polling)
+              if (progressInterval !== null || backgroundPollInterval !== null) {
+                setTimeout(() => {
+                  window.location.reload();
+                }, 2000);
+              } else {
+                // Sync was already completed before page load, just reset button and update timestamp
+                resetButton();
+                // Update timestamp display by reloading the page after a short delay
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              }
+            }
+          }
+        } else {
+          // No progress data, might be done
+          clearInterval(progressInterval);
+          progressInterval = null;
+          resetButton();
+        }
+      } catch (error) {
+        console.error('Progress check error:', error);
+        const progressStep = document.getElementById('progressStep');
+        if (progressStep) {
+          progressStep.textContent = 'Error checking progress: ' + error.message;
+          progressStep.classList.add('text-red-600', 'font-semibold');
+        }
+      }
+    }
+
+    function resetButton() {
+      const button = document.getElementById('syncButton');
+      const buttonText = document.getElementById('syncButtonText');
+      const syncIcon = document.getElementById('syncIcon');
+      const progressContainer = document.getElementById('progressContainer');
+      
+      button.disabled = false;
+      button.classList.remove('opacity-50', 'cursor-not-allowed');
+      buttonText.textContent = 'Sync Now';
+      syncIcon.classList.remove('animate-spin');
+      progressContainer.classList.add('hidden');
+    }
+
+    // Format last sync time on page load
+    window.addEventListener('load', () => {
+      const lastSyncElement = document.getElementById('lastSyncTime');
+      if (lastSyncElement && lastSyncElement.dataset.utc) {
+        const utcDate = new Date(lastSyncElement.dataset.utc);
+        const options = {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+          timeZoneName: 'short'
+        };
+        lastSyncElement.textContent = utcDate.toLocaleString(undefined, options);
+      }
+    });
+
+    // Check for existing sync on page load (only once, don't auto-poll)
+    window.addEventListener('load', async () => {
+      try {
+        const response = await fetch('/data/sonarr/sync/progress');
+        const data = await response.json();
+        
+        // Only start polling if there's an active sync
+        if (data.progress && data.progress.isRunning) {
+          // Show progress bar
+          const progressContainer = document.getElementById('progressContainer');
+          if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+          }
+          
+          // Disable sync button
+          const button = document.getElementById('syncButton');
+          const buttonText = document.getElementById('syncButtonText');
+          const syncIcon = document.getElementById('syncIcon');
+          if (button) {
+            button.disabled = true;
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+            if (buttonText) buttonText.textContent = 'Syncing...';
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+          }
+          
+          // Start polling for progress
+          progressInterval = setInterval(checkProgress, 500);
+          checkProgress();
+        }
+      } catch (error) {
+        // Silently fail - no active sync
+        console.log('No active sync detected');
+      }
+    });
+  </script>
+  <script src="/js/ui.js"></script>
+</body>
+</html>
+

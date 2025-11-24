@@ -251,6 +251,42 @@ export function getSyncedSonarrShowBySonarrId(sonarrId: number) {
   };
 }
 
+/**
+ * Get all synced Sonarr shows with pagination
+ */
+export function getSyncedSonarrShows(page: number = 1, limit: number = 50, search?: string): { shows: any[]; total: number } {
+  const offset = (page - 1) * limit;
+  let query = 'SELECT * FROM sonarr_shows';
+  let countQuery = 'SELECT COUNT(*) as count FROM sonarr_shows';
+  const params: any[] = [];
+  
+  if (search && search.trim()) {
+    const searchTerm = `%${search.trim()}%`;
+    query += ' WHERE title LIKE ? OR tvdb_id LIKE ? OR tmdb_id LIKE ? OR imdb_id LIKE ? OR year LIKE ?';
+    countQuery += ' WHERE title LIKE ? OR tvdb_id LIKE ? OR tmdb_id LIKE ? OR imdb_id LIKE ? OR year LIKE ?';
+    params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+  }
+  
+  // Sort by date_added DESC (newest first), fallback to title if date_added is null
+  query += ' ORDER BY datetime(date_added) DESC, title ASC';
+  query += ` LIMIT ? OFFSET ?`;
+  
+  const rows = db.prepare(query).all(...params, limit, offset) as any[];
+  const shows = rows.map(row => ({
+    ...row,
+    monitored: Boolean(row.monitored),
+    seasons: row.seasons ? JSON.parse(row.seasons) : null,
+    images: row.images ? JSON.parse(row.images) : null,
+  }));
+  
+  const totalResult = db.prepare(countQuery).get(...params) as { count: number };
+  
+  return {
+    shows,
+    total: totalResult.count,
+  };
+}
+
 export function getLastSonarrSync(): Date | null {
   const lastSync = settingsModel.get('sonarr_last_sync');
   return lastSync ? new Date(lastSync) : null;

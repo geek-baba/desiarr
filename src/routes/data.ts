@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getSyncedRadarrMovies, getLastRadarrSync, syncRadarrMovies, getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from '../services/radarrSync';
+import { getSyncedSonarrShows, getLastSonarrSync, syncSonarrShows } from '../services/sonarrSync';
 import { getSyncedRssItems, getSyncedRssItemsByFeed, getLastRssSync, syncRssFeeds, backfillMissingIds } from '../services/rssSync';
 import { feedsModel } from '../models/feeds';
 import { releasesModel } from '../models/releases';
@@ -254,6 +255,95 @@ router.post('/radarr/sync', async (req: Request, res: Response) => {
 
 // Get sync progress
 router.get('/radarr/sync/progress', (req: Request, res: Response) => {
+  try {
+    const progress = syncProgress.get();
+    res.json({ success: true, progress });
+  } catch (error) {
+    console.error('Get sync progress error:', error);
+    res.status(500).json({ error: 'Failed to get sync progress' });
+  }
+});
+
+// Sonarr Data page
+router.get('/sonarr', (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const search = req.query.search as string || '';
+    const { shows, total } = getSyncedSonarrShows(page, 50, search);
+    const lastSync = getLastSonarrSync();
+    
+    // Get total counts for stats (without pagination)
+    const allShows = getSyncedSonarrShows(1, 999999); // Get all for stats
+    const totalShows = allShows.total;
+    const monitoredShows = allShows.shows.filter((s: any) => s.monitored).length;
+    
+    const totalPages = Math.ceil(total / 50);
+    
+    res.render('sonarr-data', {
+      shows,
+      lastSync,
+      totalShows,
+      monitoredShows,
+      currentPage: page,
+      totalPages,
+      total,
+      search,
+      hideRefresh: true,
+      lastRefresh: lastSync ? (typeof lastSync === 'string' ? lastSync : lastSync.toISOString()) : null,
+    });
+  } catch (error) {
+    console.error('Sonarr data page error:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
+// Trigger Sonarr sync
+router.post('/sonarr/sync', async (req: Request, res: Response) => {
+  try {
+    // Check if sync is already running
+    const current = syncProgress.get();
+    if (current && current.isRunning && current.type === 'sonarr') {
+      return res.json({ success: false, message: 'Sonarr sync is already in progress' });
+    }
+
+    // Start sync in background
+    (async () => {
+      try {
+        console.log('Starting Sonarr sync from API endpoint...');
+        await syncSonarrShows();
+        console.log('Sonarr sync completed successfully');
+        
+        // Clear progress after 5 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 5000);
+      } catch (error: any) {
+        console.error('Sonarr sync error in background task:', error);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        console.error('Error message:', errorMessage);
+        syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
+        syncProgress.complete();
+        
+        // Keep error visible for 30 seconds
+        setTimeout(() => {
+          syncProgress.clear();
+        }, 30000);
+      }
+    })();
+
+    res.json({ success: true, message: 'Sonarr sync started' });
+  } catch (error: any) {
+    console.error('Start Sonarr sync error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start Sonarr sync',
+      message: error?.message || 'Unknown error'
+    });
+  }
+});
+
+// Get Sonarr sync progress
+router.get('/sonarr/sync/progress', (req: Request, res: Response) => {
   try {
     const progress = syncProgress.get();
     res.json({ success: true, progress });
