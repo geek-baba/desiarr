@@ -219,16 +219,6 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
   }
 }
 
-export function getSyncedSonarrShows() {
-  const rows = db.prepare('SELECT * FROM sonarr_shows ORDER BY title').all() as any[];
-  return rows.map((row) => ({
-    ...row,
-    monitored: Boolean(row.monitored),
-    seasons: row.seasons ? JSON.parse(row.seasons) : null,
-    images: row.images ? JSON.parse(row.images) : null,
-  }));
-}
-
 export function getSyncedSonarrShowByTvdbId(tvdbId: number) {
   const row = db.prepare('SELECT * FROM sonarr_shows WHERE tvdb_id = ?').get(tvdbId) as any;
   if (!row) return null;
