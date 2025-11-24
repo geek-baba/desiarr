@@ -405,5 +405,31 @@
 
   window.addEventListener('resize', handleResize);
   handleResize(); // Initial check
+
+  // Format last refresh/sync timestamps (works on all pages)
+  function formatLastRefreshTime() {
+    const lastRefreshElement = document.getElementById('lastRefreshTime');
+    if (lastRefreshElement && lastRefreshElement.dataset.utc) {
+      const utcDate = new Date(lastRefreshElement.dataset.utc);
+      // Format in user's local timezone with timezone info
+      const options = {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZoneName: 'short'
+      };
+      lastRefreshElement.textContent = utcDate.toLocaleString(undefined, options);
+    }
+  }
+
+  // Run on DOMContentLoaded and also immediately (in case DOM is already loaded)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', formatLastRefreshTime);
+  } else {
+    formatLastRefreshTime();
+  }
 })();
 
