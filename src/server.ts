@@ -8,8 +8,10 @@ import dataRouter from './routes/data';
 import logsRouter from './routes/logs';
 import { settingsModel } from './models/settings';
 import { syncRadarrMovies } from './services/radarrSync';
+import { syncSonarrShows } from './services/sonarrSync';
 import { syncRssFeeds } from './services/rssSync';
 import { runMatchingEngine } from './services/matchingEngine';
+import { runTvMatchingEngine } from './services/tvMatchingEngine';
 import './services/logStorage'; // Initialize log storage
 
 const app = express();
@@ -41,17 +43,35 @@ async function runFullSyncCycle() {
   try {
     console.log('=== Starting full sync cycle ===');
     
-    // Step 1: Sync Radarr
+    // Step 1: Sync Radarr movies
     console.log('Step 1: Syncing Radarr movies...');
     await syncRadarrMovies();
     
-    // Step 2: Sync RSS feeds
-    console.log('Step 2: Syncing RSS feeds...');
+    // Step 2: Sync Sonarr shows
+    console.log('Step 2: Syncing Sonarr shows...');
+    try {
+      await syncSonarrShows();
+    } catch (error) {
+      console.error('Sonarr sync error (continuing):', error);
+      // Continue even if Sonarr sync fails
+    }
+    
+    // Step 3: Sync RSS feeds (both movie and TV)
+    console.log('Step 3: Syncing RSS feeds...');
     await syncRssFeeds();
     
-    // Step 3: Run matching engine
-    console.log('Step 3: Running matching engine...');
+    // Step 4: Run movie matching engine
+    console.log('Step 4: Running movie matching engine...');
     await runMatchingEngine();
+    
+    // Step 5: Run TV matching engine
+    console.log('Step 5: Running TV matching engine...');
+    try {
+      await runTvMatchingEngine();
+    } catch (error) {
+      console.error('TV matching engine error (continuing):', error);
+      // Continue even if TV matching fails
+    }
     
     console.log('=== Full sync cycle completed ===');
   } catch (error) {
@@ -85,8 +105,13 @@ function startScheduledSyncs() {
     console.log('Running scheduled RSS sync...');
     try {
       await syncRssFeeds();
-      // After RSS sync, run matching engine
+      // After RSS sync, run both matching engines
       await runMatchingEngine();
+      try {
+        await runTvMatchingEngine();
+      } catch (error) {
+        console.error('Scheduled TV matching engine error:', error);
+      }
     } catch (error) {
       console.error('Scheduled RSS sync error:', error);
     }
@@ -97,14 +122,19 @@ function startScheduledSyncs() {
   // (it will use the latest synced data)
   const matchingIntervalMs = 30 * 60 * 1000; // Every 30 minutes
   matchingInterval = setInterval(async () => {
-    console.log('Running scheduled matching engine...');
+    console.log('Running scheduled matching engines...');
     try {
       await runMatchingEngine();
+      try {
+        await runTvMatchingEngine();
+      } catch (error) {
+        console.error('Scheduled TV matching engine error:', error);
+      }
     } catch (error) {
       console.error('Scheduled matching engine error:', error);
     }
   }, matchingIntervalMs);
-  console.log('Matching engine scheduled every 30 minutes');
+  console.log('Matching engines scheduled every 30 minutes');
 }
 
 // Initial sync on startup

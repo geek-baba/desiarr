@@ -114,6 +114,28 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS sonarr_shows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sonarr_id INTEGER UNIQUE NOT NULL,
+    tvdb_id INTEGER,
+    tmdb_id INTEGER,
+    imdb_id TEXT,
+    title TEXT NOT NULL,
+    year INTEGER,
+    path TEXT,
+    monitored INTEGER NOT NULL DEFAULT 1,
+    seasons TEXT,
+    images TEXT,
+    date_added TEXT,
+    synced_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sonarr_shows_tvdb_id ON sonarr_shows(tvdb_id);
+  CREATE INDEX IF NOT EXISTS idx_sonarr_shows_tmdb_id ON sonarr_shows(tmdb_id);
+  CREATE INDEX IF NOT EXISTS idx_sonarr_shows_sonarr_id ON sonarr_shows(sonarr_id);
+
   CREATE TABLE IF NOT EXISTS rss_feed_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     guid TEXT UNIQUE NOT NULL,

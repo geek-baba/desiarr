@@ -128,6 +128,50 @@ class TMDBClient {
     if (!posterPath) return null;
     return `https://image.tmdb.org/t/p/w500${posterPath}`;
   }
+
+  async searchTv(query: string): Promise<any[] | null> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping TV search');
+      return null;
+    }
+
+    try {
+      const response = await this.client.get<any>('/search/tv', {
+        params: {
+          api_key: this.apiKey,
+          query: query,
+          language: 'en-US',
+        },
+      });
+      
+      return response.data.results || [];
+    } catch (error) {
+      console.error('TMDB TV search error:', error);
+      return null;
+    }
+  }
+
+  async getTvShow(tmdbId: number): Promise<any | null> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping TV show fetch');
+      return null;
+    }
+
+    try {
+      const response = await this.client.get<any>(`/tv/${tmdbId}`, {
+        params: {
+          api_key: this.apiKey,
+          language: 'en-US',
+          append_to_response: 'external_ids',
+        },
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('TMDB get TV show error:', error);
+      return null;
+    }
+  }
 }
 
 export default new TMDBClient();

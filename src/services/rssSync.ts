@@ -58,11 +58,18 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
       braveClient.setApiKey(braveApiKey);
     }
     
-    const feeds = feedsModel.getEnabled();
-    stats.totalFeeds = feeds.length;
+    const allFeeds = feedsModel.getEnabled();
+    // Split feeds by type
+    const movieFeeds = allFeeds.filter(f => !f.feed_type || f.feed_type === 'movie');
+    const tvFeeds = allFeeds.filter(f => f.feed_type === 'tv');
+    
+    stats.totalFeeds = allFeeds.length;
 
-    console.log(`Found ${feeds.length} enabled RSS feeds`);
-    syncProgress.update(`Found ${feeds.length} enabled RSS feeds`, 0, feeds.length);
+    console.log(`Found ${allFeeds.length} enabled RSS feeds (${movieFeeds.length} movie, ${tvFeeds.length} TV)`);
+    syncProgress.update(`Found ${allFeeds.length} enabled RSS feeds (${movieFeeds.length} movie, ${tvFeeds.length} TV)`, 0, allFeeds.length);
+    
+    // Process movie feeds first (existing logic)
+    const feeds = movieFeeds;
 
     for (let feedIndex = 0; feedIndex < feeds.length; feedIndex++) {
       const feed = feeds[feedIndex];
@@ -546,6 +553,163 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
         });
         console.error(`Error syncing feed: ${feed.name}`, feedError);
         stats.feedsProcessed++;
+      }
+    }
+
+    // Process TV feeds (basic sync - enrichment will be done in tvMatchingEngine)
+    if (tvFeeds.length > 0) {
+      console.log(`Processing ${tvFeeds.length} TV feeds...`);
+      syncProgress.update(`Processing ${tvFeeds.length} TV feeds...`, movieFeeds.length, allFeeds.length);
+      
+      for (let feedIndex = 0; feedIndex < tvFeeds.length; feedIndex++) {
+        const feed = tvFeeds[feedIndex];
+        try {
+          console.log(`Syncing TV feed: ${feed.name} (${feed.url})`);
+          syncProgress.update(`Syncing TV feed: ${feed.name}...`, movieFeeds.length + feedIndex, allFeeds.length);
+          const feedData = await parser.parseURL(feed.url);
+
+          if (!feedData.items || feedData.items.length === 0) {
+            console.log(`No items found in TV feed: ${feed.name}`);
+            stats.feedsProcessed++;
+            continue;
+          }
+
+          console.log(`Found ${feedData.items.length} items in TV feed: ${feed.name}`);
+          stats.totalItems += feedData.items.length;
+
+          // Process TV items (basic parsing - no enrichment yet)
+          const newItems: string[] = [];
+          const transaction = db.transaction(() => {
+            for (const item of feedData.items) {
+              try {
+                if (!item.title && !item.link) {
+                  continue;
+                }
+
+                const guid = item.guid || item.link || '';
+                const existing = db
+                  .prepare('SELECT id FROM rss_feed_items WHERE guid = ?')
+                  .get(guid) as { id: number } | undefined;
+
+                // Basic parsing for TV (extract show name and season from title)
+                // Full parsing and enrichment will be done in tvMatchingEngine
+                const itemData = {
+                  guid,
+                  feed_id: feed.id!,
+                  feed_name: feed.name,
+                  title: item.title || '',
+                  normalized_title: (item.title || '').toLowerCase().trim(),
+                  clean_title: null, // Will be set by tvMatchingEngine
+                  year: null, // Will be extracted by tvMatchingEngine
+                  source_site: new URL(item.link || feed.url).hostname,
+                  link: item.link || '',
+                  resolution: 'UNKNOWN', // TV feeds don't need quality parsing
+                  source_tag: 'OTHER',
+                  codec: 'UNKNOWN',
+                  audio: 'UNKNOWN',
+                  rss_size_mb: null,
+                  published_at: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+                  tmdb_id: null, // Will be enriched by tvMatchingEngine
+                  imdb_id: null, // Will be enriched by tvMatchingEngine
+                  audio_languages: null,
+                  raw_data: JSON.stringify(item),
+                  synced_at: new Date().toISOString(),
+                };
+
+                if (existing) {
+                  // Update existing
+                  db.prepare(`
+                    UPDATE rss_feed_items SET
+                      feed_id = ?,
+                      feed_name = ?,
+                      title = ?,
+                      normalized_title = ?,
+                      source_site = ?,
+                      link = ?,
+                      published_at = ?,
+                      raw_data = ?,
+                      synced_at = ?
+                    WHERE guid = ?
+                  `).run(
+                    itemData.feed_id,
+                    itemData.feed_name,
+                    itemData.title,
+                    itemData.normalized_title,
+                    itemData.source_site,
+                    itemData.link,
+                    itemData.published_at,
+                    itemData.raw_data,
+                    itemData.synced_at,
+                    guid
+                  );
+                  stats.itemsUpdated++;
+                } else {
+                  // Insert new
+                  db.prepare(`
+                    INSERT INTO rss_feed_items (
+                      guid, feed_id, feed_name, title, normalized_title, clean_title,
+                      year, source_site, link, resolution, source_tag, codec, audio,
+                      rss_size_mb, published_at, tmdb_id, imdb_id, audio_languages,
+                      raw_data, synced_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `).run(
+                    itemData.guid,
+                    itemData.feed_id,
+                    itemData.feed_name,
+                    itemData.title,
+                    itemData.normalized_title,
+                    itemData.clean_title,
+                    itemData.year,
+                    itemData.source_site,
+                    itemData.link,
+                    itemData.resolution,
+                    itemData.source_tag,
+                    itemData.codec,
+                    itemData.audio,
+                    itemData.rss_size_mb,
+                    itemData.published_at,
+                    itemData.tmdb_id,
+                    itemData.imdb_id,
+                    itemData.audio_languages,
+                    itemData.raw_data,
+                    itemData.synced_at
+                  );
+                  stats.itemsSynced++;
+                  if (newItems.length < 5) {
+                    newItems.push(itemData.title);
+                  }
+                }
+              } catch (itemError: any) {
+                console.error(`Error processing TV RSS item: ${item.title || item.link}`, itemError);
+              }
+            }
+          });
+
+          transaction();
+          stats.feedsProcessed++;
+          console.log(`TV Feed ${feed.name}: Synced ${feedData.items.length} items`);
+          
+          const details: string[] = [];
+          if (stats.itemsSynced > 0 && newItems.length > 0) {
+            details.push(`${newItems.length} new TV item${newItems.length > 1 ? 's' : ''}: ${newItems.join(', ')}`);
+          }
+          
+          syncProgress.update(
+            `Completed TV feed ${feed.name} (${feedData.items.length} items)`,
+            movieFeeds.length + feedIndex + 1,
+            allFeeds.length,
+            stats.errors.length,
+            details.length > 0 ? details : undefined
+          );
+        } catch (feedError: any) {
+          stats.errors.push({
+            feedId: feed.id!,
+            feedName: feed.name,
+            error: feedError?.message || 'Unknown error',
+          });
+          console.error(`Error syncing TV feed: ${feed.name}`, feedError);
+          stats.feedsProcessed++;
+        }
       }
     }
 

@@ -5,8 +5,10 @@ import { settingsModel } from '../models/settings';
 import { config } from '../config';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId, syncRadarrMovies } from '../services/radarrSync';
+import { syncSonarrShows } from '../services/sonarrSync';
 import { syncRssFeeds } from '../services/rssSync';
 import { runMatchingEngine } from '../services/matchingEngine';
+import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import db from '../db';
@@ -741,20 +743,43 @@ router.post('/build-match', async (req: Request, res: Response) => {
           throw new Error(`Radarr sync failed: ${errorMsg}`);
         }
         
-        // Step 3: Run matching engine
-        console.log('Step 3: Running matching engine...');
-        syncProgress.update('Step 3: Running matching engine...', 0);
+        // Step 3: Sync Sonarr
+        console.log('Step 3: Syncing Sonarr shows...');
+        syncProgress.update('Step 3: Syncing Sonarr shows...', 0);
+        try {
+          await syncSonarrShows();
+        } catch (error: any) {
+          console.error('Sonarr sync error (continuing):', error);
+          // Continue even if Sonarr sync fails
+        }
+        
+        // Step 4: Run movie matching engine
+        console.log('Step 4: Running movie matching engine...');
+        syncProgress.update('Step 4: Running movie matching engine...', 0);
         let stats;
         try {
           stats = await runMatchingEngine();
         } catch (error: any) {
           console.error('Matching engine error:', error);
           const errorMsg = error?.message || error?.toString() || 'Unknown error';
-          syncProgress.update(`Step 3 failed: ${errorMsg}`, 0, 0, 1);
+          syncProgress.update(`Step 4 failed: ${errorMsg}`, 0, 0, 1);
           throw new Error(`Matching engine failed: ${errorMsg}`);
         }
         
-        syncProgress.update('Build & Match completed successfully', stats.processed || 0, stats.processed || 0, stats.errors || 0);
+        // Step 5: Run TV matching engine
+        console.log('Step 5: Running TV matching engine...');
+        syncProgress.update('Step 5: Running TV matching engine...', 0);
+        let tvStats;
+        try {
+          tvStats = await runTvMatchingEngine();
+        } catch (error: any) {
+          console.error('TV matching engine error (continuing):', error);
+          // Continue even if TV matching fails
+        }
+        
+        const totalProcessed = (stats?.processed || 0) + (tvStats?.processed || 0);
+        const totalErrors = (stats?.errors || 0) + (tvStats?.errors || 0);
+        syncProgress.update('Build & Match completed successfully', totalProcessed, totalProcessed, totalErrors);
         syncProgress.complete();
         
         console.log('=== Build & Match completed ===');

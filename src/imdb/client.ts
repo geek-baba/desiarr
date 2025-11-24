@@ -97,6 +97,39 @@ class IMDBClient {
 
 
   /**
+   * Search for a TV series by title using OMDB API
+   * Returns the IMDB ID if found
+   */
+  async searchByTitle(query: string, type: 'movie' | 'series' = 'movie'): Promise<{ imdbId: string; title: string; year: string } | null> {
+    try {
+      const params: any = {
+        s: query,
+        type: type,
+      };
+      
+      if (this.apiKey) {
+        params.apikey = this.apiKey;
+      }
+
+      const response = await this.client.get<OMDBResponse>('/', { params });
+      
+      if (response.data.Response === 'True' && response.data.Search && response.data.Search.length > 0) {
+        const first = response.data.Search[0];
+        return {
+          imdbId: first.imdbID,
+          title: first.Title,
+          year: first.Year,
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('IMDB/OMDB search error:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get movie details by IMDB ID
    */
   async getMovieByImdbId(imdbId: string): Promise<any | null> {

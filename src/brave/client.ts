@@ -119,6 +119,15 @@ class BraveClient {
   }
 
   /**
+   * Extract TVDB ID from a URL
+   * Matches patterns like: https://www.thetvdb.com/series/12345
+   */
+  extractTvdbIdFromUrl(url: string): number | null {
+    const match = url.match(/thetvdb\.com\/series\/(\d+)/i);
+    return match ? parseInt(match[1], 10) : null;
+  }
+
+  /**
    * Search for IMDb ID using Brave Search
    * Searches with site:imdb.com restriction
    */
@@ -184,6 +193,42 @@ class BraveClient {
       return null;
     } catch (error: any) {
       console.error(`    ✗ Brave search for TMDB ID error for "${title}":`, error?.message || error);
+      return null;
+    }
+  }
+
+  /**
+   * Search for TVDB ID using Brave Search
+   * Searches with site:thetvdb.com restriction
+   */
+  async searchForTvdbId(title: string): Promise<number | null> {
+    if (!this.apiKey) {
+      return null;
+    }
+
+    try {
+      // Build query: "title" site:thetvdb.com
+      const query = `"${title}" site:thetvdb.com`;
+
+      console.log(`    Searching Brave for TVDB ID: "${query}"`);
+      const results = await this.searchWeb(query, 5);
+
+      // Look for TVDB series URLs in results
+      for (const result of results) {
+        const tvdbId = this.extractTvdbIdFromUrl(result.url);
+        if (tvdbId) {
+          console.log(`    ✓ Found TVDB ID ${tvdbId} via Brave search for "${title}"`);
+          return tvdbId;
+        }
+      }
+
+      console.log(`    ✗ No TVDB ID found via Brave search for "${title}"`);
+      return null;
+    } catch (error: any) {
+      if (error?.message === 'BRAVE_RATE_LIMITED') {
+        throw error; // Re-throw rate limit errors
+      }
+      console.error(`    ✗ Brave search for TVDB ID error for "${title}":`, error?.message || error);
       return null;
     }
   }

@@ -88,6 +88,46 @@ class TvdbClient {
     });
     return response.data;
   }
+
+  async searchSeries(query: string): Promise<any[]> {
+    try {
+      const response = await this.request<{ data: { tvdb_id?: number; id?: number; [key: string]: any }[] }>('get', '/search', undefined, { query, type: 'series' });
+      // TVDB v4 API returns { data: [...] }
+      if (response && (response as any).data && Array.isArray((response as any).data)) {
+        return (response as any).data;
+      }
+      return [];
+    } catch (error: any) {
+      console.error('TVDB search series error:', error?.response?.data || error?.message || error);
+      return [];
+    }
+  }
+
+  async getSeries(tvdbId: number): Promise<any | null> {
+    try {
+      const response = await this.request<{ data: any }>('get', `/series/${tvdbId}`);
+      if (response && (response as any).data) {
+        return (response as any).data;
+      }
+      return null;
+    } catch (error: any) {
+      console.error('TVDB get series error:', error?.response?.data || error?.message || error);
+      return null;
+    }
+  }
+
+  async getSeriesExtended(tvdbId: number): Promise<any | null> {
+    try {
+      const response = await this.request<{ data: any }>('get', `/series/${tvdbId}/extended`);
+      if (response && (response as any).data) {
+        return (response as any).data;
+      }
+      return null;
+    } catch (error: any) {
+      console.error('TVDB get series extended error:', error?.response?.data || error?.message || error);
+      return null;
+    }
+  }
 }
 
 export default new TvdbClient();
