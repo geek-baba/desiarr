@@ -87,21 +87,25 @@
         </button>
       </div>
       <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200">
+        <table class="w-full table-fixed divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Enabled</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">Name</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-2/5">URL</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/12">Type</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/12">Enabled</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <% feeds.forEach(feed => { %>
               <tr>
                 <td class="px-4 py-3 text-sm"><%= feed.name %></td>
-                <td class="px-4 py-3 text-sm text-gray-600"><%= feed.url %></td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <div class="truncate" title="<%= feed.url %>">
+                    <%= feed.url %>
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-sm">
                   <span class="px-2 py-1 text-xs rounded-full <%= feed.feed_type === 'tv' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800' %>">
                     <%= feed.feed_type === 'tv' ? 'TV' : 'Movie' %>
