@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - tv-integration
   pull_request:
     branches:
       - main
+      - tv-integration
   workflow_dispatch:
 
 env:
