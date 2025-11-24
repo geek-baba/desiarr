@@ -242,6 +242,54 @@ export function getSyncedSonarrShowBySonarrId(sonarrId: number) {
 }
 
 /**
+ * Search Sonarr shows by name (fuzzy match, case-insensitive)
+ * Returns the best match or null
+ */
+export function findSonarrShowByName(showName: string): any | null {
+  if (!showName || !showName.trim()) return null;
+  
+  const normalizedSearch = showName.toLowerCase().trim();
+  
+  // Get all Sonarr shows
+  const allShows = db.prepare('SELECT * FROM sonarr_shows').all() as any[];
+  
+  if (allShows.length === 0) return null;
+  
+  // Try exact match first (case-insensitive)
+  let match = allShows.find(show => 
+    show.title && show.title.toLowerCase().trim() === normalizedSearch
+  );
+  
+  if (match) {
+    return {
+      ...match,
+      monitored: Boolean(match.monitored),
+      seasons: match.seasons ? JSON.parse(match.seasons) : null,
+      images: match.images ? JSON.parse(match.images) : null,
+    };
+  }
+  
+  // Try fuzzy match - show name contains search term or vice versa
+  match = allShows.find(show => {
+    if (!show.title) return false;
+    const normalizedTitle = show.title.toLowerCase().trim();
+    return normalizedTitle.includes(normalizedSearch) || 
+           normalizedSearch.includes(normalizedTitle);
+  });
+  
+  if (match) {
+    return {
+      ...match,
+      monitored: Boolean(match.monitored),
+      seasons: match.seasons ? JSON.parse(match.seasons) : null,
+      images: match.images ? JSON.parse(match.images) : null,
+    };
+  }
+  
+  return null;
+}
+
+/**
  * Get all synced Sonarr shows with pagination
  */
 export function getSyncedSonarrShows(page: number = 1, limit: number = 50, search?: string): { shows: any[]; total: number } {

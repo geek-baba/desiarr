@@ -7,7 +7,7 @@ import braveClient from '../brave/client';
 import tvdbClient from '../tvdb/client';
 import { TvRelease, TvReleaseStatus } from '../types/Release';
 import { getSyncedRssItems } from './rssSync';
-import { getSyncedSonarrShowByTvdbId, getSyncedSonarrShowBySonarrId } from './sonarrSync';
+import { getSyncedSonarrShowByTvdbId, getSyncedSonarrShowBySonarrId, findSonarrShowByName } from './sonarrSync';
 import { feedsModel } from '../models/feeds';
 import { syncProgress } from './syncProgress';
 
@@ -342,18 +342,79 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
         }
 
-        // Enrich with TVDB → TMDB → IMDB
-        const enrichment = await enrichTvShow(
-          showName,
-          season,
-          tvdbApiKey,
-          tmdbApiKey,
-          omdbApiKey,
-          braveApiKey
-        );
+        // Step 1: First try to match with Sonarr by show name (without year)
+        console.log(`    Searching Sonarr for: "${showName}"`);
+        let sonarrShow = findSonarrShowByName(showName);
+        let enrichment: {
+          tvdbId: number | null;
+          tmdbId: number | null;
+          imdbId: string | null;
+          tvdbPosterUrl: string | null;
+          tmdbPosterUrl: string | null;
+        };
+        
+        if (sonarrShow) {
+          console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
+          
+          // Use IDs from Sonarr
+          enrichment = {
+            tvdbId: sonarrShow.tvdb_id || null,
+            tmdbId: sonarrShow.tmdb_id || null,
+            imdbId: sonarrShow.imdb_id || null,
+            tvdbPosterUrl: null, // Will extract from images if available
+            tmdbPosterUrl: null, // Will extract from images if available
+          };
+          
+          // Extract poster URLs from Sonarr images
+          if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
+            const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
+            if (poster) {
+              enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
+              enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+            }
+          }
+          
+          console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+        } else {
+          console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
+          
+          // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
+          enrichment = await enrichTvShow(
+            showName,
+            season,
+            tvdbApiKey,
+            tmdbApiKey,
+            omdbApiKey,
+            braveApiKey
+          );
+        }
 
-        // Check if show/season exists in Sonarr
-        const sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season);
+        // Check if show/season exists in Sonarr (using the IDs we have or the show we found by name)
+        let sonarrCheck: {
+          exists: boolean;
+          sonarrSeriesId: number | null;
+          sonarrSeriesTitle: string | null;
+          seasonExists: boolean;
+        };
+        
+        if (sonarrShow) {
+          // We found the show by name, use that info
+          let seasonExists = false;
+          if (season !== null && sonarrShow.seasons) {
+            const seasons = Array.isArray(sonarrShow.seasons) ? sonarrShow.seasons : JSON.parse(sonarrShow.seasons);
+            seasonExists = seasons.some((s: any) => s.seasonNumber === season && s.monitored);
+          }
+          
+          sonarrCheck = {
+            exists: true,
+            sonarrSeriesId: sonarrShow.sonarr_id,
+            sonarrSeriesTitle: sonarrShow.title,
+            seasonExists: season !== null ? seasonExists : true,
+          };
+        } else {
+          // Check by IDs (for shows found via external APIs)
+          sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season);
+        }
 
         // Determine status
         let status: TvReleaseStatus = 'NEW_SHOW';
