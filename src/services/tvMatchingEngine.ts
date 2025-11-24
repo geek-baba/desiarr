@@ -141,14 +141,16 @@ async function enrichTvShow(
         console.log(`    ✓ Found TMDB ID: ${tmdbId}`);
         
         // Get TMDB show details for poster and IMDB ID
-        const tmdbShow = await tmdbClient.getTvShow(tmdbId);
-        if (tmdbShow) {
+        if (tmdbId) {
+          const tmdbShow = await tmdbClient.getTvShow(tmdbId);
+          if (tmdbShow) {
           if (tmdbShow.poster_path) {
             tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
           }
           if (tmdbShow.external_ids?.imdb_id) {
             imdbId = tmdbShow.external_ids.imdb_id;
             console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
+          }
           }
         }
       }
@@ -162,8 +164,8 @@ async function enrichTvShow(
     try {
       console.log(`    Searching OMDB for: "${showName}"`);
       const omdbResult = await imdbClient.searchByTitle(showName, 'series');
-      if (omdbResult && omdbResult.imdbID) {
-        imdbId = omdbResult.imdbID;
+      if (omdbResult && omdbResult.imdbId) {
+        imdbId = omdbResult.imdbId;
         console.log(`    ✓ Found IMDB ID from OMDB: ${imdbId}`);
       }
     } catch (error: any) {
@@ -351,18 +353,18 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           title: String(item.title || ''),
           normalized_title: String(item.normalized_title || ''),
           show_name: showName,
-          season_number: season,
+          season_number: season ?? undefined,
           source_site: String(item.source_site || ''),
           feed_id: Number(item.feed_id || 0),
           link: String(item.link || ''),
           published_at: String(item.published_at || new Date().toISOString()),
-          tvdb_id: enrichment.tvdbId,
-          tmdb_id: enrichment.tmdbId,
-          imdb_id: enrichment.imdbId,
-          tvdb_poster_url: enrichment.tvdbPosterUrl,
-          tmdb_poster_url: enrichment.tmdbPosterUrl,
-          sonarr_series_id: sonarrCheck.sonarrSeriesId,
-          sonarr_series_title: sonarrCheck.sonarrSeriesTitle,
+          tvdb_id: enrichment.tvdbId ?? undefined,
+          tmdb_id: enrichment.tmdbId ?? undefined,
+          imdb_id: enrichment.imdbId ?? undefined,
+          tvdb_poster_url: enrichment.tvdbPosterUrl ?? undefined,
+          tmdb_poster_url: enrichment.tmdbPosterUrl ?? undefined,
+          sonarr_series_id: sonarrCheck.sonarrSeriesId ?? undefined,
+          sonarr_series_title: sonarrCheck.sonarrSeriesTitle ?? undefined,
           status: finalStatus,
           last_checked_at: new Date().toISOString(),
         };
