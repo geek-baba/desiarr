@@ -1,5 +1,5 @@
 {
-  "name": "radarr-indian-helper",
+  "name": "desiarr",
   "version": "1.0.0",
   "description": "Internal web dashboard for managing Indian-language movie releases with Radarr",
   "main": "dist/server.js",
