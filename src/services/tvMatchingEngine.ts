@@ -31,26 +31,34 @@ export interface TvMatchingStats {
 function parseTvTitle(title: string): { showName: string; season: number | null } {
   const normalized = title.trim();
   
+  // First, normalize dots to spaces for better matching (common in release names)
+  // Replace dots with spaces, but preserve common patterns like "S03", "S01E01", etc.
+  const normalizedForParsing = normalized.replace(/\./g, ' ');
+  
   // Try to match patterns like "Show Name S01", "Show Name Season 1", "Show Name S1E1"
+  // Also handles dot-separated formats like "The.Family.Man.S03"
   const seasonPatterns = [
-    /^(.+?)\s+S(\d+)(?:E\d+)?/i, // "Show Name S01" or "Show Name S1E1"
-    /^(.+?)\s+Season\s+(\d+)/i, // "Show Name Season 1"
-    /^(.+?)\s+S(\d+)$/i, // "Show Name S1"
+    /^(.+?)[\s\.]+S(\d+)(?:E\d+)?/i, // "Show Name S01" or "Show.Name.S03" or "Show Name S1E1"
+    /^(.+?)[\s\.]+Season[\s\.]+(\d+)/i, // "Show Name Season 1" or "Show.Name.Season.1"
+    /^(.+?)[\s\.]+S(\d+)$/i, // "Show Name S1" or "Show.Name.S1"
   ];
   
   for (const pattern of seasonPatterns) {
-    const match = normalized.match(pattern);
+    const match = normalizedForParsing.match(pattern);
     if (match) {
+      // Clean up the show name - replace dots/spaces with single spaces, trim
+      const showName = match[1].replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
       return {
-        showName: match[1].trim(),
+        showName: showName,
         season: parseInt(match[2], 10),
       };
     }
   }
   
-  // If no season pattern found, return the whole title as show name
+  // If no season pattern found, try to clean up the title and return as show name
+  const cleanedTitle = normalized.replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
   return {
-    showName: normalized,
+    showName: cleanedTitle,
     season: null,
   };
 }
