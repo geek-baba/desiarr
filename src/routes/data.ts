@@ -758,9 +758,10 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'TVDB API key and User PIN not configured' });
     }
 
-    // Initialize TVDB client
-    tvdbClient.loadCredentials(tvdbApiKey, tvdbUserPin);
-    await tvdbClient.authenticate();
+    // Initialize TVDB client - update config and trigger authentication via a request
+    tvdbClient.updateConfig();
+    // Trigger authentication by making a request (ensureAuthHeaders will be called internally)
+    // We'll verify the ID by calling getSeries which will authenticate automatically
 
     // Verify the TVDB ID by fetching series details
     const tvdbSeries = await tvdbClient.getSeries(parseInt(tvdbId, 10));
