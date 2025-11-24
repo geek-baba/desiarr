@@ -1,147 +1,208 @@
 # Radarr Indian Helper
 
-Internal web dashboard for managing Indian-language movie releases with Radarr using RSS feeds and configurable quality preferences.
+Internal dashboard for orchestrating Indian-language movie releases with Radarr by combining RSS feeds, TMDB metadata, custom quality scoring, and one-click automation.
+
+## Table of Contents
+- [Overview](#overview)
+- [Feature Highlights](#feature-highlights)
+- [System Architecture](#system-architecture)
+  - [Tech Stack](#tech-stack)
+  - [Data Flow](#data-flow)
+  - [Key Modules](#key-modules)
+- [Data Model](#data-model)
+- [Background Jobs & Sync Pipeline](#background-jobs--sync-pipeline)
+- [UI Pages & Routes](#ui-pages--routes)
+- [External Integrations](#external-integrations)
+- [Configuration](#configuration)
+  - [Radarr API Setup](#radarr-api-setup)
+  - [RSS Feeds](#rss-feeds)
+  - [Quality & Matching Rules](#quality--matching-rules)
+  - [Environment Variables](#environment-variables)
+- [Local Development](#local-development)
+- [Docker](#docker)
+- [Deployment Workflow](#deployment-workflow)
+- [Logging & Troubleshooting](#logging--troubleshooting)
+- [License](#license)
 
 ## Overview
 
-Radarr Indian Helper is a Node.js + TypeScript + Express application that helps manage Indian-language movie releases with Radarr. It fetches RSS feeds, parses release information, matches movies with Radarr, and identifies new movies and upgrade candidates based on your configurable quality preferences.
+Radarr Indian Helper is a Node.js + TypeScript + Express application with an EJS/Tailwind UI. It continuously ingests multiple RSS feeds, enriches releases with TMDB/IMDB data, evaluates them against custom quality rules, and surfaces actionable insights (new movies, upgrades, manual fixes) for Radarr users. A single “Sync & Match” control or background scheduler keeps Radarr, RSS, and release data aligned.
 
-## Features
+## Feature Highlights
 
-- **RSS Feed Management**: Add, edit, and manage multiple RSS feeds through the Settings UI
-- **Quality Preferences**: Configure resolution, codec, source, audio, and language preferences stored in SQLite
-- **Smart Release Parsing**: Automatically extracts resolution, codec, source tags, audio formats, and languages from release titles
-- **Radarr Integration**: Seamlessly integrates with Radarr API for movie lookup and management
-- **Upgrade Detection**: Identifies upgrade candidates based on quality score differences and file size increases
-- **Dubbed Detection**: Detects dubbed releases by comparing original language with audio languages
-- **Web Dashboard**: Modern UI built with EJS and Tailwind CSS
+- **Insightful dashboard**: Grouped cards show new releases, upgrade candidates, attention-needed items, ignored titles, and stats. Global search, tabbed filters, dark mode, and sticky headers keep navigation fast.
+- **Flattened Releases view**: Dedicated `/data/releases` page lists every release with poster art, TMDB/IMDB IDs, quality metadata, actions (Add/Upgrade/Ignore), and exportable links.
+- **Radarr & RSS data explorers**: `/data/radarr` surfaces synced Radarr library metadata, while `/data/rss` exposes raw feed items with parsed tags for debugging matching issues.
+- **One-click Sync & Match**: Triggers a full Radarr sync → RSS sync → matching-engine pass. Inline progress shows per-step metrics (e.g., “3 new movies from Radarr”, “2 RSS updates”), includes granular log lines, reloads automatically on success, and surfaces dismissible errors with guidance.
+- **Smart matching engine**: Normalizes RSS titles, scores resolution/source/codec/audio, detects dubbed content, enforces size deltas, and enriches each release with TMDB posters and identifiers for later rendering.
+- **Manual actions with guardrails**: Add, upgrade, or ignore releases directly from the UI via `/actions` endpoints. TMDB ID is required (Radarr constraint), but releases can be added regardless of their status (NEW / ATTENTION_NEEDED / IGNORED).
+- **Comprehensive Settings UI**: Manage Radarr credentials, feed definitions, and quality rules (weights, preferred languages, dubbed penalties, upgrade thresholds) with instant validation. All settings live in SQLite, not env vars.
+- **Structured logging & log explorer**: Persistent `structured_logs` table plus `/data/logs` and `/api/logs` endpoints enable timeline filtering, severity breakdowns, and deep dives without shell access.
+- **Global search & keyboard shortcuts**: Cmd/Ctrl+K focuses the search bar. Dashboard search filters cards client-side; data pages leverage server-side queries.
+- **Responsive shell & dark mode**: Tailwind-based layout adapts to mobile/desktop, with saved dark/light preference and mobile-friendly sidebar controls.
+
+## System Architecture
+
+### Tech Stack
+- **Runtime**: Node.js 22+, TypeScript, Express.
+- **Rendering**: EJS templates with Tailwind CSS; vanilla JS in `public/js/ui.js`.
+- **Data**: SQLite via better-sqlite3 with write-ahead logging (WAL) for durability.
+- **Background services**: In-process cron-style intervals plus on-demand jobs.
+- **Containerization**: Multi-arch Docker image (`ghcr.io/geek-baba/desiarr`).
+
+### Data Flow
+```
+Radarr API -> syncRadarrMovies() -> radarr_movies table
+RSS feeds -> syncRssFeeds() -> rss_feed_items table
+                  \                       /
+                   \                     /
+                    -> matchingEngine() -> releases table (with TMDB metadata)
+                                              |
+                                              v
+                                     Dashboard & Data Pages
+```
+`syncProgress` tracks the state of manual “Sync & Match” jobs, while `structuredLogging` captures rich diagnostics through every stage.
+
+### Key Modules
+- `src/server.ts`: Express bootstrap, static assets, router mounting, startup sync + schedule orchestration.
+- `src/routes/`: HTTP handlers for dashboard, data explorers, actions, settings, logs, and refresh-stat endpoints.
+- `src/services/`:
+  - `radarrSync.ts`: Radarr movie ingestion, quality profile lookup, library caching.
+  - `rssSync.ts`: Feed polling, release parsing, Brave/TMDB/IMDB enrichment, duplicate handling.
+  - `matchingEngine.ts`: Core matching/scoring engine, TMDB poster extraction, Radarr history merging.
+  - `syncProgress.ts`: In-memory progress + detail lines for long-running jobs.
+  - `structuredLogging.ts` & `logStorage.ts`: Centralized logging helpers and pruning.
+- `src/models/`: lightweight repo layer for feeds, releases, settings.
+- `src/tmdb`, `src/imdb`, `src/brave`, `src/radarr`: API clients and type adapters.
+- `views/`: EJS templates for dashboard and supporting pages; `partials/` share shell, header, sidebar, and card components.
+- `public/js/ui.js`: Handles dark mode, sidebar controls, global search wiring, icon rendering, timestamp formatting, copy-to-clipboard, and Sync & Match polling UI.
+
+## Data Model
+SQLite schema (see `src/db/index.ts`) includes:
+- `rss_feeds`: UI-managed feed configs (name, URL, enabled flag, timestamps).
+- `rss_feed_items`: Raw feed snapshots with normalized titles, parsed tags, manual override flags, and sync timestamps.
+- `radarr_movies`: Cached Radarr library (TMDB/IMDB IDs, language, images, file info, `synced_at`).
+- `releases`: Canonical release records powering the UI; stores TMDB poster URL, normalized metadata, scoring fields, Radarr linkage, and status (`NEW`, `UPGRADE`, `ATTENTION_NEEDED`, `IGNORED`).
+- `app_settings`: JSON blobs for quality rules, sync intervals, and Radarr credentials.
+- `structured_logs`: Persistent log storage with severity, source, job_id, and optional stack traces.
+
+## Background Jobs & Sync Pipeline
+- **Initial boot**: `runFullSyncCycle()` executes Radarr sync → RSS sync → matching engine before the server starts listening.
+- **Scheduled intervals** (configurable via settings):
+  - Radarr sync every `radarrSyncIntervalHours` (default 6h).
+  - RSS sync every `rssSyncIntervalHours` (default 1h) with immediate matching engine pass.
+  - Matching engine also runs every 30 minutes to reevaluate existing data.
+- **Manual Sync & Match** (`POST /build-match`):
+  1. Runs all three steps sequentially in the background.
+  2. `GET /build-match/progress` exposes {status, step, percent, details[]} for polling.
+  3. UI shows progress, new/updated counts, and errors with actionable copy.
+- **Rate limiting & resiliency**:
+  - Brave Search 429s short-circuit additional Brave calls for the current sync yet keep the job alive.
+  - TMDB/Radarr/IMDB failures bubble up to syncProgress and structured logs.
+
+## UI Pages & Routes
+| Route | Purpose |
+| --- | --- |
+| `/` | Dashboard with summary cards, stats, Sync & Match control, and grouped release tables. |
+| `/data/releases` | Flattened releases list with posters, metadata, actions, and global search. |
+| `/data/radarr` | View cached Radarr library, quality profiles, root folders, and sync timestamps. |
+| `/data/rss` | Inspect RSS feeds, raw items, parsed tags, and manual ID overrides. |
+| `/settings` | Manage Radarr API credentials, RSS feeds, quality preferences, and sync intervals. |
+| `/actions/*` | POST endpoints for add/upgrade/ignore operations tied to UI buttons. |
+| `/api/logs` & `/data/logs` | Structured log API + UI explorer with filters and live stream. |
+
+Shared header (`views/partials/app-header.ejs`) injects global search, dark-mode toggle, and “Last refreshed” timestamps on every primary page.
+
+## External Integrations
+- **Radarr API** (`src/radarr/client.ts`): Library sync, movie lookup/add, search queue triggers, quality profile and root folder reads.
+- **TMDB API** (`src/tmdb/client.ts`): Title search, metadata retrieval, poster paths for releases (stored as full URLs).
+- **IMDB/OMDB & Brave Search** (`src/imdb`, `src/brave`): Backup ID resolution when TMDB lacks results; Brave rate limiting handled gracefully.
+- **RSS feeds** (`src/services/rssSync.ts`): Parser-based ingestion with per-feed enablement and normalized metadata extraction.
 
 ## Configuration
 
 ### Radarr API Setup
+1. Obtain Radarr API key (Radarr → Settings → General → Security).
+2. Visit `/settings` → “Radarr API Configuration”.
+3. Provide the Radarr API URL (`http(s)://host:port/api/v3`) and API key.
+4. Save to persist in SQLite (survives container restarts). Environment variables are no longer used for these credentials.
 
-1. Get your Radarr API key from Radarr Settings → General → Security
-2. After starting the application, navigate to the Settings page (`/settings`)
-3. In the "Radarr API Configuration" section, enter:
-   - **Radarr API URL**: Your Radarr API URL (e.g., `http://radarr:7878/api/v3`)
-   - **Radarr API Key**: Your Radarr API key
-4. Click "Save Radarr Configuration"
-5. The configuration is stored in the database and persists across container restarts
+### RSS Feeds
+1. Go to `/settings` → “RSS Feeds”.
+2. Add feed name + URL, toggle enabled flag, and reorder as needed.
+3. Changes take effect on the next RSS sync or manual Sync & Match.
 
-**Note**: Radarr API configuration is no longer done via environment variables. Use the Settings page instead.
+### Quality & Matching Rules
+Located under `/settings`:
+- Allowed resolutions per codec (2160p/1080p/720p/480p/UNKNOWN) with preferred/discouraged codecs.
+- Weight maps for resolution, source tags (AMZN/NF/JC/ZEE5/DSNP/HS/SS/OTHER), codecs, and audio formats (Atmos/TrueHD/DDP5.1/DD5.1/2.0).
+- Language handling: preferred audio languages, bonus points, dubbed penalties.
+- Upgrade heuristics: min size delta %, score delta threshold, optional size-bonus toggle.
+- Sync cadence: Radarr and RSS interval sliders (hours).
+All values serialize to JSON inside `app_settings`.
 
-### Adding RSS Feeds
-
-1. Start the application and navigate to the Settings page (`/settings`)
-2. Click "Add Feed" to add a new RSS feed
-3. Enter the feed name and URL
-4. Enable or disable the feed as needed
-5. All feeds are stored in SQLite database (not in environment variables)
-
-### Configuring Quality Settings
-
-1. Navigate to Settings page (`/settings`)
-2. Configure resolution rules:
-   - Enable/disable specific resolutions (2160p, 1080p, 720p, 480p)
-   - Set preferred and discouraged codecs per resolution
-3. Adjust quality weights:
-   - Resolution weights
-   - Source tag weights (AMZN, NF, JC, ZEE5, DSNP, HS)
-   - Codec weights (x264, x265, HEVC, AVC)
-   - Audio weights (Atmos, TrueHD, DDP5.1, DD5.1, 2.0)
-4. Configure language preferences:
-   - Preferred audio languages (e.g., hi, en)
-   - Preferred language bonus
-   - Dubbed penalty
-5. Set upgrade thresholds:
-   - Minimum size increase percentage for upgrade
-   - Upgrade threshold (score delta)
-   - Poll interval in minutes
-
-All settings are persisted in SQLite database.
+### Environment Variables
+Only a handful are read in `src/config.ts` (e.g., `PORT`, optional DB paths). All user-level configuration flows through the UI to the database.
 
 ## Local Development
 
 ### Prerequisites
-
-- Node.js 22+ 
+- Node.js 22+
 - npm
 
 ### Setup
-
-1. Install dependencies:
+1. Install dependencies
    ```bash
    npm install
    ```
-
-2. Set environment variables (optional):
+2. (Optional) set the port
    ```bash
    export PORT=8085
    ```
-   
-   **Note**: Radarr API configuration is done via the Settings page after starting the app, not via environment variables.
-
-3. Build the project:
+3. Build TypeScript
    ```bash
    npm run build
    ```
-
-4. Start the server:
+4. Start the server
    ```bash
    npm start
    ```
+5. Visit `http://localhost:8085` and configure Radarr + feeds from `/settings`.
 
-5. Access the dashboard at `http://localhost:8085`
+Hot-reload/workflow tips:
+- `npm run dev` (if defined) can be wired to ts-node-dev/nodemon.
+- SQLite database lives under `./data` (configurable).
 
 ## Docker
 
 ### Build Locally
-
 ```bash
-docker build -t radarr-indian-helper .
-docker run -p 8085:8085 -v /path/to/data:/app/data radarr-indian-helper
+docker build -t desiarr .
+docker run -p 8085:8085 -v /path/to/data:/app/data desiarr
 ```
 
-**Note**: Radarr API configuration is done via the Settings page after starting the container, not via environment variables.
-
-### Docker Quick Start
-
+### Quick Start with GHCR Image
 ```bash
-docker pull ghcr.io/geek-baba/radarr-indian-helper:latest
+docker pull ghcr.io/geek-baba/desiarr:latest
 
 docker run -d \
-  --name radarr-indian-helper \
+  --name desiarr \
   -p 8085:8085 \
   -v /path/to/data:/app/data \
-  ghcr.io/geek-baba/radarr-indian-helper:latest
+  ghcr.io/geek-baba/desiarr:latest
 ```
+Then browse to `http://localhost:8085/settings` to enter Radarr credentials and feeds.
 
-After starting the container, navigate to `http://localhost:8085/settings` to configure your Radarr API URL and API key.
+## Deployment Workflow
+- GitHub Actions workflow `Build and Push Docker Image` builds multi-arch images on every `main` push and publishes to GHCR.
+- `deploy.sh` pulls the freshly tagged `latest`, stops the running container, redeploys, and reminds operators that Radarr config lives in the UI.
+- Default container listens on port 8085; adjust host port mapping as desired.
 
-## Project Structure
-
-```
-src/
-  ├── server.ts              # Main Express server
-  ├── config.ts              # Environment configuration
-  ├── db/index.ts            # Database initialization
-  ├── models/                # Data models (releases, feeds, settings)
-  ├── types/                 # TypeScript type definitions
-  ├── radarr/                # Radarr API client
-  ├── rss/                   # RSS feed processing
-  ├── scoring/               # Quality scoring logic
-  └── routes/                # Express routes
-views/                       # EJS templates
-public/                      # Static files
-```
-
-## Database Schema
-
-The application uses SQLite with three main tables:
-
-- **releases**: Stores parsed RSS feed items with quality scores and status
-- **rss_feeds**: Stores RSS feed configurations
-- **app_settings**: Stores quality settings and preferences
+## Logging & Troubleshooting
+- Structured logs stored in SQLite power `/data/logs` and the real-time `/api/logs` endpoint. Filter by level, source, or job ID to investigate sync issues.
+- Sync progress UI surfaces user-facing errors; raw stack traces and API responses are captured in `structured_logs`.
+- Brave Search rate limits emit `BRAVE_RATE_LIMITED` warnings; TMDB/Radarr errors show both in progress UI and logs.
+- RSS and Radarr data explorers provide ground truth when matching results differ from expectations.
 
 ## License
 
