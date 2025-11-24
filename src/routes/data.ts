@@ -23,19 +23,27 @@ router.get('/releases', (req: Request, res: Response) => {
     const allReleases = releasesModel.getAll();
     const feeds = feedsModel.getAll();
     
-    // Get feed names for display
+    // Get feed names and types for display and filtering
     const feedMap: { [key: number]: string } = {};
+    const feedTypeMap: { [key: number]: string } = {};
     for (const feed of feeds) {
       if (feed.id) {
         feedMap[feed.id] = feed.name;
+        feedTypeMap[feed.id] = feed.feed_type || 'movie';
       }
     }
     
+    // Filter out releases from TV feeds - only show movie releases
+    const movieReleases = allReleases.filter(release => {
+      const feedType = feedTypeMap[release.feed_id] || 'movie';
+      return feedType === 'movie';
+    });
+    
     // Filter releases by search term if provided
-    let filteredReleases = allReleases;
+    let filteredReleases = movieReleases;
     if (search && search.trim()) {
       const searchLower = search.toLowerCase().trim();
-      filteredReleases = allReleases.filter(release => {
+      filteredReleases = movieReleases.filter(release => {
         const title = (release.title || '').toLowerCase();
         const normalizedTitle = (release.normalized_title || '').toLowerCase();
         const tmdbTitle = (release.tmdb_title || '').toLowerCase();
@@ -107,7 +115,7 @@ router.get('/releases', (req: Request, res: Response) => {
     
     res.render('releases-list', {
       releases: enrichedReleases,
-      totalReleases: allReleases.length,
+      totalReleases: movieReleases.length,
       filteredCount: enrichedReleases.length,
       search,
       hideRefresh: true,
