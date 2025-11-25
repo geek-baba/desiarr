@@ -305,6 +305,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     const allRssItems = getSyncedRssItems();
     const tvRssItems = allRssItems.filter(item => tvFeedIds.includes(item.feed_id));
     stats.totalRssItems = tvRssItems.length;
+    const ignoredShowKeys: Set<string> = ignoredShowsModel.getAllKeys();
 
     console.log(`[TV MATCHING ENGINE] Processing ${tvRssItems.length} TV RSS items from ${tvFeedIds.length} feed(s)...`);
     syncProgress.update(`Processing ${tvRssItems.length} TV RSS items...`, 0, tvRssItems.length);

@@ -718,7 +718,7 @@ router.get('/tv', async (req: Request, res: Response) => {
     }
 
     // Build show groups with metadata
-    const showGroups: Array<{
+    type ShowGroup = {
       showKey: string;
       showName: string;
       tvdbId?: number;
@@ -730,7 +730,10 @@ router.get('/tv', async (req: Request, res: Response) => {
       newShows: any[];      // NEW_SHOW or NEW_SEASON status (not in Sonarr)
       existingShows: any[]; // IGNORED or ADDED status (in Sonarr)
       unmatched: any[];     // No IDs, not in Sonarr
-    }> = [];
+      manuallyIgnored: boolean;
+      ignoreReleaseId?: number | null;
+    };
+    const showGroups: ShowGroup[] = [];
 
     for (const showKey in releasesByShow) {
       const releases = releasesByShow[showKey];
@@ -781,7 +784,7 @@ router.get('/tv', async (req: Request, res: Response) => {
     }
 
     // Helper function to get the latest release date from a show group
-    const getLatestDate = (group: typeof showGroups[0]) => {
+    const getLatestDate = (group: ShowGroup) => {
       const allReleases = [...group.newShows, ...group.existingShows, ...group.unmatched];
       if (allReleases.length === 0) return 0;
       const dates = allReleases.map(r => new Date(r.published_at).getTime());
@@ -807,7 +810,7 @@ router.get('/tv', async (req: Request, res: Response) => {
     };
 
     // Helper function to get status priority for sorting
-    const getStatusPriority = (group: typeof showGroups[0]): number => {
+    const getStatusPriority = (group: ShowGroup): number => {
       if (group.newShows.length > 0) return 1; // NEW_SHOW first
       if (group.existingShows.length > 0) return 2; // EXISTING second
       return 3; // UNMATCHED last
