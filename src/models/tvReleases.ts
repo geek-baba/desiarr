@@ -49,11 +49,24 @@ export const tvReleasesModel = {
   upsert: (release: Omit<TvRelease, 'id'>): TvRelease => {
     const existing = tvReleasesModel.getByGuid(release.guid);
     
+    // Check if this show is in the ignored list (for both new and existing releases)
+    const { buildShowKey, ignoredShowsModel } = require('./ignoredShows');
+    const showKey = buildShowKey({
+      tvdbId: release.tvdb_id || null,
+      tmdbId: release.tmdb_id || null,
+      showName: release.show_name || null,
+    });
+    const isIgnoredInList = showKey ? ignoredShowsModel.isIgnored({
+      tvdbId: release.tvdb_id || null,
+      tmdbId: release.tmdb_id || null,
+      showName: release.show_name || null,
+    }) : false;
+    
     if (existing) {
       const manuallyIgnored =
         typeof release.manually_ignored === 'boolean'
           ? release.manually_ignored
-          : Boolean(existing.manually_ignored);
+          : Boolean(existing.manually_ignored) || isIgnoredInList;
       // Update existing release, but preserve status if it's ADDED or manually ignored
       const status =
         existing.status === 'ADDED' || manuallyIgnored
@@ -106,6 +119,10 @@ export const tvReleasesModel = {
       return tvReleasesModel.getByGuid(release.guid)!;
     } else {
       // Insert new release
+      // Check if show is ignored and override status/manually_ignored if needed
+      const finalManuallyIgnored = isIgnoredInList || (release.manually_ignored ? 1 : 0);
+      const finalStatus = isIgnoredInList ? 'IGNORED' : release.status;
+      
       const result = db.prepare(`
         INSERT INTO tv_releases (
           guid, title, normalized_title, show_name, season_number, source_site, feed_id, link,
@@ -130,8 +147,8 @@ export const tvReleasesModel = {
         release.tmdb_poster_url || null,
         release.sonarr_series_id || null,
         release.sonarr_series_title || null,
-        release.status,
-        release.manually_ignored ? 1 : 0
+        finalStatus,
+        finalManuallyIgnored
       );
       return tvReleasesModel.getById(result.lastInsertRowid as number)!;
     }

@@ -728,18 +728,20 @@ router.get('/tv', async (req: Request, res: Response) => {
     }
 
     // Group TV releases by show (using TVDB ID as primary key, fallback to show name)
+    // Use the same showKey format as ignored_shows table for consistency
+    const ignoredShowKeys = ignoredShowsModel.getAllKeys();
     const releasesByShow: { [key: string]: any[] } = {};
     
     for (const release of allTvReleases) {
-      let showKey: string;
-      if (release.tvdb_id) {
-        showKey = `tvdb_${release.tvdb_id}`;
-      } else if (release.tmdb_id) {
-        showKey = `tmdb_${release.tmdb_id}`;
-      } else {
-        // Use normalized show name as key
-        const normalizedShowName = (release.show_name || release.title || 'Unknown').toLowerCase().trim();
-        showKey = `name_${normalizedShowName}`;
+      const showKey = buildShowKey({
+        tvdbId: release.tvdb_id || null,
+        tmdbId: release.tmdb_id || null,
+        showName: release.show_name || release.title || null,
+      });
+      
+      if (!showKey) {
+        // Skip releases without a valid showKey
+        continue;
       }
       
       if (!releasesByShow[showKey]) {
@@ -795,7 +797,9 @@ router.get('/tv', async (req: Request, res: Response) => {
       }
 
       const allShowReleases = [...newShows, ...existingShows, ...unmatched];
-      const manuallyIgnored = allShowReleases.length > 0 && allShowReleases.every((release: any) => release.manually_ignored);
+      // Check if show is ignored using the same showKey format
+      const isIgnoredInList = ignoredShowKeys.has(showKey);
+      const manuallyIgnored = isIgnoredInList || (allShowReleases.length > 0 && allShowReleases.every((release: any) => release.manually_ignored));
       const ignoreReleaseId = allShowReleases[0]?.id || null;
 
       // Generate TVDB URL using slug format
