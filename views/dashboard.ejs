@@ -47,33 +47,33 @@
     
     <main class="p-4 lg:p-6">
       <% 
-        const viewType = typeof viewType !== 'undefined' ? viewType : 'movies';
+        const currentViewType = typeof viewType !== 'undefined' ? viewType : 'movies';
         
         // Movies view variables
-        const hasNewMovies = viewType === 'movies' && newMoviesByPeriod && (
+        const hasNewMovies = currentViewType === 'movies' && newMoviesByPeriod && (
           (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
           (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
           (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
         );
-        const hasExistingMovies = viewType === 'movies' && existingMoviesByPeriod && (
+        const hasExistingMovies = currentViewType === 'movies' && existingMoviesByPeriod && (
           (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
           (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
           (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
         );
-        const hasUnmatched = viewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
+        const hasUnmatched = currentViewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
         
         // TV view variables
-        const hasNewShows = viewType === 'tv' && newShowsByPeriod && (
+        const hasNewShows = currentViewType === 'tv' && newShowsByPeriod && (
           (newShowsByPeriod.today && newShowsByPeriod.today.length > 0) ||
           (newShowsByPeriod.yesterday && newShowsByPeriod.yesterday.length > 0) ||
           (newShowsByPeriod.older && newShowsByPeriod.older.length > 0)
         );
-        const hasNewSeasons = viewType === 'tv' && newSeasonsByPeriod && (
+        const hasNewSeasons = currentViewType === 'tv' && newSeasonsByPeriod && (
           (newSeasonsByPeriod.today && newSeasonsByPeriod.today.length > 0) ||
           (newSeasonsByPeriod.yesterday && newSeasonsByPeriod.yesterday.length > 0) ||
           (newSeasonsByPeriod.older && newSeasonsByPeriod.older.length > 0)
         );
-        const hasAttentionNeeded = viewType === 'tv' && attentionNeededByPeriod && (
+        const hasAttentionNeeded = currentViewType === 'tv' && attentionNeededByPeriod && (
           (attentionNeededByPeriod.today && attentionNeededByPeriod.today.length > 0) ||
           (attentionNeededByPeriod.yesterday && attentionNeededByPeriod.yesterday.length > 0) ||
           (attentionNeededByPeriod.older && attentionNeededByPeriod.older.length > 0)
@@ -85,7 +85,7 @@
         <nav class="flex gap-2 items-center" aria-label="View Type">
           <a 
             href="/movies"
-            class="<%= viewType === 'movies' 
+            class="<%= currentViewType === 'movies' 
               ? 'bg-blue-600 text-white shadow-md' 
               : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
               px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
@@ -97,7 +97,7 @@
           </a>
           <a 
             href="/tv"
-            class="<%= viewType === 'tv' 
+            class="<%= currentViewType === 'tv' 
               ? 'bg-blue-600 text-white shadow-md' 
               : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
               px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
@@ -110,7 +110,7 @@
         </nav>
       </div>
 
-      <% if (viewType === 'movies') { %>
+      <% if (currentViewType === 'movies') { %>
         <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
           <p class="text-gray-600 dark:text-gray-400">No movie releases found. Go to Settings to add RSS feeds and sync data.</p>
         <% } else { %>
@@ -316,7 +316,7 @@
 
       <% } %>
 
-      <% } else if (viewType === 'tv') { %>
+      <% } else if (currentViewType === 'tv') { %>
         <% if (!hasNewShows && !hasNewSeasons && !hasAttentionNeeded) { %>
           <p class="text-gray-600 dark:text-gray-400">No TV releases found. Go to Settings to add RSS feeds and sync data.</p>
         <% } else { %>
