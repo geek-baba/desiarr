@@ -331,12 +331,15 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         
         // For BWT TVShows feed, remove year from show name (year is often inaccurate)
         if (feedName.toLowerCase().includes('bwt') && feedName.toLowerCase().includes('tv')) {
-          // Remove year patterns: "2025", "(2025)", "[2025]", ".2025", " 2025"
+          // Remove year patterns: "2025", "(2025)", "[2025]", ".2025", " 2025", "2025 " (at end)
+          // Handle year at the end of show name (common in release names like "Show Name 2025 S03")
           showName = showName
             .replace(/\s*\((\d{4})\)\s*/g, ' ') // Remove (2025)
             .replace(/\s*\[(\d{4})\]\s*/g, ' ') // Remove [2025]
             .replace(/\s*\.(\d{4})\s*/g, ' ') // Remove .2025
-            .replace(/\s+(\d{4})\s+/g, ' ') // Remove standalone 2025
+            .replace(/\s+(\d{4})\s+/g, ' ') // Remove standalone 2025 with spaces on both sides
+            .replace(/\s+(\d{4})$/g, '') // Remove year at the end (e.g., "Show Name 2025")
+            .replace(/^(\d{4})\s+/g, '') // Remove year at the start
             .replace(/\s+/g, ' ') // Normalize spaces
             .trim();
           console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
