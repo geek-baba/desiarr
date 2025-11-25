@@ -16,6 +16,7 @@ import tvdbClient from '../tvdb/client';
 import { settingsModel } from '../models/settings';
 import { runMatchingEngine } from '../services/matchingEngine';
 import { runTvMatchingEngine } from '../services/tvMatchingEngine';
+import { backfillTvdbSlugs } from '../services/tvdbSlugBackfill';
 
 const router = Router();
 
@@ -1349,6 +1350,35 @@ router.get('/tv-releases/match/progress', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get TV matching engine progress error:', error);
     res.status(500).json({ error: 'Failed to get progress' });
+  }
+});
+
+// Backfill TVDB slugs for existing TV shows
+router.post('/tv/backfill-slugs', async (req: Request, res: Response) => {
+  try {
+    console.log('TVDB slug backfill requested');
+    
+    // Run backfill asynchronously
+    (async () => {
+      try {
+        const stats = await backfillTvdbSlugs();
+        console.log('TVDB slug backfill completed:', stats);
+      } catch (error: any) {
+        console.error('TVDB slug backfill error:', error);
+      }
+    })();
+    
+    res.json({ 
+      success: true, 
+      message: 'TVDB slug backfill started. Check logs for progress.' 
+    });
+  } catch (error: any) {
+    console.error('Start TVDB slug backfill error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to start TVDB slug backfill',
+      message: error?.message || 'Unknown error'
+    });
   }
 });
 

@@ -1,18 +1,20 @@
 /**
- * Backfill script to update all existing TV shows with TVDB slugs
- * This script fetches slugs from TVDB API for all TV releases that have a TVDB ID but no slug
- * 
- * Run with: npx tsx scripts/backfillTvdbSlugs.ts
- * Or compile first: npm run build && node dist/scripts/backfillTvdbSlugs.js
+ * Backfill service to update all existing TV shows with TVDB slugs
+ * This service fetches slugs from TVDB API for all TV releases that have a TVDB ID but no slug
  */
 
-// Re-export from service for backward compatibility
-export { backfillTvdbSlugs } from '../src/services/tvdbSlugBackfill';
+import db from '../db';
+import tvdbClient from '../tvdb/client';
+import { settingsModel } from '../models/settings';
 
-// Legacy script entry point
-import { backfillTvdbSlugs } from '../src/services/tvdbSlugBackfill';
+export interface BackfillStats {
+  total: number;
+  updated: number;
+  errors: number;
+  processedIds: number;
+}
 
-async function runBackfill() {
+export async function backfillTvdbSlugs(): Promise<BackfillStats> {
   console.log('Starting TVDB slug backfill...');
   
   // Get TVDB API key
@@ -20,8 +22,7 @@ async function runBackfill() {
   const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
   
   if (!tvdbApiKey) {
-    console.error('TVDB API key not configured. Please add it in Settings.');
-    process.exit(1);
+    throw new Error('TVDB API key not configured. Please add it in Settings.');
   }
   
   // Get all TV releases with TVDB ID but no slug
@@ -86,22 +87,18 @@ async function runBackfill() {
     }
   }
   
+  const stats: BackfillStats = {
+    total: releases.length,
+    updated,
+    errors,
+    processedIds: processedTvdbIds.size,
+  };
+  
   console.log(`\nBackfill complete!`);
   console.log(`  Updated: ${updated} releases`);
   console.log(`  Errors: ${errors}`);
   console.log(`  Unique TVDB IDs processed: ${processedTvdbIds.size}`);
-}
-
-// Run if called directly
-if (require.main === module) {
-  runBackfill()
-    .then(() => {
-      console.log('Done!');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('Fatal error:', error);
-      process.exit(1);
-    });
+  
+  return stats;
 }
 
