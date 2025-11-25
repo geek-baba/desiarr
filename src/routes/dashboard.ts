@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
+import { tvReleasesModel } from '../models/tvReleases';
 import { feedsModel } from '../models/feeds';
 import { settingsModel } from '../models/settings';
 import { config } from '../config';
@@ -82,7 +83,14 @@ function buildDisplayTitle(release: Release): string {
   return base || release.title || 'Unknown Title';
 }
 
+// Root dashboard route - redirect to movies or show selector
 router.get('/', async (req: Request, res: Response) => {
+  // Default to movies view for now (can be changed to show selector later)
+  res.redirect('/dashboard/movies');
+});
+
+// Movies Dashboard route
+router.get('/movies', async (req: Request, res: Response) => {
   try {
     // Get all releases (dashboard now uses only synced data, no real-time API calls)
     const allReleases = releasesModel.getAll();
@@ -635,6 +643,7 @@ router.get('/', async (req: Request, res: Response) => {
     const lastRefresh = lastRefreshResult?.value ? new Date(lastRefreshResult.value) : null;
     
     res.render('dashboard', {
+      viewType: 'movies',
       newMoviesByPeriod,
       existingMoviesByPeriod,
       unmatchedItems,
@@ -642,7 +651,233 @@ router.get('/', async (req: Request, res: Response) => {
       lastRefresh: lastRefresh ? lastRefresh.toISOString() : null,
     });
   } catch (error) {
-    console.error('Dashboard error:', error);
+    console.error('Movies Dashboard error:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
+// TV Dashboard route
+router.get('/tv', async (req: Request, res: Response) => {
+  try {
+    // Get all TV releases
+    const allTvReleases = tvReleasesModel.getAll();
+    const feeds = feedsModel.getAll();
+    
+    // Get feed names for display
+    const feedMap: { [key: number]: string } = {};
+    for (const feed of feeds) {
+      if (feed.id) {
+        feedMap[feed.id] = feed.name;
+      }
+    }
+
+    // Add feed names to releases
+    for (const release of allTvReleases) {
+      (release as any).feedName = feedMap[release.feed_id] || 'Unknown Feed';
+    }
+
+    // Group TV releases by show (using TVDB ID as primary key, fallback to show name)
+    const releasesByShow: { [key: string]: any[] } = {};
+    
+    for (const release of allTvReleases) {
+      let showKey: string;
+      if (release.tvdb_id) {
+        showKey = `tvdb_${release.tvdb_id}`;
+      } else if (release.tmdb_id) {
+        showKey = `tmdb_${release.tmdb_id}`;
+      } else {
+        // Use normalized show name as key
+        const normalizedShowName = (release.show_name || release.title || 'Unknown').toLowerCase().trim();
+        showKey = `name_${normalizedShowName}`;
+      }
+      
+      if (!releasesByShow[showKey]) {
+        releasesByShow[showKey] = [];
+      }
+      releasesByShow[showKey].push(release);
+    }
+
+    // Build show groups with metadata
+    const showGroups: Array<{
+      showKey: string;
+      showName: string;
+      tvdbId?: number;
+      tmdbId?: number;
+      imdbId?: string;
+      sonarrSeriesId?: number;
+      sonarrSeriesTitle?: string;
+      posterUrl?: string;
+      newShows: any[];      // NEW_SHOW status
+      newSeasons: any[];    // NEW_SEASON status
+      attentionNeeded: any[]; // ATTENTION_NEEDED status
+      ignored: any[];       // IGNORED status
+    }> = [];
+
+    for (const showKey in releasesByShow) {
+      const releases = releasesByShow[showKey];
+      
+      // Get the primary show info (prefer from releases with IDs)
+      const primaryRelease = releases.find(r => r.tvdb_id) || 
+                            releases.find(r => r.tmdb_id) || 
+                            releases.find(r => r.sonarr_series_id) ||
+                            releases[0];
+      
+      const showName = primaryRelease.sonarr_series_title || 
+                      primaryRelease.show_name || 
+                      primaryRelease.title || 
+                      'Unknown Show';
+
+      // Categorize releases by status
+      const newShows = releases.filter(r => r.status === 'NEW_SHOW');
+      const newSeasons = releases.filter(r => r.status === 'NEW_SEASON');
+      const attentionNeeded = releases.filter(r => r.status === 'ATTENTION_NEEDED');
+      const ignored = releases.filter(r => r.status === 'IGNORED');
+
+      // Get poster URL from any release
+      let posterUrl: string | undefined;
+      const releaseWithPoster = releases.find(r => r.tmdb_poster_url || r.tvdb_poster_url);
+      if (releaseWithPoster) {
+        posterUrl = releaseWithPoster.tmdb_poster_url || releaseWithPoster.tvdb_poster_url;
+      }
+
+      showGroups.push({
+        showKey,
+        showName,
+        tvdbId: primaryRelease.tvdb_id,
+        tmdbId: primaryRelease.tmdb_id,
+        imdbId: primaryRelease.imdb_id,
+        sonarrSeriesId: primaryRelease.sonarr_series_id,
+        sonarrSeriesTitle: primaryRelease.sonarr_series_title,
+        posterUrl,
+        newShows,
+        newSeasons,
+        attentionNeeded,
+        ignored,
+      });
+    }
+
+    // Helper function to get the latest release date from a show group
+    const getLatestDate = (group: typeof showGroups[0]) => {
+      const allReleases = [...group.newShows, ...group.newSeasons, ...group.attentionNeeded];
+      if (allReleases.length === 0) return 0;
+      const dates = allReleases.map(r => new Date(r.published_at).getTime());
+      return Math.max(...dates);
+    };
+
+    // Helper function to categorize by time period
+    const categorizeByTimePeriod = (dateMs: number): string => {
+      const now = Date.now();
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (dateMs >= today.getTime()) {
+        return 'today';
+      } else if (dateMs >= yesterday.getTime()) {
+        return 'yesterday';
+      } else {
+        return 'older';
+      }
+    };
+
+    // Helper function to get status priority for sorting
+    const getStatusPriority = (group: typeof showGroups[0]): number => {
+      if (group.newShows.length > 0) return 1; // NEW_SHOW first
+      if (group.newSeasons.length > 0) return 2; // NEW_SEASON second
+      return 3; // ATTENTION_NEEDED last
+    };
+
+    // Filter out show groups that have no releases to display
+    const filteredShowGroups = showGroups.filter(group => 
+      group.newShows.length > 0 || 
+      group.newSeasons.length > 0 || 
+      group.attentionNeeded.length > 0
+    );
+
+    // Separate into New Shows, New Seasons, and Attention Needed
+    const newShows: typeof showGroups = [];
+    const newSeasons: typeof showGroups = [];
+    const attentionNeeded: typeof showGroups = [];
+
+    for (const group of filteredShowGroups) {
+      if (group.newShows.length > 0) {
+        newShows.push(group);
+      } else if (group.newSeasons.length > 0) {
+        newSeasons.push(group);
+      } else if (group.attentionNeeded.length > 0) {
+        attentionNeeded.push(group);
+      }
+    }
+
+    // Helper function to group by time period
+    const groupByTimePeriod = (groups: typeof showGroups) => {
+      const grouped: { [key: string]: typeof showGroups } = {
+        today: [],
+        yesterday: [],
+        older: [],
+      };
+
+      for (const group of groups) {
+        const latestDate = getLatestDate(group);
+        const period = categorizeByTimePeriod(latestDate);
+        
+        if (period === 'today') {
+          grouped.today.push(group);
+        } else if (period === 'yesterday') {
+          grouped.yesterday.push(group);
+        } else {
+          grouped.older.push(group);
+        }
+      }
+
+      // Sort within each time period: first by status priority, then by date (newest first)
+      for (const period in grouped) {
+        grouped[period].sort((a, b) => {
+          const priorityA = getStatusPriority(a);
+          const priorityB = getStatusPriority(b);
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+          const dateA = getLatestDate(a);
+          const dateB = getLatestDate(b);
+          return dateB - dateA;
+        });
+      }
+
+      return grouped;
+    };
+
+    const newShowsByPeriod = groupByTimePeriod(newShows);
+    const newSeasonsByPeriod = groupByTimePeriod(newSeasons);
+    const attentionNeededByPeriod = groupByTimePeriod(attentionNeeded);
+
+    // Get Sonarr base URL for links from settings
+    const allSettings = settingsModel.getAll();
+    const sonarrApiUrl = allSettings.find(s => s.key === 'sonarr_api_url')?.value || '';
+    
+    let sonarrBaseUrl = '';
+    if (sonarrApiUrl) {
+      sonarrBaseUrl = sonarrApiUrl
+        .replace(/\/api\/v3\/?$/i, '')
+        .replace(/\/$/, '');
+    }
+
+    // Get last refresh time (matching engine last run)
+    const lastRefreshResult = db.prepare("SELECT value FROM app_settings WHERE key = 'matching_last_run'").get() as { value: string } | undefined;
+    const lastRefresh = lastRefreshResult?.value ? new Date(lastRefreshResult.value) : null;
+    
+    res.render('dashboard', {
+      viewType: 'tv',
+      newShowsByPeriod,
+      newSeasonsByPeriod,
+      attentionNeededByPeriod,
+      sonarrBaseUrl,
+      lastRefresh: lastRefresh ? lastRefresh.toISOString() : null,
+    });
+  } catch (error) {
+    console.error('TV Dashboard error:', error);
     res.status(500).send('Internal server error');
   }
 });

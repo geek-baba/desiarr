@@ -47,36 +47,86 @@
     
     <main class="p-4 lg:p-6">
       <% 
-        // Define these variables for search functionality
-        const hasNewMovies = newMoviesByPeriod && (
+        const viewType = typeof viewType !== 'undefined' ? viewType : 'movies';
+        
+        // Movies view variables
+        const hasNewMovies = viewType === 'movies' && newMoviesByPeriod && (
           (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
           (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
           (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
         );
-        const hasExistingMovies = existingMoviesByPeriod && (
+        const hasExistingMovies = viewType === 'movies' && existingMoviesByPeriod && (
           (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
           (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
           (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
         );
-        const hasUnmatched = unmatchedItems && unmatchedItems.length > 0;
+        const hasUnmatched = viewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
+        
+        // TV view variables
+        const hasNewShows = viewType === 'tv' && newShowsByPeriod && (
+          (newShowsByPeriod.today && newShowsByPeriod.today.length > 0) ||
+          (newShowsByPeriod.yesterday && newShowsByPeriod.yesterday.length > 0) ||
+          (newShowsByPeriod.older && newShowsByPeriod.older.length > 0)
+        );
+        const hasNewSeasons = viewType === 'tv' && newSeasonsByPeriod && (
+          (newSeasonsByPeriod.today && newSeasonsByPeriod.today.length > 0) ||
+          (newSeasonsByPeriod.yesterday && newSeasonsByPeriod.yesterday.length > 0) ||
+          (newSeasonsByPeriod.older && newSeasonsByPeriod.older.length > 0)
+        );
+        const hasAttentionNeeded = viewType === 'tv' && attentionNeededByPeriod && (
+          (attentionNeededByPeriod.today && attentionNeededByPeriod.today.length > 0) ||
+          (attentionNeededByPeriod.yesterday && attentionNeededByPeriod.yesterday.length > 0) ||
+          (attentionNeededByPeriod.older && attentionNeededByPeriod.older.length > 0)
+        );
       %>
 
-      <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
-        <p class="text-gray-600 dark:text-gray-400">No releases found. Go to Settings to add RSS feeds and sync data.</p>
-      <% } else { %>
-        
-        <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
-        <div class="mb-6">
-          <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
-            <% 
-              const mainTabs = [
-                { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
-                { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
-                { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatched },
-              ];
-              let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
-              if (firstVisibleTab === -1) firstVisibleTab = 0;
-            %>
+      <!-- Movies/TV View Selector Tabs -->
+      <div class="mb-6">
+        <nav class="flex gap-2 items-center" aria-label="View Type">
+          <a 
+            href="/dashboard/movies"
+            class="<%= viewType === 'movies' 
+              ? 'bg-blue-600 text-white shadow-md' 
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
+            </svg>
+            <span>Movies</span>
+          </a>
+          <a 
+            href="/dashboard/tv"
+            class="<%= viewType === 'tv' 
+              ? 'bg-blue-600 text-white shadow-md' 
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+            </svg>
+            <span>TV Shows</span>
+          </a>
+        </nav>
+      </div>
+
+      <% if (viewType === 'movies') { %>
+        <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
+          <p class="text-gray-600 dark:text-gray-400">No movie releases found. Go to Settings to add RSS feeds and sync data.</p>
+        <% } else { %>
+          
+          <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
+          <div class="mb-6">
+            <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
+              <% 
+                const mainTabs = [
+                  { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
+                  { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
+                  { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatched },
+                ];
+                let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
+                if (firstVisibleTab === -1) firstVisibleTab = 0;
+              %>
             <% mainTabs.forEach((tab, index) => { %>
               <% if (tab.visible) { %>
                 <button 
@@ -264,7 +314,259 @@
         </div>
         <% } %>
 
+      <% } %>
 
+      <% } else if (viewType === 'tv') { %>
+        <% if (!hasNewShows && !hasNewSeasons && !hasAttentionNeeded) { %>
+          <p class="text-gray-600 dark:text-gray-400">No TV releases found. Go to Settings to add RSS feeds and sync data.</p>
+        <% } else { %>
+          
+          <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
+          <div class="mb-6">
+            <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
+              <% 
+                const mainTabs = [
+                  { key: 'new-shows', label: 'New Shows', count: (newShowsByPeriod.today?.length || 0) + (newShowsByPeriod.yesterday?.length || 0) + (newShowsByPeriod.older?.length || 0), visible: hasNewShows },
+                  { key: 'new-seasons', label: 'New Seasons', count: (newSeasonsByPeriod.today?.length || 0) + (newSeasonsByPeriod.yesterday?.length || 0) + (newSeasonsByPeriod.older?.length || 0), visible: hasNewSeasons },
+                  { key: 'attention', label: 'Attention Needed', count: (attentionNeededByPeriod.today?.length || 0) + (attentionNeededByPeriod.yesterday?.length || 0) + (attentionNeededByPeriod.older?.length || 0), visible: hasAttentionNeeded },
+                ];
+                let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
+                if (firstVisibleTab === -1) firstVisibleTab = 0;
+              %>
+              <% mainTabs.forEach((tab, index) => { %>
+                <% if (tab.visible) { %>
+                  <button 
+                    onclick="showMainSection('<%= tab.key %>')" 
+                    id="main-tab-<%= tab.key %>"
+                    class="<%= index === firstVisibleTab 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+                      px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+                  >
+                    <span><%= tab.label %></span>
+                    <span class="<%= index === firstVisibleTab 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' %> 
+                      px-2 py-0.5 rounded-full text-xs font-semibold min-w-[1.75rem] text-center">
+                      <%= tab.count %>
+                    </span>
+                  </button>
+                <% } %>
+              <% }); %>
+              
+              <!-- Sync & Match Button -->
+              <div class="ml-auto flex items-center gap-3">
+                <button 
+                  id="syncMatchBtn" 
+                  class="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  type="button"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                  </svg>
+                  <span id="syncMatchBtnText">Sync & Match</span>
+                </button>
+              </div>
+            </nav>
+            
+            <!-- Progress Container (shown below tabs when active) -->
+            <div id="syncProgressContainer" class="hidden mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex-1">
+                  <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+                    <div id="syncProgressBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                  </div>
+                  <div id="syncProgressText" class="text-sm text-gray-700 dark:text-gray-300 font-medium"></div>
+                  <div id="syncProgressDetails" class="hidden mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1"></div>
+                  <div id="syncProgressError" class="hidden mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="flex-1">
+                        <div class="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Error</div>
+                        <div id="syncProgressErrorText" class="text-sm text-red-700 dark:text-red-400"></div>
+                      </div>
+                      <button 
+                        id="dismissErrorBtn"
+                        onclick="dismissSyncError()"
+                        class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 flex-shrink-0"
+                        aria-label="Dismiss error"
+                      >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- New Shows Section -->
+          <% if (hasNewShows) { %>
+            <div id="main-section-new-shows" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for New Shows -->
+              <div class="mb-4">
+                <nav class="flex gap-2" aria-label="Time Periods">
+                  <% const newShowsPeriods = [
+                    { key: 'today', label: 'Today', count: newShowsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: newShowsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: newShowsByPeriod.older?.length || 0 }
+                  ]; %>
+                  <% 
+                    let firstNewShowsIndex = -1;
+                    newShowsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstNewShowsIndex === -1) {
+                        firstNewShowsIndex = index;
+                      }
+                    });
+                  %>
+                  <% newShowsPeriods.forEach((period, index) => { %>
+                    <% if (period.count > 0) { %>
+                      <button 
+                        onclick="showNewShowsPeriod('<%= period.key %>')" 
+                        id="new-shows-tab-<%= period.key %>"
+                        class="<%= index === firstNewShowsIndex 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                      >
+                        <span><%= period.label %></span>
+                        <span class="<%= index === firstNewShowsIndex 
+                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                          <%= period.count %>
+                        </span>
+                      </button>
+                    <% } %>
+                  <% }); %>
+                </nav>
+              </div>
+
+              <!-- New Shows Time Period Sections -->
+              <% newShowsPeriods.forEach((period, index) => { %>
+                <% if (newShowsByPeriod[period.key] && newShowsByPeriod[period.key].length > 0) { %>
+                  <div id="new-shows-period-<%= period.key %>" class="new-shows-section <%= index === firstNewShowsIndex ? '' : 'hidden' %>">
+                    <% newShowsByPeriod[period.key].forEach(show => { %>
+                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+                    <% }); %>
+                  </div>
+                <% } %>
+              <% }); %>
+            </div>
+          <% } %>
+
+          <!-- New Seasons Section -->
+          <% if (hasNewSeasons) { %>
+            <div id="main-section-new-seasons" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for New Seasons -->
+              <div class="mb-4">
+                <nav class="flex gap-2" aria-label="Time Periods">
+                  <% const newSeasonsPeriods = [
+                    { key: 'today', label: 'Today', count: newSeasonsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: newSeasonsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: newSeasonsByPeriod.older?.length || 0 }
+                  ]; %>
+                  <% 
+                    let firstNewSeasonsIndex = -1;
+                    newSeasonsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstNewSeasonsIndex === -1) {
+                        firstNewSeasonsIndex = index;
+                      }
+                    });
+                  %>
+                  <% newSeasonsPeriods.forEach((period, index) => { %>
+                    <% if (period.count > 0) { %>
+                      <button 
+                        onclick="showNewSeasonsPeriod('<%= period.key %>')" 
+                        id="new-seasons-tab-<%= period.key %>"
+                        class="<%= index === firstNewSeasonsIndex 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                      >
+                        <span><%= period.label %></span>
+                        <span class="<%= index === firstNewSeasonsIndex 
+                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                          <%= period.count %>
+                        </span>
+                      </button>
+                    <% } %>
+                  <% }); %>
+                </nav>
+              </div>
+
+              <!-- New Seasons Time Period Sections -->
+              <% newSeasonsPeriods.forEach((period, index) => { %>
+                <% if (newSeasonsByPeriod[period.key] && newSeasonsByPeriod[period.key].length > 0) { %>
+                  <div id="new-seasons-period-<%= period.key %>" class="new-seasons-section <%= index === firstNewSeasonsIndex ? '' : 'hidden' %>">
+                    <% newSeasonsByPeriod[period.key].forEach(show => { %>
+                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+                    <% }); %>
+                  </div>
+                <% } %>
+              <% }); %>
+            </div>
+          <% } %>
+
+          <!-- Attention Needed Section -->
+          <% if (hasAttentionNeeded) { %>
+            <div id="main-section-attention" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for Attention Needed -->
+              <div class="mb-4">
+                <nav class="flex gap-2" aria-label="Time Periods">
+                  <% const attentionPeriods = [
+                    { key: 'today', label: 'Today', count: attentionNeededByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: attentionNeededByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: attentionNeededByPeriod.older?.length || 0 }
+                  ]; %>
+                  <% 
+                    let firstAttentionIndex = -1;
+                    attentionPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstAttentionIndex === -1) {
+                        firstAttentionIndex = index;
+                      }
+                    });
+                  %>
+                  <% attentionPeriods.forEach((period, index) => { %>
+                    <% if (period.count > 0) { %>
+                      <button 
+                        onclick="showAttentionPeriod('<%= period.key %>')" 
+                        id="attention-tab-<%= period.key %>"
+                        class="<%= index === firstAttentionIndex 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                      >
+                        <span><%= period.label %></span>
+                        <span class="<%= index === firstAttentionIndex 
+                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                          <%= period.count %>
+                        </span>
+                      </button>
+                    <% } %>
+                  <% }); %>
+                </nav>
+              </div>
+
+              <!-- Attention Needed Time Period Sections -->
+              <% attentionPeriods.forEach((period, index) => { %>
+                <% if (attentionNeededByPeriod[period.key] && attentionNeededByPeriod[period.key].length > 0) { %>
+                  <div id="attention-period-<%= period.key %>" class="attention-section <%= index === firstAttentionIndex ? '' : 'hidden' %>">
+                    <% attentionNeededByPeriod[period.key].forEach(show => { %>
+                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+                    <% }); %>
+                  </div>
+                <% } %>
+              <% }); %>
+            </div>
+          <% } %>
+
+        <% } %>
       <% } %>
     </main>
   </div>
@@ -470,6 +772,91 @@
       activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
       
       // Update active badge
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    // TV View Tab Switching Functions
+    function showNewShowsPeriod(period) {
+      document.querySelectorAll('.new-shows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-shows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-shows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-shows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showNewSeasonsPeriod(period) {
+      document.querySelectorAll('.new-seasons-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-seasons-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-seasons-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-seasons-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showAttentionPeriod(period) {
+      document.querySelectorAll('.attention-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`attention-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="attention-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`attention-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
       const activeBadge = activeTab.querySelector('span:last-child');
       if (activeBadge) {
         activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
