@@ -497,6 +497,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           link: String(item.link || ''),
           published_at: String(item.published_at || new Date().toISOString()),
           tvdb_id: enrichment.tvdbId ?? undefined,
+          tvdb_slug: enrichment.tvdbSlug ?? undefined,
           tmdb_id: enrichment.tmdbId ?? undefined,
           imdb_id: enrichment.imdbId ?? undefined,
           tvdb_poster_url: enrichment.tvdbPosterUrl ?? undefined,

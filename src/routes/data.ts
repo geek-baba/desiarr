@@ -474,7 +474,8 @@ router.get('/rss', (req: Request, res: Response) => {
         SELECT 
           rss.*,
           f.feed_type,
-          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id,
+          tv.tvdb_slug
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -486,7 +487,8 @@ router.get('/rss', (req: Request, res: Response) => {
         SELECT 
           rss.*,
           f.feed_type,
-          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id,
+          tv.tvdb_slug
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -498,7 +500,8 @@ router.get('/rss', (req: Request, res: Response) => {
         SELECT 
           rss.*,
           f.feed_type,
-          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id
+          COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id,
+          tv.tvdb_slug
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
@@ -512,14 +515,14 @@ router.get('/rss', (req: Request, res: Response) => {
     const lastRefresh = lastSync ? (typeof lastSync === 'string' ? lastSync : lastSync.toISOString()) : null;
     
     // Enrich items with TVDB URLs (for TV shows)
-    // Note: We don't have slug stored, so we'll generate from title
+    // Use stored slug from database if available
     const itemsWithUrls = items.map((item: any) => {
       if (item.feed_type === 'tv' && item.tvdb_id) {
         // Try to get show name from title or normalized_title
         const showName = item.title || item.normalized_title || '';
         return {
           ...item,
-          tvdb_url: getTvdbUrl(item.tvdb_id, null, showName),
+          tvdb_url: getTvdbUrl(item.tvdb_id, item.tvdb_slug, showName),
         };
       }
       return item;

@@ -799,10 +799,10 @@ router.get('/tv', async (req: Request, res: Response) => {
       const ignoreReleaseId = allShowReleases[0]?.id || null;
 
       // Generate TVDB URL using slug format
-      // Note: We don't store slug in DB yet, so we'll generate from show name
-      // In the future, we could fetch slug from TVDB API or store it
+      // Use stored slug from database if available, otherwise generate from show name
       const tvdbId = primaryRelease.tvdb_id;
-      const tvdbUrl = getTvdbUrl(tvdbId, null, showName);
+      const tvdbSlug = primaryRelease.tvdb_slug;
+      const tvdbUrl = getTvdbUrl(tvdbId, tvdbSlug, showName);
 
       showGroups.push({
         showKey,

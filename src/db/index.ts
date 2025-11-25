@@ -416,6 +416,10 @@ if (!tvReleaseColumns.includes('manually_ignored')) {
   db.exec('ALTER TABLE tv_releases ADD COLUMN manually_ignored INTEGER NOT NULL DEFAULT 0');
   console.log('Added column: tv_releases.manually_ignored');
 }
+if (!tvReleaseColumns.includes('tvdb_slug')) {
+  db.exec('ALTER TABLE tv_releases ADD COLUMN tvdb_slug TEXT');
+  console.log('Added column: tv_releases.tvdb_slug');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS ignored_shows (

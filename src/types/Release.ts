@@ -53,6 +53,7 @@ export interface TvRelease {
   link: string;
   published_at: string;
   tvdb_id?: number;
+  tvdb_slug?: string;
   tmdb_id?: number;
   imdb_id?: string;
   tvdb_poster_url?: string;

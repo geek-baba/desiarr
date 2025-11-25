@@ -71,6 +71,7 @@ export const tvReleasesModel = {
           link = ?,
           published_at = ?,
           tvdb_id = ?,
+          tvdb_slug = ?,
           tmdb_id = ?,
           imdb_id = ?,
           tvdb_poster_url = ?,
@@ -91,6 +92,7 @@ export const tvReleasesModel = {
         release.link,
         release.published_at,
         release.tvdb_id || null,
+        release.tvdb_slug || null,
         release.tmdb_id || null,
         release.imdb_id || null,
         release.tvdb_poster_url || null,
@@ -107,9 +109,9 @@ export const tvReleasesModel = {
       const result = db.prepare(`
         INSERT INTO tv_releases (
           guid, title, normalized_title, show_name, season_number, source_site, feed_id, link,
-          published_at, tvdb_id, tmdb_id, imdb_id, tvdb_poster_url, tmdb_poster_url,
+          published_at, tvdb_id, tvdb_slug, tmdb_id, imdb_id, tvdb_poster_url, tmdb_poster_url,
           sonarr_series_id, sonarr_series_title, status, manually_ignored
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         release.guid,
         release.title,
@@ -121,6 +123,7 @@ export const tvReleasesModel = {
         release.link,
         release.published_at,
         release.tvdb_id || null,
+        release.tvdb_slug || null,
         release.tmdb_id || null,
         release.imdb_id || null,
         release.tvdb_poster_url || null,
