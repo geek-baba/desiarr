@@ -12,6 +12,7 @@ import { runMatchingEngine } from '../services/matchingEngine';
 import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
+import { buildShowKey, ignoredShowsModel } from '../models/ignoredShows';
 import db from '../db';
 
 const router = Router();
