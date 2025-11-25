@@ -73,6 +73,12 @@ export const tvReleasesModel = {
           ? existing.status
           : release.status;
 
+      // Preserve existing IDs if new release doesn't have them (to avoid overwriting manually set IDs)
+      const tvdbId = release.tvdb_id ?? existing.tvdb_id ?? null;
+      const tvdbSlug = release.tvdb_slug ?? existing.tvdb_slug ?? null;
+      const tmdbId = release.tmdb_id ?? existing.tmdb_id ?? null;
+      const imdbId = release.imdb_id ?? existing.imdb_id ?? null;
+
       db.prepare(`
         UPDATE tv_releases SET
           title = ?,
@@ -104,10 +110,10 @@ export const tvReleasesModel = {
         release.feed_id,
         release.link,
         release.published_at,
-        release.tvdb_id || null,
-        release.tvdb_slug || null,
-        release.tmdb_id || null,
-        release.imdb_id || null,
+        tvdbId,
+        tvdbSlug,
+        tmdbId,
+        imdbId,
         release.tvdb_poster_url || null,
         release.tmdb_poster_url || null,
         release.sonarr_series_id || null,
