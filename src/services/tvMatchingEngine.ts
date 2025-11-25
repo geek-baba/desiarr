@@ -261,10 +261,15 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     errors: 0,
   };
 
+  const parentProgress = syncProgress.get();
+  const nestedInFullSync = Boolean(parentProgress && parentProgress.isRunning && parentProgress.type === 'full');
+
   try {
     console.log('Starting TV matching engine...');
-    syncProgress.start('tv-matching', 0);
-    syncProgress.update('Initializing TV matching engine...', 0);
+    if (!nestedInFullSync) {
+      syncProgress.start('tv-matching', 0);
+      syncProgress.update('Initializing TV matching engine...', 0);
+    }
     
     const allSettings = settingsModel.getAll();
     const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
@@ -289,7 +294,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     if (tvFeedIds.length === 0) {
       console.log('No TV feeds configured. Skipping TV matching engine.');
       syncProgress.update('No TV feeds configured', 0, 0);
-      syncProgress.complete();
+      if (!nestedInFullSync) {
+        syncProgress.complete();
+      }
       return stats;
     }
 
@@ -304,7 +311,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     if (tvRssItems.length === 0) {
       console.log('[TV MATCHING ENGINE] No TV RSS items to process.');
       syncProgress.update('No TV RSS items to process', 0, 0);
-      syncProgress.complete();
+      if (!nestedInFullSync) {
+        syncProgress.complete();
+      }
       return stats;
     }
 
@@ -524,12 +533,16 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
       stats.errors,
       details.length > 0 ? details : undefined
     );
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.complete();
+    }
 
     return stats;
   } catch (error: any) {
     console.error('[TV MATCHING ENGINE] Error:', error);
-    syncProgress.error(`TV matching failed: ${error?.message || 'Unknown error'}`);
+    if (!nestedInFullSync) {
+      syncProgress.error(`TV matching failed: ${error?.message || 'Unknown error'}`);
+    }
     throw error;
   }
 }

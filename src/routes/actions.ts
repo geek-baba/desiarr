@@ -246,8 +246,8 @@ router.post('/:id/ignore', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Release not found' });
     }
 
-    // Update release status
-    releasesModel.updateStatus(release.id!, 'IGNORED');
+    // Update release status and mark as manually ignored
+    releasesModel.updateStatus(release.id!, 'IGNORED', { manuallyIgnored: true });
 
     res.json({ success: true, message: 'Release ignored' });
   } catch (error) {

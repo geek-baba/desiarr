@@ -5,6 +5,7 @@ function convertRelease(row: any): MovieRelease {
   return {
     ...row,
     is_dubbed: Boolean(row.is_dubbed),
+    manually_ignored: Boolean(row.manually_ignored),
   };
 }
 
@@ -50,10 +51,17 @@ export const movieReleasesModel = {
     const existing = movieReleasesModel.getByGuid(release.guid);
     
     if (existing) {
-      // Update existing release, but preserve status if it's ADDED or UPGRADED
-      const status = existing.status === 'ADDED' || existing.status === 'UPGRADED' 
-        ? existing.status 
-        : release.status;
+      const manuallyIgnored =
+        typeof release.manually_ignored === 'boolean'
+          ? release.manually_ignored
+          : Boolean(existing.manually_ignored);
+      // Update existing release, but preserve status if it's ADDED, UPGRADED, or manually ignored
+      const status =
+        existing.status === 'ADDED' ||
+        existing.status === 'UPGRADED' ||
+        manuallyIgnored
+          ? existing.status
+          : release.status;
 
               db.prepare(`
                 UPDATE movie_releases SET
@@ -84,7 +92,8 @@ export const movieReleasesModel = {
                   status = ?,
                   existing_file_path = ?,
                   existing_file_attributes = ?,
-                  radarr_history = ?,
+                radarr_history = ?,
+                  manually_ignored = ?,
                   last_checked_at = datetime('now')
                 WHERE guid = ?
               `).run(
@@ -116,6 +125,7 @@ export const movieReleasesModel = {
                 (release as any).existing_file_path || null,
                 (release as any).existing_file_attributes || null,
                 (release as any).radarr_history || null,
+                manuallyIgnored ? 1 : 0,
                 release.guid
               );
       return movieReleasesModel.getByGuid(release.guid)!;
@@ -128,8 +138,8 @@ export const movieReleasesModel = {
           published_at, tmdb_id, tmdb_title, tmdb_original_language, tmdb_poster_url, imdb_id, is_dubbed,
           audio_languages, radarr_movie_id, radarr_movie_title,
           radarr_existing_quality_score, new_quality_score, status,
-          existing_file_path, existing_file_attributes, radarr_history
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          existing_file_path, existing_file_attributes, radarr_history, manually_ignored
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         release.guid,
         release.title,
@@ -159,14 +169,23 @@ export const movieReleasesModel = {
         release.status,
         (release as any).existing_file_path || null,
         (release as any).existing_file_attributes || null,
-        (release as any).radarr_history || null
+        (release as any).radarr_history || null,
+        release.manually_ignored ? 1 : 0
       );
       return movieReleasesModel.getById(result.lastInsertRowid as number)!;
     }
   },
 
-  updateStatus: (id: number, status: ReleaseStatus): boolean => {
-    const result = db.prepare('UPDATE movie_releases SET status = ?, last_checked_at = datetime(\'now\') WHERE id = ?').run(status, id);
+  updateStatus: (id: number, status: ReleaseStatus, options?: { manuallyIgnored?: boolean }): boolean => {
+    const manuallyIgnored =
+      typeof options?.manuallyIgnored === 'boolean'
+        ? options.manuallyIgnored
+        : status === 'IGNORED';
+    const result = db
+      .prepare(
+        'UPDATE movie_releases SET status = ?, manually_ignored = ?, last_checked_at = datetime(\'now\') WHERE id = ?'
+      )
+      .run(status, manuallyIgnored ? 1 : 0, id);
     return result.changes > 0;
   },
 };

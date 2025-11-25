@@ -38,6 +38,7 @@ export interface MovieRelease {
   existing_file_path?: string;
   existing_file_attributes?: string;
   radarr_history?: string;
+  manually_ignored?: boolean;
 }
 
 export interface TvRelease {

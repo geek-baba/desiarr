@@ -405,5 +405,11 @@ if (!existingAppSettings) {
   );
 }
 
+const movieReleaseColumns = db.prepare("PRAGMA table_info(movie_releases)").all().map((col: any) => col.name);
+if (!movieReleaseColumns.includes('manually_ignored')) {
+  db.exec('ALTER TABLE movie_releases ADD COLUMN manually_ignored INTEGER NOT NULL DEFAULT 0');
+  console.log('Added column: movie_releases.manually_ignored');
+}
+
 export default db;
 

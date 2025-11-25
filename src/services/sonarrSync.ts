@@ -38,10 +38,15 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
     lastSyncAt: new Date(),
   };
 
+  const parentProgress = syncProgress.get();
+  const nestedInFullSync = Boolean(parentProgress && parentProgress.isRunning && parentProgress.type === 'full');
+
   try {
     console.log('Starting Sonarr shows sync...');
-    syncProgress.start('sonarr', 0);
-    syncProgress.update('Connecting to Sonarr...', 0);
+    if (!nestedInFullSync) {
+      syncProgress.start('sonarr', 0);
+      syncProgress.update('Connecting to Sonarr...', 0);
+    }
     
     // Update client config in case it changed
     console.log('Updating Sonarr client configuration...');
@@ -66,7 +71,9 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
     
     if (series.length === 0) {
       syncProgress.update('No shows found in Sonarr (this might be normal if your Sonarr library is empty)', 0, 0);
-      syncProgress.complete();
+      if (!nestedInFullSync) {
+        syncProgress.complete();
+      }
       return stats;
     }
     
@@ -208,13 +215,17 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
     settingsModel.set('sonarr_last_sync', new Date().toISOString());
 
     console.log(`Sonarr sync completed: ${stats.synced} new, ${stats.updated} updated, ${stats.errors.length} errors`);
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.complete();
+    }
 
     return stats;
   } catch (error: any) {
     console.error('Sonarr sync error:', error);
     const errorMessage = error?.message || error?.toString() || 'Unknown error';
-    syncProgress.error(`Sonarr sync failed: ${errorMessage}`);
+    if (!nestedInFullSync) {
+      syncProgress.error(`Sonarr sync failed: ${errorMessage}`);
+    }
     throw error;
   }
 }

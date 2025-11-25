@@ -37,10 +37,15 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
   // Track if Brave search is rate limited to skip it for remaining items
   let braveRateLimited = false;
 
+  const parentProgress = syncProgress.get();
+  const nestedInFullSync = Boolean(parentProgress && parentProgress.isRunning && parentProgress.type === 'full');
+
   try {
     console.log('Starting RSS feeds sync...');
-    syncProgress.start('rss', 0);
-    syncProgress.update('Initializing...', 0);
+    if (!nestedInFullSync) {
+      syncProgress.start('rss', 0);
+      syncProgress.update('Initializing...', 0);
+    }
     
     // Get API keys for TMDB/OMDB/Brave lookups
     const allSettings = settingsModel.getAll();
@@ -730,20 +735,24 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
     }
     
     // Mark sync as complete
-    syncProgress.update(
-      'RSS sync completed', 
-      stats.feedsProcessed, 
-      stats.totalFeeds, 
-      stats.errors.length,
-      finalDetails.length > 0 ? finalDetails : undefined
-    );
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.update(
+        'RSS sync completed', 
+        stats.feedsProcessed, 
+        stats.totalFeeds, 
+        stats.errors.length,
+        finalDetails.length > 0 ? finalDetails : undefined
+      );
+      syncProgress.complete();
+    }
     
     return stats;
   } catch (error: any) {
     console.error('RSS sync error:', error);
-    syncProgress.update(`Error: ${error?.message || 'Unknown error'}`, 0, 0, 1);
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.update(`Error: ${error?.message || 'Unknown error'}`, 0, 0, 1);
+      syncProgress.complete();
+    }
     throw error;
   }
 }
