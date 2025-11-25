@@ -86,7 +86,7 @@ function buildDisplayTitle(release: Release): string {
 // Root dashboard route - redirect to movies or show selector
 router.get('/', async (req: Request, res: Response) => {
   // Default to movies view for now (can be changed to show selector later)
-  res.redirect('/dashboard/movies');
+  res.redirect('/movies');
 });
 
 // Movies Dashboard route
