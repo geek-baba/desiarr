@@ -20,13 +20,18 @@ import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 const router = Router();
 
 /**
- * Generate TVDB URL from TVDB ID and show name
+ * Generate TVDB URL from TVDB ID, slug, and show name
  * TVDB v4 uses slug-based URLs: https://thetvdb.com/series/{slug}
- * Falls back to numeric ID if slug cannot be generated
+ * Prefers API-provided slug, falls back to generated slug, then numeric ID
  */
-function getTvdbUrl(tvdbId: number | undefined | null, showName?: string): string | null {
+function getTvdbUrl(tvdbId: number | undefined | null, tvdbSlug?: string | null, showName?: string): string | null {
   if (!tvdbId) {
     return null;
+  }
+  
+  // Use API-provided slug if available (most reliable)
+  if (tvdbSlug) {
+    return `https://thetvdb.com/series/${tvdbSlug}`;
   }
   
   // Try to create slug from show name if available
@@ -374,9 +379,10 @@ router.get('/sonarr', (req: Request, res: Response) => {
     const totalPages = Math.ceil(total / 50);
     
     // Enrich shows with TVDB URLs
+    // Note: We don't have slug stored, so we'll generate from title
     const showsWithUrls = shows.map((show: any) => ({
       ...show,
-      tvdb_url: getTvdbUrl(show.tvdb_id, show.title),
+      tvdb_url: getTvdbUrl(show.tvdb_id, null, show.title),
     }));
     
     res.render('sonarr-data', {
@@ -506,13 +512,14 @@ router.get('/rss', (req: Request, res: Response) => {
     const lastRefresh = lastSync ? (typeof lastSync === 'string' ? lastSync : lastSync.toISOString()) : null;
     
     // Enrich items with TVDB URLs (for TV shows)
+    // Note: We don't have slug stored, so we'll generate from title
     const itemsWithUrls = items.map((item: any) => {
       if (item.feed_type === 'tv' && item.tvdb_id) {
         // Try to get show name from title or normalized_title
         const showName = item.title || item.normalized_title || '';
         return {
           ...item,
-          tvdb_url: getTvdbUrl(item.tvdb_id, showName),
+          tvdb_url: getTvdbUrl(item.tvdb_id, null, showName),
         };
       }
       return item;

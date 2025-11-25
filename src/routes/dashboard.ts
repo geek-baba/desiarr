@@ -24,13 +24,18 @@ function sanitizeTitle(value: string): string {
 }
 
 /**
- * Generate TVDB URL from TVDB ID and show name
+ * Generate TVDB URL from TVDB ID, slug, and show name
  * TVDB v4 uses slug-based URLs: https://thetvdb.com/series/{slug}
- * Falls back to numeric ID if slug cannot be generated
+ * Prefers API-provided slug, falls back to generated slug, then numeric ID
  */
-function getTvdbUrl(tvdbId: number | undefined, showName?: string): string {
+function getTvdbUrl(tvdbId: number | undefined, tvdbSlug?: string | null, showName?: string): string {
   if (!tvdbId) {
     return '#';
+  }
+  
+  // Use API-provided slug if available (most reliable)
+  if (tvdbSlug) {
+    return `https://thetvdb.com/series/${tvdbSlug}`;
   }
   
   // Try to create slug from show name if available
@@ -794,8 +799,10 @@ router.get('/tv', async (req: Request, res: Response) => {
       const ignoreReleaseId = allShowReleases[0]?.id || null;
 
       // Generate TVDB URL using slug format
+      // Note: We don't store slug in DB yet, so we'll generate from show name
+      // In the future, we could fetch slug from TVDB API or store it
       const tvdbId = primaryRelease.tvdb_id;
-      const tvdbUrl = getTvdbUrl(tvdbId, showName);
+      const tvdbUrl = getTvdbUrl(tvdbId, null, showName);
 
       showGroups.push({
         showKey,

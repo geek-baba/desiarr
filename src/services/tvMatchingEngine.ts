@@ -76,12 +76,14 @@ async function enrichTvShow(
   braveApiKey: string | undefined
 ): Promise<{
   tvdbId: number | null;
+  tvdbSlug: string | null;
   tmdbId: number | null;
   imdbId: string | null;
   tvdbPosterUrl: string | null;
   tmdbPosterUrl: string | null;
 }> {
   let tvdbId: number | null = null;
+  let tvdbSlug: string | null = null;
   let tmdbId: number | null = null;
   let imdbId: string | null = null;
   let tvdbPosterUrl: string | null = null;
@@ -97,13 +99,22 @@ async function enrichTvShow(
         const tvdbShow = tvdbResults[0];
         // TVDB v4 API uses 'tvdb_id' or 'id' field
         tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
+        // Extract slug from search result (TVDB v4 API may include slug, nameSlug, or slug field)
+        tvdbSlug = (tvdbShow as any).slug || (tvdbShow as any).nameSlug || (tvdbShow as any).name_slug || null;
         
         if (tvdbId) {
           console.log(`    ✓ Found TVDB ID: ${tvdbId}`);
+          if (tvdbSlug) {
+            console.log(`    ✓ Found TVDB slug: ${tvdbSlug}`);
+          }
           
           // Get extended info for poster and other IDs
           const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
           if (tvdbExtended) {
+            // Extract slug from extended info if not found in search result
+            if (!tvdbSlug) {
+              tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+            }
             // Extract poster URL (TVDB v4 structure may vary)
             const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
             if (artwork && Array.isArray(artwork)) {
@@ -199,6 +210,7 @@ async function enrichTvShow(
 
   return {
     tvdbId,
+    tvdbSlug,
     tmdbId,
     imdbId,
     tvdbPosterUrl,
@@ -361,6 +373,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         let sonarrShow = findSonarrShowByName(showName);
         let enrichment: {
           tvdbId: number | null;
+          tvdbSlug: string | null;
           tmdbId: number | null;
           imdbId: string | null;
           tvdbPosterUrl: string | null;
@@ -370,14 +383,27 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         if (sonarrShow) {
           console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
           
-          // Use IDs from Sonarr
+          // Use IDs from Sonarr (slug will be null, we'll need to fetch it if needed)
           enrichment = {
             tvdbId: sonarrShow.tvdb_id || null,
+            tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
             tmdbId: sonarrShow.tmdb_id || null,
             imdbId: sonarrShow.imdb_id || null,
             tvdbPosterUrl: null, // Will extract from images if available
             tmdbPosterUrl: null, // Will extract from images if available
           };
+          
+          // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+          if (enrichment.tvdbId && tvdbApiKey) {
+            try {
+              const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
+              if (tvdbExtended) {
+                enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+              }
+            } catch (error) {
+              // Silently fail, slug is optional
+            }
+          }
           
           // Extract poster URLs from Sonarr images
           if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
