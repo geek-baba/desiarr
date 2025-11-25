@@ -66,6 +66,15 @@
           Add to Sonarr
         </button>
       <% } %>
+      <% if (!show.manuallyIgnored && show.ignoreReleaseId) { %>
+        <button 
+          class="w-full px-3 py-2 rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors font-medium text-sm"
+          onclick="ignoreTvShow(<%= show.ignoreReleaseId %>)"
+          aria-label="Ignore TV show"
+        >
+          Ignore Show
+        </button>
+      <% } %>
     </div>
 
     <!-- Show Info -->

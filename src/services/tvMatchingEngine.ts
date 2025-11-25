@@ -10,6 +10,7 @@ import { getSyncedRssItems } from './rssSync';
 import { getSyncedSonarrShowByTvdbId, getSyncedSonarrShowBySonarrId, findSonarrShowByName } from './sonarrSync';
 import { feedsModel } from '../models/feeds';
 import { syncProgress } from './syncProgress';
+import { ignoredShowsModel, buildShowKey } from '../models/ignoredShows';
 
 export interface TvMatchingStats {
   totalRssItems: number;
@@ -444,6 +445,16 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           stats.newShows++;
         }
 
+        const showKey = buildShowKey({
+          tvdbId: enrichment.tvdbId || item.tvdb_id || null,
+          tmdbId: enrichment.tmdbId || item.tmdb_id || null,
+          showName,
+        });
+        const showManuallyIgnored = showKey ? ignoredShowKeys.has(showKey) : false;
+        if (showManuallyIgnored) {
+          status = 'IGNORED';
+        }
+
         // Preserve ADDED status if it was manually added
         const finalStatus = preserveStatus ? 'ADDED' : status;
 
@@ -467,6 +478,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           sonarr_series_title: sonarrCheck.sonarrSeriesTitle ?? undefined,
           status: finalStatus,
           last_checked_at: new Date().toISOString(),
+          manually_ignored: showManuallyIgnored,
         };
 
         tvReleasesModel.upsert(tvRelease);

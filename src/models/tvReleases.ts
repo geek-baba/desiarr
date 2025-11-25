@@ -5,6 +5,7 @@ function convertTvRelease(row: any): TvRelease {
   return {
     ...row,
     season_number: row.season_number ? parseInt(row.season_number, 10) : undefined,
+    manually_ignored: Boolean(row.manually_ignored),
   };
 }
 
@@ -49,10 +50,15 @@ export const tvReleasesModel = {
     const existing = tvReleasesModel.getByGuid(release.guid);
     
     if (existing) {
-      // Update existing release, but preserve status if it's ADDED
-      const status = existing.status === 'ADDED' 
-        ? existing.status 
-        : release.status;
+      const manuallyIgnored =
+        typeof release.manually_ignored === 'boolean'
+          ? release.manually_ignored
+          : Boolean(existing.manually_ignored);
+      // Update existing release, but preserve status if it's ADDED or manually ignored
+      const status =
+        existing.status === 'ADDED' || manuallyIgnored
+          ? existing.status
+          : release.status;
 
       db.prepare(`
         UPDATE tv_releases SET
@@ -72,6 +78,7 @@ export const tvReleasesModel = {
           sonarr_series_id = ?,
           sonarr_series_title = ?,
           status = ?,
+          manually_ignored = ?,
           last_checked_at = datetime('now')
         WHERE guid = ?
       `).run(
@@ -91,6 +98,7 @@ export const tvReleasesModel = {
         release.sonarr_series_id || null,
         release.sonarr_series_title || null,
         status,
+        manuallyIgnored ? 1 : 0,
         release.guid
       );
       return tvReleasesModel.getByGuid(release.guid)!;
@@ -100,8 +108,8 @@ export const tvReleasesModel = {
         INSERT INTO tv_releases (
           guid, title, normalized_title, show_name, season_number, source_site, feed_id, link,
           published_at, tvdb_id, tmdb_id, imdb_id, tvdb_poster_url, tmdb_poster_url,
-          sonarr_series_id, sonarr_series_title, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sonarr_series_id, sonarr_series_title, status, manually_ignored
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         release.guid,
         release.title,
@@ -119,15 +127,50 @@ export const tvReleasesModel = {
         release.tmdb_poster_url || null,
         release.sonarr_series_id || null,
         release.sonarr_series_title || null,
-        release.status
+        release.status,
+        release.manually_ignored ? 1 : 0
       );
       return tvReleasesModel.getById(result.lastInsertRowid as number)!;
     }
   },
 
-  updateStatus: (id: number, status: TvReleaseStatus): boolean => {
-    const result = db.prepare('UPDATE tv_releases SET status = ?, last_checked_at = datetime(\'now\') WHERE id = ?').run(status, id);
+  updateStatus: (id: number, status: TvReleaseStatus, options?: { manuallyIgnored?: boolean }): boolean => {
+    const manuallyIgnored =
+      typeof options?.manuallyIgnored === 'boolean'
+        ? options.manuallyIgnored
+        : status === 'IGNORED';
+    const result = db
+      .prepare(
+        'UPDATE tv_releases SET status = ?, manually_ignored = ?, last_checked_at = datetime(\'now\') WHERE id = ?'
+      )
+      .run(status, manuallyIgnored ? 1 : 0, id);
     return result.changes > 0;
+  },
+
+  markShowIgnoreByIdentifiers: (identifier: { tvdbId?: number | null; tmdbId?: number | null; showName?: string | null }, manuallyIgnored: boolean) => {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (identifier.tvdbId) {
+      conditions.push('tvdb_id = ?');
+      params.push(identifier.tvdbId);
+    }
+    if (identifier.tmdbId) {
+      conditions.push('tmdb_id = ?');
+      params.push(identifier.tmdbId);
+    }
+    if (identifier.showName) {
+      conditions.push('LOWER(show_name) = LOWER(?)');
+      params.push(identifier.showName);
+    }
+    if (conditions.length === 0) {
+      return;
+    }
+    const whereClause = conditions.join(' OR ');
+    db.prepare(
+      `UPDATE tv_releases
+       SET manually_ignored = ?, status = CASE WHEN ? = 1 THEN 'IGNORED' ELSE status END, last_checked_at = datetime('now')
+       WHERE ${whereClause}`
+    ).run(manuallyIgnored ? 1 : 0, manuallyIgnored ? 1 : 0, ...params);
   },
 };
 

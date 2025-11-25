@@ -552,6 +552,17 @@ router.get('/movies', async (req: Request, res: Response) => {
     const unmatchedItems: typeof movieGroups = [];
 
     for (const group of filteredMovieGroups) {
+      const allGroupReleases = [
+        ...(group.add || []),
+        ...(group.existing || []),
+        ...(group.upgrade || []),
+        ...(group.ignored || []),
+      ];
+      const manuallyIgnoredOnly = allGroupReleases.length > 0 && allGroupReleases.every((release: any) => release.manually_ignored);
+      if (manuallyIgnoredOnly) {
+        continue;
+      }
+
       // Check if this is an unmatched item (no TMDB ID and no Radarr ID)
       if (!group.tmdbId && !group.radarrMovieId) {
         // All unmatched items go to "Unmatched Items" (including ignored ones)
@@ -748,6 +759,10 @@ router.get('/tv', async (req: Request, res: Response) => {
         posterUrl = releaseWithPoster.tmdb_poster_url || releaseWithPoster.tvdb_poster_url;
       }
 
+      const allShowReleases = [...newShows, ...existingShows, ...unmatched];
+      const manuallyIgnored = allShowReleases.length > 0 && allShowReleases.every((release: any) => release.manually_ignored);
+      const ignoreReleaseId = allShowReleases[0]?.id || null;
+
       showGroups.push({
         showKey,
         showName,
@@ -760,6 +775,8 @@ router.get('/tv', async (req: Request, res: Response) => {
         newShows,
         existingShows,
         unmatched,
+        manuallyIgnored,
+        ignoreReleaseId,
       });
     }
 
@@ -798,9 +815,10 @@ router.get('/tv', async (req: Request, res: Response) => {
 
     // Filter out show groups that have no releases to display
     const filteredShowGroups = showGroups.filter(group => 
-      group.newShows.length > 0 || 
+      !group.manuallyIgnored &&
+      (group.newShows.length > 0 || 
       group.existingShows.length > 0 || 
-      group.unmatched.length > 0
+      group.unmatched.length > 0)
     );
 
     // Separate into New TVShows, Existing TVShows, and Unmatched Items (matching Movies structure)

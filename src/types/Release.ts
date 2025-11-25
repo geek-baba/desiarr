@@ -61,5 +61,6 @@ export interface TvRelease {
   sonarr_series_title?: string;
   status: TvReleaseStatus;
   last_checked_at: string;
+  manually_ignored?: boolean;
 }
 

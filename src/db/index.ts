@@ -411,5 +411,22 @@ if (!movieReleaseColumns.includes('manually_ignored')) {
   console.log('Added column: movie_releases.manually_ignored');
 }
 
+const tvReleaseColumns = db.prepare("PRAGMA table_info(tv_releases)").all().map((col: any) => col.name);
+if (!tvReleaseColumns.includes('manually_ignored')) {
+  db.exec('ALTER TABLE tv_releases ADD COLUMN manually_ignored INTEGER NOT NULL DEFAULT 0');
+  console.log('Added column: tv_releases.manually_ignored');
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ignored_shows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    show_key TEXT UNIQUE NOT NULL,
+    show_name TEXT,
+    tvdb_id INTEGER,
+    tmdb_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+
 export default db;
 

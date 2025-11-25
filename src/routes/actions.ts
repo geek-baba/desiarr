@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
 import { tvReleasesModel } from '../models/tvReleases';
+import { ignoredShowsModel } from '../models/ignoredShows';
 import radarrClient from '../radarr/client';
 import sonarrClient from '../sonarr/client';
 import { Release } from '../types/Release';
@@ -199,6 +200,31 @@ router.post('/tv/:id/add', async (req: Request, res: Response) => {
       error: `Failed to add TV show: ${errorMessage}`,
       details: error?.response?.data || undefined,
     });
+  }
+});
+
+router.post('/tv/:id/ignore', async (req: Request, res: Response) => {
+  try {
+    const release = tvReleasesModel.getById(parseInt(req.params.id, 10));
+    if (!release) {
+      return res.status(404).json({ error: 'TV release not found' });
+    }
+
+    ignoredShowsModel.add({
+      tvdbId: release.tvdb_id || null,
+      tmdbId: release.tmdb_id || null,
+      showName: release.show_name,
+    });
+
+    tvReleasesModel.markShowIgnoreByIdentifiers(
+      { tvdbId: release.tvdb_id || null, tmdbId: release.tmdb_id || null, showName: release.show_name },
+      true
+    );
+
+    res.json({ success: true, message: `TV show "${release.show_name}" ignored` });
+  } catch (error: any) {
+    console.error('Ignore TV show error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to ignore TV show' });
   }
 });
 

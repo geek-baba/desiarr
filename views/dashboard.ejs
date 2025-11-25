@@ -1060,6 +1060,25 @@
       }
     }
 
+    async function ignoreTvShow(id) {
+      if (!id) {
+        return;
+      }
+      try {
+        const res = await fetch(`/actions/tv/${id}/ignore`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TV show ignored', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast(data.error || 'Failed to ignore TV show', 'error');
+        }
+      } catch (error) {
+        console.error('Ignore TV show error:', error);
+        showToast('Error ignoring TV show: ' + error.message, 'error');
+      }
+    }
+
     async function submitAddMovie(event) {
       event.preventDefault();
       
