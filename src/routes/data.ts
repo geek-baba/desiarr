@@ -1418,5 +1418,65 @@ router.post('/tv/backfill-slugs', async (req: Request, res: Response) => {
   }
 });
 
+// Update TVDB slug for a specific TVDB ID (utility endpoint for manual fixes)
+router.post('/tv/update-slug/:tvdbId', async (req: Request, res: Response) => {
+  try {
+    const tvdbId = parseInt(req.params.tvdbId, 10);
+    
+    if (!tvdbId || isNaN(tvdbId)) {
+      return res.status(400).json({ success: false, error: 'Valid TVDB ID is required' });
+    }
+
+    // Get API keys
+    const allSettings = settingsModel.getAll();
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
+    
+    if (!tvdbApiKey) {
+      return res.status(400).json({ success: false, error: 'TVDB API key not configured' });
+    }
+
+    tvdbClient.updateConfig();
+
+    // Fetch extended info from TVDB API
+    const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
+    
+    if (!tvdbExtended) {
+      return res.status(404).json({ success: false, error: 'TVDB ID not found' });
+    }
+
+    // Extract slug from extended info
+    const slug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+    
+    if (!slug) {
+      return res.status(404).json({ success: false, error: 'No slug found in TVDB API response' });
+    }
+
+    // Update all tv_releases with this TVDB ID
+    const updateResult = db.prepare(`
+      UPDATE tv_releases 
+      SET tvdb_slug = ?
+      WHERE tvdb_id = ?
+    `).run(slug, tvdbId);
+    
+    const updated = updateResult.changes || 0;
+    
+    console.log(`Updated ${updated} tv_release(s) with TVDB ID ${tvdbId} to have slug: ${slug}`);
+
+    res.json({ 
+      success: true, 
+      message: `Updated ${updated} release(s) with slug: ${slug}`,
+      tvdbId,
+      slug,
+      updated,
+    });
+  } catch (error: any) {
+    console.error('Update TVDB slug error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update TVDB slug: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
 export default router;
 
