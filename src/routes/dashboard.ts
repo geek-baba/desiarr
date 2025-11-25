@@ -714,10 +714,9 @@ router.get('/tv', async (req: Request, res: Response) => {
       sonarrSeriesId?: number;
       sonarrSeriesTitle?: string;
       posterUrl?: string;
-      newShows: any[];      // NEW_SHOW status
-      newSeasons: any[];    // NEW_SEASON status
-      attentionNeeded: any[]; // ATTENTION_NEEDED status
-      ignored: any[];       // IGNORED status
+      newShows: any[];      // NEW_SHOW or NEW_SEASON status (not in Sonarr)
+      existingShows: any[]; // IGNORED or ADDED status (in Sonarr)
+      unmatched: any[];     // No IDs, not in Sonarr
     }> = [];
 
     for (const showKey in releasesByShow) {
@@ -735,10 +734,10 @@ router.get('/tv', async (req: Request, res: Response) => {
                       'Unknown Show';
 
       // Categorize releases by status
-      const newShows = releases.filter(r => r.status === 'NEW_SHOW');
-      const newSeasons = releases.filter(r => r.status === 'NEW_SEASON');
-      const attentionNeeded = releases.filter(r => r.status === 'ATTENTION_NEEDED');
-      const ignored = releases.filter(r => r.status === 'IGNORED');
+      // Similar to Movies: New TVShow (not in Sonarr), Existing TVShow (in Sonarr), Unmatched (no IDs)
+      const newShows = releases.filter(r => r.status === 'NEW_SHOW' || r.status === 'NEW_SEASON');
+      const existingShows = releases.filter(r => r.sonarr_series_id && (r.status === 'IGNORED' || r.status === 'ADDED'));
+      const unmatched = releases.filter(r => !r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id);
 
       // Get poster URL from any release
       let posterUrl: string | undefined;
@@ -757,15 +756,14 @@ router.get('/tv', async (req: Request, res: Response) => {
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
         newShows,
-        newSeasons,
-        attentionNeeded,
-        ignored,
+        existingShows,
+        unmatched,
       });
     }
 
     // Helper function to get the latest release date from a show group
     const getLatestDate = (group: typeof showGroups[0]) => {
-      const allReleases = [...group.newShows, ...group.newSeasons, ...group.attentionNeeded];
+      const allReleases = [...group.newShows, ...group.existingShows, ...group.unmatched];
       if (allReleases.length === 0) return 0;
       const dates = allReleases.map(r => new Date(r.published_at).getTime());
       return Math.max(...dates);
@@ -792,29 +790,32 @@ router.get('/tv', async (req: Request, res: Response) => {
     // Helper function to get status priority for sorting
     const getStatusPriority = (group: typeof showGroups[0]): number => {
       if (group.newShows.length > 0) return 1; // NEW_SHOW first
-      if (group.newSeasons.length > 0) return 2; // NEW_SEASON second
-      return 3; // ATTENTION_NEEDED last
+      if (group.existingShows.length > 0) return 2; // EXISTING second
+      return 3; // UNMATCHED last
     };
 
     // Filter out show groups that have no releases to display
     const filteredShowGroups = showGroups.filter(group => 
       group.newShows.length > 0 || 
-      group.newSeasons.length > 0 || 
-      group.attentionNeeded.length > 0
+      group.existingShows.length > 0 || 
+      group.unmatched.length > 0
     );
 
-    // Separate into New Shows, New Seasons, and Attention Needed
-    const newShows: typeof showGroups = [];
-    const newSeasons: typeof showGroups = [];
-    const attentionNeeded: typeof showGroups = [];
+    // Separate into New TVShows, Existing TVShows, and Unmatched Items (matching Movies structure)
+    const newTvShows: typeof showGroups = [];
+    const existingTvShows: typeof showGroups = [];
+    const unmatchedItems: typeof showGroups = [];
 
     for (const group of filteredShowGroups) {
-      if (group.newShows.length > 0) {
-        newShows.push(group);
-      } else if (group.newSeasons.length > 0) {
-        newSeasons.push(group);
-      } else if (group.attentionNeeded.length > 0) {
-        attentionNeeded.push(group);
+      // Check if this is an unmatched item (no TVDB ID and no TMDB ID and no Sonarr ID)
+      if (!group.tvdbId && !group.tmdbId && !group.sonarrSeriesId) {
+        unmatchedItems.push(group);
+      } else if (group.sonarrSeriesId || group.existingShows.length > 0) {
+        // Show is in Sonarr or has existing releases - goes to "Existing TVShows"
+        existingTvShows.push(group);
+      } else if (group.newShows.length > 0) {
+        // Has new releases - goes to "New TVShows"
+        newTvShows.push(group);
       }
     }
 
@@ -856,9 +857,9 @@ router.get('/tv', async (req: Request, res: Response) => {
       return grouped;
     };
 
-    const newShowsByPeriod = groupByTimePeriod(newShows);
-    const newSeasonsByPeriod = groupByTimePeriod(newSeasons);
-    const attentionNeededByPeriod = groupByTimePeriod(attentionNeeded);
+    const newTvShowsByPeriod = groupByTimePeriod(newTvShows);
+    const existingTvShowsByPeriod = groupByTimePeriod(existingTvShows);
+    // Unmatched items don't need time period grouping
 
     // Get Sonarr base URL for links from settings
     const allSettings = settingsModel.getAll();
@@ -877,9 +878,9 @@ router.get('/tv', async (req: Request, res: Response) => {
     
     res.render('dashboard', {
       viewType: 'tv',
-      newShowsByPeriod,
-      newSeasonsByPeriod,
-      attentionNeededByPeriod,
+      newTvShowsByPeriod,
+      existingTvShowsByPeriod,
+      unmatchedItems,
       sonarrBaseUrl,
       lastRefresh: lastRefresh ? lastRefresh.toISOString() : null,
     });

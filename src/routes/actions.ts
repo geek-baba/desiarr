@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
+import { tvReleasesModel } from '../models/tvReleases';
 import radarrClient from '../radarr/client';
+import sonarrClient from '../sonarr/client';
 import { Release } from '../types/Release';
 import tmdbClient from '../tmdb/client';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
@@ -101,6 +103,100 @@ router.post('/:id/add', async (req: Request, res: Response) => {
     const errorMessage = error?.message || error?.toString() || 'Unknown error';
     res.status(500).json({ 
       error: `Failed to add movie: ${errorMessage}`,
+      details: error?.response?.data || undefined,
+    });
+  }
+});
+
+router.get('/sonarr-options', async (req: Request, res: Response) => {
+  try {
+    const qualityProfiles = await sonarrClient.getQualityProfiles();
+    const rootFolders = await sonarrClient.getRootFolders();
+    
+    res.json({
+      success: true,
+      qualityProfiles,
+      rootFolders,
+    });
+  } catch (error: any) {
+    console.error('Get Sonarr options error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch Sonarr options',
+      details: error?.message || undefined,
+    });
+  }
+});
+
+router.post('/tv/:id/add', async (req: Request, res: Response) => {
+  try {
+    const release = tvReleasesModel.getById(parseInt(req.params.id, 10));
+    
+    if (!release) {
+      return res.status(404).json({ error: 'TV release not found' });
+    }
+
+    console.log(`Add TV show request for release ID ${req.params.id}: status=${release.status}, tvdb_id=${release.tvdb_id}, sonarr_series_id=${release.sonarr_series_id}`);
+
+    // Check if show already exists in Sonarr
+    if (release.sonarr_series_id) {
+      return res.status(400).json({ 
+        error: 'TV show already exists in Sonarr.' 
+      });
+    }
+
+    // TVDB ID is required - Sonarr primarily uses TVDB ID
+    if (!release.tvdb_id) {
+      return res.status(400).json({ 
+        error: 'TVDB ID is required to add TV show to Sonarr. Please ensure the release has a valid TVDB ID.' 
+      });
+    }
+
+    const { qualityProfileId, rootFolderPath } = req.body;
+
+    if (!qualityProfileId || !rootFolderPath) {
+      return res.status(400).json({ 
+        error: 'Quality profile ID and root folder path are required' 
+      });
+    }
+
+    // Lookup series by TVDB ID (required for Sonarr)
+    let series = await sonarrClient.lookupSeriesByTvdbId(release.tvdb_id);
+    
+    // Fallback to term lookup if TVDB ID lookup fails
+    if (!series) {
+      console.log(`TVDB ID lookup failed for ${release.tvdb_id}, trying term lookup...`);
+      const lookupResults = await sonarrClient.lookupSeries(release.show_name || release.title);
+      series = lookupResults.find((s: any) => s.tvdbId === release.tvdb_id) || null;
+    }
+
+    if (!series) {
+      return res.status(404).json({ 
+        error: `TV show not found in Sonarr lookup. TVDB ID: ${release.tvdb_id}, Title: ${release.show_name || release.title}` 
+      });
+    }
+
+    // Add to Sonarr with selected options
+    const addedSeries = await sonarrClient.addSeries(series, parseInt(qualityProfileId, 10), rootFolderPath);
+
+    // Update release with Sonarr series ID
+    const updatedRelease = {
+      ...release,
+      sonarr_series_id: addedSeries.id,
+      sonarr_series_title: addedSeries.title,
+      status: 'ADDED' as const,
+    };
+    tvReleasesModel.upsert(updatedRelease);
+
+    res.json({ 
+      success: true, 
+      message: `TV show "${addedSeries.title}" added to Sonarr successfully`,
+      sonarrSeriesId: addedSeries.id,
+    });
+  } catch (error: any) {
+    console.error('Add TV show error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    res.status(500).json({ 
+      error: `Failed to add TV show: ${errorMessage}`,
       details: error?.response?.data || undefined,
     });
   }

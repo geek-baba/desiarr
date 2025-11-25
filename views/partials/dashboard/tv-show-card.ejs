@@ -1,36 +1,36 @@
 <%
-  // Determine show-level decision based on status
+  // Determine show-level decision based on status (matching Movies structure)
   let decision = 'PENDING';
   let decisionReason = 'No releases found';
   let decisionBadgeClass = 'badge-info';
   
   if (show.newShows && show.newShows.length > 0) {
-    decision = 'NEW_SHOW';
-    decisionReason = `${show.newShows.length} new show release(s)`;
+    decision = 'NEW';
+    decisionReason = `${show.newShows.length} new release(s) available`;
     decisionBadgeClass = 'badge-success';
-  } else if (show.newSeasons && show.newSeasons.length > 0) {
-    decision = 'NEW_SEASON';
-    decisionReason = `${show.newSeasons.length} new season release(s)`;
-    decisionBadgeClass = 'badge-warning';
-  } else if (show.attentionNeeded && show.attentionNeeded.length > 0) {
-    decision = 'ATTENTION_NEEDED';
-    decisionReason = `${show.attentionNeeded.length} release(s) need attention`;
-    decisionBadgeClass = 'badge-error';
+  } else if (show.existingShows && show.existingShows.length > 0) {
+    decision = 'EXISTING';
+    decisionReason = 'Already in Sonarr';
+    decisionBadgeClass = 'badge-info';
+  } else if (show.unmatched && show.unmatched.length > 0) {
+    decision = 'UNMATCHED';
+    decisionReason = 'No TVDB/TMDB ID found';
+    decisionBadgeClass = 'badge-neutral';
   }
   
   // Get total release count
-  const totalReleases = (show.newShows?.length || 0) + (show.newSeasons?.length || 0) + (show.attentionNeeded?.length || 0) + (show.ignored?.length || 0);
+  const totalReleases = (show.newShows?.length || 0) + (show.existingShows?.length || 0) + (show.unmatched?.length || 0);
   
   // Get all releases for display
-  const allReleases = [...(show.newShows || []), ...(show.newSeasons || []), ...(show.attentionNeeded || [])];
+  const allReleases = [...(show.newShows || []), ...(show.existingShows || []), ...(show.unmatched || [])];
 %>
 
 <article class="card overflow-hidden mb-4" 
          data-show-id="<%= show.tvdbId || show.tmdbId || 'unknown' %>"
          data-status="<%= decision.toLowerCase() %>">
   <div class="p-4 flex gap-4">
-    <!-- Poster -->
-    <div class="flex-shrink-0">
+    <!-- Poster and Action Button -->
+    <div class="flex-shrink-0 flex flex-col gap-3">
       <% if (show.posterUrl) { %>
         <img 
           src="<%= show.posterUrl %>" 
@@ -42,6 +42,29 @@
         <div class="w-28 h-40 bg-gray-200 dark:bg-gray-700 rounded-xl shadow-lg flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs text-center p-2">
           No Poster
         </div>
+      <% } %>
+      
+      <!-- Action Button Below Poster -->
+      <% 
+        // Determine primary action button - show "Add to Sonarr" for new shows (not in Sonarr)
+        let primaryRelease = null;
+        let primaryAction = null;
+        
+        if (show.newShows && show.newShows.length > 0 && !show.sonarrSeriesId) {
+          primaryRelease = show.newShows[0];
+          primaryAction = 'add';
+        }
+      %>
+      
+      <% if (primaryRelease && primaryAction === 'add') { %>
+        <button 
+          class="w-full px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm add-to-sonarr" 
+          data-id="<%= primaryRelease.id %>"
+          onclick="addTvShow(<%= primaryRelease.id %>)"
+          aria-label="Add to Sonarr"
+        >
+          Add to Sonarr
+        </button>
       <% } %>
     </div>
 
@@ -133,9 +156,13 @@
                 <% } %>
               </div>
               <div class="flex items-center gap-2 flex-shrink-0">
-                <span class="badge <%= release.status === 'NEW_SHOW' ? 'badge-success' : release.status === 'NEW_SEASON' ? 'badge-warning' : 'badge-error' %> text-xs">
-                  <%= release.status.replace('_', ' ') %>
-                </span>
+                <% if (release.status === 'NEW_SHOW' || release.status === 'NEW_SEASON') { %>
+                  <span class="badge badge-success text-xs">NEW</span>
+                <% } else if (release.status === 'IGNORED' || release.status === 'ADDED') { %>
+                  <span class="badge badge-info text-xs">EXISTING</span>
+                <% } else { %>
+                  <span class="badge badge-neutral text-xs">UNMATCHED</span>
+                <% } %>
               </div>
             </div>
             

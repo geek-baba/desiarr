@@ -63,21 +63,17 @@
         const hasUnmatched = currentViewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
         
         // TV view variables
-        const hasNewShows = currentViewType === 'tv' && newShowsByPeriod && (
-          (newShowsByPeriod.today && newShowsByPeriod.today.length > 0) ||
-          (newShowsByPeriod.yesterday && newShowsByPeriod.yesterday.length > 0) ||
-          (newShowsByPeriod.older && newShowsByPeriod.older.length > 0)
+        const hasNewTvShows = currentViewType === 'tv' && newTvShowsByPeriod && (
+          (newTvShowsByPeriod.today && newTvShowsByPeriod.today.length > 0) ||
+          (newTvShowsByPeriod.yesterday && newTvShowsByPeriod.yesterday.length > 0) ||
+          (newTvShowsByPeriod.older && newTvShowsByPeriod.older.length > 0)
         );
-        const hasNewSeasons = currentViewType === 'tv' && newSeasonsByPeriod && (
-          (newSeasonsByPeriod.today && newSeasonsByPeriod.today.length > 0) ||
-          (newSeasonsByPeriod.yesterday && newSeasonsByPeriod.yesterday.length > 0) ||
-          (newSeasonsByPeriod.older && newSeasonsByPeriod.older.length > 0)
+        const hasExistingTvShows = currentViewType === 'tv' && existingTvShowsByPeriod && (
+          (existingTvShowsByPeriod.today && existingTvShowsByPeriod.today.length > 0) ||
+          (existingTvShowsByPeriod.yesterday && existingTvShowsByPeriod.yesterday.length > 0) ||
+          (existingTvShowsByPeriod.older && existingTvShowsByPeriod.older.length > 0)
         );
-        const hasAttentionNeeded = currentViewType === 'tv' && attentionNeededByPeriod && (
-          (attentionNeededByPeriod.today && attentionNeededByPeriod.today.length > 0) ||
-          (attentionNeededByPeriod.yesterday && attentionNeededByPeriod.yesterday.length > 0) ||
-          (attentionNeededByPeriod.older && attentionNeededByPeriod.older.length > 0)
-        );
+        const hasUnmatchedTv = currentViewType === 'tv' && unmatchedItems && unmatchedItems.length > 0;
       %>
 
       <!-- Movies/TV View Selector Tabs -->
@@ -111,22 +107,22 @@
       </div>
 
       <% if (currentViewType === 'movies') { %>
-        <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
+      <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
           <p class="text-gray-600 dark:text-gray-400">No movie releases found. Go to Settings to add RSS feeds and sync data.</p>
-        <% } else { %>
-          
-          <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
-          <div class="mb-6">
-            <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
-              <% 
-                const mainTabs = [
-                  { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
-                  { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
-                  { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatched },
-                ];
-                let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
-                if (firstVisibleTab === -1) firstVisibleTab = 0;
-              %>
+      <% } else { %>
+        
+        <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
+        <div class="mb-6">
+          <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
+            <% 
+              const mainTabs = [
+                { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
+                { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
+                { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatched },
+              ];
+              let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
+              if (firstVisibleTab === -1) firstVisibleTab = 0;
+            %>
             <% mainTabs.forEach((tab, index) => { %>
               <% if (tab.visible) { %>
                 <button 
@@ -317,7 +313,7 @@
       <% } %>
 
       <% } else if (currentViewType === 'tv') { %>
-        <% if (!hasNewShows && !hasNewSeasons && !hasAttentionNeeded) { %>
+        <% if (!hasNewTvShows && !hasExistingTvShows && !hasUnmatchedTv) { %>
           <p class="text-gray-600 dark:text-gray-400">No TV releases found. Go to Settings to add RSS feeds and sync data.</p>
         <% } else { %>
           
@@ -326,9 +322,9 @@
             <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
               <% 
                 const mainTabs = [
-                  { key: 'new-shows', label: 'New Shows', count: (newShowsByPeriod.today?.length || 0) + (newShowsByPeriod.yesterday?.length || 0) + (newShowsByPeriod.older?.length || 0), visible: hasNewShows },
-                  { key: 'new-seasons', label: 'New Seasons', count: (newSeasonsByPeriod.today?.length || 0) + (newSeasonsByPeriod.yesterday?.length || 0) + (newSeasonsByPeriod.older?.length || 0), visible: hasNewSeasons },
-                  { key: 'attention', label: 'Attention Needed', count: (attentionNeededByPeriod.today?.length || 0) + (attentionNeededByPeriod.yesterday?.length || 0) + (attentionNeededByPeriod.older?.length || 0), visible: hasAttentionNeeded },
+                  { key: 'new', label: 'New TVShows', count: (newTvShowsByPeriod.today?.length || 0) + (newTvShowsByPeriod.yesterday?.length || 0) + (newTvShowsByPeriod.older?.length || 0), visible: hasNewTvShows },
+                  { key: 'existing', label: 'Existing TVShows', count: (existingTvShowsByPeriod.today?.length || 0) + (existingTvShowsByPeriod.yesterday?.length || 0) + (existingTvShowsByPeriod.older?.length || 0), visible: hasExistingTvShows },
+                  { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatchedTv },
                 ];
                 let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
                 if (firstVisibleTab === -1) firstVisibleTab = 0;
@@ -401,37 +397,37 @@
             </div>
           </div>
 
-          <!-- New Shows Section -->
-          <% if (hasNewShows) { %>
-            <div id="main-section-new-shows" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
-              <!-- Time Period Tabs for New Shows -->
+          <!-- New TVShows Section -->
+          <% if (hasNewTvShows) { %>
+            <div id="main-section-new" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for New TVShows -->
               <div class="mb-4">
                 <nav class="flex gap-2" aria-label="Time Periods">
-                  <% const newShowsPeriods = [
-                    { key: 'today', label: 'Today', count: newShowsByPeriod.today?.length || 0 },
-                    { key: 'yesterday', label: 'Yesterday', count: newShowsByPeriod.yesterday?.length || 0 },
-                    { key: 'older', label: 'Older', count: newShowsByPeriod.older?.length || 0 }
+                  <% const newTvShowsPeriods = [
+                    { key: 'today', label: 'Today', count: newTvShowsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: newTvShowsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: newTvShowsByPeriod.older?.length || 0 }
                   ]; %>
                   <% 
-                    let firstNewShowsIndex = -1;
-                    newShowsPeriods.forEach((period, index) => {
-                      if (period.count > 0 && firstNewShowsIndex === -1) {
-                        firstNewShowsIndex = index;
+                    let firstNewTvShowsIndex = -1;
+                    newTvShowsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstNewTvShowsIndex === -1) {
+                        firstNewTvShowsIndex = index;
                       }
                     });
                   %>
-                  <% newShowsPeriods.forEach((period, index) => { %>
+                  <% newTvShowsPeriods.forEach((period, index) => { %>
                     <% if (period.count > 0) { %>
                       <button 
-                        onclick="showNewShowsPeriod('<%= period.key %>')" 
-                        id="new-shows-tab-<%= period.key %>"
-                        class="<%= index === firstNewShowsIndex 
+                        onclick="showNewTvShowsPeriod('<%= period.key %>')" 
+                        id="new-tvshows-tab-<%= period.key %>"
+                        class="<%= index === firstNewTvShowsIndex 
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
                           : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
                           px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
                       >
                         <span><%= period.label %></span>
-                        <span class="<%= index === firstNewShowsIndex 
+                        <span class="<%= index === firstNewTvShowsIndex 
                           ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
                           : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
                           px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
@@ -443,11 +439,11 @@
                 </nav>
               </div>
 
-              <!-- New Shows Time Period Sections -->
-              <% newShowsPeriods.forEach((period, index) => { %>
-                <% if (newShowsByPeriod[period.key] && newShowsByPeriod[period.key].length > 0) { %>
-                  <div id="new-shows-period-<%= period.key %>" class="new-shows-section <%= index === firstNewShowsIndex ? '' : 'hidden' %>">
-                    <% newShowsByPeriod[period.key].forEach(show => { %>
+              <!-- New TVShows Time Period Sections -->
+              <% newTvShowsPeriods.forEach((period, index) => { %>
+                <% if (newTvShowsByPeriod[period.key] && newTvShowsByPeriod[period.key].length > 0) { %>
+                  <div id="new-tvshows-period-<%= period.key %>" class="new-tvshows-section <%= index === firstNewTvShowsIndex ? '' : 'hidden' %>">
+                    <% newTvShowsByPeriod[period.key].forEach(show => { %>
                       <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
                     <% }); %>
                   </div>
@@ -456,37 +452,37 @@
             </div>
           <% } %>
 
-          <!-- New Seasons Section -->
-          <% if (hasNewSeasons) { %>
-            <div id="main-section-new-seasons" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
-              <!-- Time Period Tabs for New Seasons -->
+          <!-- Existing TVShows Section -->
+          <% if (hasExistingTvShows) { %>
+            <div id="main-section-existing" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for Existing TVShows -->
               <div class="mb-4">
                 <nav class="flex gap-2" aria-label="Time Periods">
-                  <% const newSeasonsPeriods = [
-                    { key: 'today', label: 'Today', count: newSeasonsByPeriod.today?.length || 0 },
-                    { key: 'yesterday', label: 'Yesterday', count: newSeasonsByPeriod.yesterday?.length || 0 },
-                    { key: 'older', label: 'Older', count: newSeasonsByPeriod.older?.length || 0 }
+                  <% const existingTvShowsPeriods = [
+                    { key: 'today', label: 'Today', count: existingTvShowsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: existingTvShowsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: existingTvShowsByPeriod.older?.length || 0 }
                   ]; %>
                   <% 
-                    let firstNewSeasonsIndex = -1;
-                    newSeasonsPeriods.forEach((period, index) => {
-                      if (period.count > 0 && firstNewSeasonsIndex === -1) {
-                        firstNewSeasonsIndex = index;
+                    let firstExistingTvShowsIndex = -1;
+                    existingTvShowsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstExistingTvShowsIndex === -1) {
+                        firstExistingTvShowsIndex = index;
                       }
                     });
                   %>
-                  <% newSeasonsPeriods.forEach((period, index) => { %>
+                  <% existingTvShowsPeriods.forEach((period, index) => { %>
                     <% if (period.count > 0) { %>
                       <button 
-                        onclick="showNewSeasonsPeriod('<%= period.key %>')" 
-                        id="new-seasons-tab-<%= period.key %>"
-                        class="<%= index === firstNewSeasonsIndex 
+                        onclick="showExistingTvShowsPeriod('<%= period.key %>')" 
+                        id="existing-tvshows-tab-<%= period.key %>"
+                        class="<%= index === firstExistingTvShowsIndex 
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
                           : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
                           px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
                       >
                         <span><%= period.label %></span>
-                        <span class="<%= index === firstNewSeasonsIndex 
+                        <span class="<%= index === firstExistingTvShowsIndex 
                           ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
                           : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
                           px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
@@ -498,11 +494,11 @@
                 </nav>
               </div>
 
-              <!-- New Seasons Time Period Sections -->
-              <% newSeasonsPeriods.forEach((period, index) => { %>
-                <% if (newSeasonsByPeriod[period.key] && newSeasonsByPeriod[period.key].length > 0) { %>
-                  <div id="new-seasons-period-<%= period.key %>" class="new-seasons-section <%= index === firstNewSeasonsIndex ? '' : 'hidden' %>">
-                    <% newSeasonsByPeriod[period.key].forEach(show => { %>
+              <!-- Existing TVShows Time Period Sections -->
+              <% existingTvShowsPeriods.forEach((period, index) => { %>
+                <% if (existingTvShowsByPeriod[period.key] && existingTvShowsByPeriod[period.key].length > 0) { %>
+                  <div id="existing-tvshows-period-<%= period.key %>" class="existing-tvshows-section <%= index === firstExistingTvShowsIndex ? '' : 'hidden' %>">
+                    <% existingTvShowsByPeriod[period.key].forEach(show => { %>
                       <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
                     <% }); %>
                   </div>
@@ -511,57 +507,11 @@
             </div>
           <% } %>
 
-          <!-- Attention Needed Section -->
-          <% if (hasAttentionNeeded) { %>
-            <div id="main-section-attention" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
-              <!-- Time Period Tabs for Attention Needed -->
-              <div class="mb-4">
-                <nav class="flex gap-2" aria-label="Time Periods">
-                  <% const attentionPeriods = [
-                    { key: 'today', label: 'Today', count: attentionNeededByPeriod.today?.length || 0 },
-                    { key: 'yesterday', label: 'Yesterday', count: attentionNeededByPeriod.yesterday?.length || 0 },
-                    { key: 'older', label: 'Older', count: attentionNeededByPeriod.older?.length || 0 }
-                  ]; %>
-                  <% 
-                    let firstAttentionIndex = -1;
-                    attentionPeriods.forEach((period, index) => {
-                      if (period.count > 0 && firstAttentionIndex === -1) {
-                        firstAttentionIndex = index;
-                      }
-                    });
-                  %>
-                  <% attentionPeriods.forEach((period, index) => { %>
-                    <% if (period.count > 0) { %>
-                      <button 
-                        onclick="showAttentionPeriod('<%= period.key %>')" 
-                        id="attention-tab-<%= period.key %>"
-                        class="<%= index === firstAttentionIndex 
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                      >
-                        <span><%= period.label %></span>
-                        <span class="<%= index === firstAttentionIndex 
-                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                          <%= period.count %>
-                        </span>
-                      </button>
-                    <% } %>
-                  <% }); %>
-                </nav>
-              </div>
-
-              <!-- Attention Needed Time Period Sections -->
-              <% attentionPeriods.forEach((period, index) => { %>
-                <% if (attentionNeededByPeriod[period.key] && attentionNeededByPeriod[period.key].length > 0) { %>
-                  <div id="attention-period-<%= period.key %>" class="attention-section <%= index === firstAttentionIndex ? '' : 'hidden' %>">
-                    <% attentionNeededByPeriod[period.key].forEach(show => { %>
-                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
-                    <% }); %>
-                  </div>
-                <% } %>
+          <!-- Unmatched Items Section -->
+          <% if (hasUnmatchedTv) { %>
+            <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
+              <% unmatchedItems.forEach(show => { %>
+                <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
               <% }); %>
             </div>
           <% } %>
@@ -591,6 +541,36 @@
         </div>
         <div class="flex justify-end space-x-2">
           <button type="button" onclick="hideAddMovieModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+            Cancel
+          </button>
+          <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+            Add
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add TV Show Modal -->
+  <div id="addTvShowModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Add TV Show to Sonarr</h3>
+      <form id="addTvShowForm" onsubmit="submitAddTvShow(event)">
+        <input type="hidden" id="addTvShowReleaseId" name="releaseId">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Quality Profile:</label>
+          <select id="qualityProfileSelectTv" name="qualityProfileId" required class="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Root Folder:</label>
+          <select id="rootFolderSelectTv" name="rootFolderPath" required class="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideAddTvShowModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
           <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
@@ -780,6 +760,63 @@
     }
 
     // TV View Tab Switching Functions
+    function showNewTvShowsPeriod(period) {
+      document.querySelectorAll('.new-tvshows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-tvshows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-tvshows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-tvshows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showExistingTvShowsPeriod(period) {
+      document.querySelectorAll('.existing-tvshows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`existing-tvshows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="existing-tvshows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`existing-tvshows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    // Legacy functions for backward compatibility (can be removed later)
     function showNewShowsPeriod(period) {
       document.querySelectorAll('.new-shows-section').forEach(section => {
         section.classList.add('hidden');
@@ -865,7 +902,9 @@
     }
 
     let currentReleaseId = null;
+    let currentTvReleaseId = null;
     let radarrOptions = null;
+    let sonarrOptions = null;
 
     async function loadRadarrOptions() {
       if (radarrOptions) return radarrOptions;
@@ -917,6 +956,108 @@
     function hideAddMovieModal() {
       document.getElementById('addMovieModal').classList.add('hidden');
       currentReleaseId = null;
+    }
+
+    async function loadSonarrOptions() {
+      if (sonarrOptions) return sonarrOptions;
+      
+      try {
+        const res = await fetch('/actions/sonarr-options');
+        const data = await res.json();
+        if (data.success) {
+          sonarrOptions = data;
+          return data;
+        } else {
+          throw new Error(data.error || 'Failed to load options');
+        }
+      } catch (error) {
+        console.error('Error loading Sonarr options:', error);
+        showToast('Error loading Sonarr options: ' + error.message, 'error');
+        return null;
+      }
+    }
+
+    async function addTvShow(id) {
+      currentTvReleaseId = id;
+      
+      const options = await loadSonarrOptions();
+      if (!options) return;
+
+      const qualitySelect = document.getElementById('qualityProfileSelectTv');
+      qualitySelect.innerHTML = '';
+      options.qualityProfiles.forEach(profile => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name;
+        qualitySelect.appendChild(option);
+      });
+
+      const rootFolderSelect = document.getElementById('rootFolderSelectTv');
+      rootFolderSelect.innerHTML = '';
+      options.rootFolders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder.path;
+        option.textContent = folder.path;
+        rootFolderSelect.appendChild(option);
+      });
+
+      document.getElementById('addTvShowModal').classList.remove('hidden');
+      document.getElementById('addTvShowReleaseId').value = id;
+    }
+
+    function hideAddTvShowModal() {
+      document.getElementById('addTvShowModal').classList.add('hidden');
+      currentTvReleaseId = null;
+    }
+
+    async function submitAddTvShow(event) {
+      event.preventDefault();
+      
+      const releaseId = document.getElementById('addTvShowReleaseId').value;
+      const qualityProfileId = document.getElementById('qualityProfileSelectTv').value;
+      const rootFolderPath = document.getElementById('rootFolderSelectTv').value;
+
+      if (!qualityProfileId || !rootFolderPath) {
+        showToast('Please select both quality profile and root folder', 'warning');
+        return;
+      }
+
+      const submitBtn = event.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding...';
+
+      try {
+        const res = await fetch(`/actions/tv/${releaseId}/add`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            qualityProfileId,
+            rootFolderPath,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(data.message || 'TV show added to Sonarr successfully', 'success');
+          hideAddTvShowModal();
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        } else {
+          showToast(data.error || 'Failed to add TV show to Sonarr', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      } catch (error) {
+        console.error('Add TV show error:', error);
+        showToast('Error adding TV show: ' + error.message, 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
     }
 
     async function submitAddMovie(event) {
