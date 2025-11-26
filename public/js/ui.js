@@ -79,74 +79,25 @@
   // Connect global search based on current page
   if (search) {
     const path = window.location.pathname;
-    // Treat movies, TV, and root/dashboard routes as dashboard views
-    const isDashboardView =
-      path === '/' ||
-      path === '/movies' ||
-      path === '/tv' ||
-      path.startsWith('/dashboard');
-    
-    // Dashboard page (movies or TV) - filter client-side
-    if (isDashboardView) {
-      // Use event delegation and direct function call
-      function setupDashboardSearch() {
-        const globalSearch = document.getElementById('globalSearch');
-        if (!globalSearch) {
-          setTimeout(setupDashboardSearch, 50);
-          return;
+
+    // Generic handler: on any page, if dashboard filterMovies is defined, call it
+    // This makes dashboard search work on /, /movies, /tv, /dashboard, etc.
+    function genericDashboardFilterHandler() {
+      if (typeof window.filterMovies === 'function') {
+        try {
+          window.filterMovies();
+        } catch (error) {
+          console.error('Error calling filterMovies:', error);
         }
-        
-        // Remove any existing listeners by using a flag or one-time setup
-        if (globalSearch.dataset.dashboardConnected === 'true') {
-          return; // Already connected
-        }
-        
-        // Mark as connected
-        globalSearch.dataset.dashboardConnected = 'true';
-        
-        // Create a handler that calls filterMovies
-        function triggerFilter() {
-          // Wait for function to be available, then call it
-          if (typeof window.filterMovies === 'function') {
-            try {
-              window.filterMovies();
-            } catch (error) {
-              console.error('Error calling filterMovies:', error);
-            }
-          } else {
-            // Function not ready yet, try again after a short delay
-            setTimeout(() => {
-              if (typeof window.filterMovies === 'function') {
-                try {
-                  window.filterMovies();
-                } catch (error) {
-                  console.error('Error calling filterMovies (delayed):', error);
-                }
-              }
-            }, 100);
-          }
-        }
-        
-        // Attach listeners
-        globalSearch.addEventListener('input', triggerFilter);
-        globalSearch.addEventListener('keyup', triggerFilter);
-        globalSearch.addEventListener('change', triggerFilter);
       }
-      
-      // Try multiple times
-      setupDashboardSearch();
-      setTimeout(setupDashboardSearch, 100);
-      setTimeout(setupDashboardSearch, 300);
-      setTimeout(setupDashboardSearch, 500);
-      setTimeout(setupDashboardSearch, 1000);
-      
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupDashboardSearch);
-      }
-      window.addEventListener('load', setupDashboardSearch);
     }
+
+    search.addEventListener('input', genericDashboardFilterHandler);
+    search.addEventListener('keyup', genericDashboardFilterHandler);
+    search.addEventListener('change', genericDashboardFilterHandler);
+
     // Radarr Data page - URL-based search
-    else if (path === '/data/releases') {
+    if (path === '/data/releases') {
       // All Releases page - URL-based search with debouncing
       let searchTimeout = null;
       
