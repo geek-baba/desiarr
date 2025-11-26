@@ -208,13 +208,13 @@
             <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded"><%= sizeGiB.toFixed(2) %> GiB</span>
           <% } %>
           <% if (movie.radarrInfo.lastDownload && movie.radarrInfo.lastDownload.sourceTitle) { %>
-            <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs truncate max-w-xs" title="<%= movie.radarrInfo.lastDownload.sourceTitle %>">
-              <%= movie.radarrInfo.lastDownload.sourceTitle.length > 30 ? movie.radarrInfo.lastDownload.sourceTitle.substring(0, 30) + '...' : movie.radarrInfo.lastDownload.sourceTitle %>
-            </span>
+            <div class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs break-words" title="<%= movie.radarrInfo.lastDownload.sourceTitle %>">
+              <%= movie.radarrInfo.lastDownload.sourceTitle %>
+            </div>
           <% } else if (movie.radarrInfo.fileName) { %>
-            <span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs truncate max-w-xs" title="<%= movie.radarrInfo.fileName %>">
-              <%= movie.radarrInfo.fileName.length > 30 ? movie.radarrInfo.fileName.substring(0, 30) + '...' : movie.radarrInfo.fileName %>
-            </span>
+            <div class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded text-xs break-words" title="<%= movie.radarrInfo.fileName %>">
+              <%= movie.radarrInfo.fileName %>
+            </div>
           <% } %>
         </div>
       <% } %>

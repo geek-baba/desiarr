@@ -315,12 +315,12 @@
             </nav>
           </div>
           
-          <!-- Combined List by Status -->
+          <!-- Combined List by Status - Single Column Layout -->
           <% statusTabs.forEach((tab, index) => { %>
             <% const statusData = combinedByStatus[tab.key]; %>
             <% if (statusData && statusData.length > 0) { %>
               <div id="combined-status-<%= tab.key %>" class="combined-section <%= index === firstStatusIndex ? '' : 'hidden' %>">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div class="space-y-4">
                   <% statusData.forEach(item => { %>
                     <% if (item.type === 'movie') { %>
                       <%- include('partials/dashboard/movie-card', { movie: item.group, radarrBaseUrl, showTypeIcon: true }) %>

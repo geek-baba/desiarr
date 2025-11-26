@@ -163,7 +163,7 @@
           <div class="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 dark:bg-gray-800/30 rounded">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-medium text-sm text-gray-900 dark:text-white truncate max-w-md" title="<%= release.title || release.show_name || 'Unknown Release' %>">
+                <span class="font-medium text-sm text-gray-900 dark:text-white break-words" title="<%= release.title || release.show_name || 'Unknown Release' %>">
                   <%= release.title || release.show_name || 'Unknown Release' %>
                 </span>
                 <% if (release.season_number !== null && release.season_number !== undefined) { %>

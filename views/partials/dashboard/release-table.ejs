@@ -54,9 +54,9 @@
             </td>
             <td class="px-3 py-2 text-sm">
               <div>
-                <!-- Release File Name - Cleaner Display -->
+                <!-- Release File Name - Full Display -->
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="font-mono text-gray-800 dark:text-gray-200 text-xs truncate max-w-md" title="<%= r.title %>"><%= r.title %></span>
+                  <span class="font-mono text-gray-800 dark:text-gray-200 text-xs break-words" title="<%= r.title %>"><%= r.title %></span>
                   <% if (r.link) { %>
                     <button 
                       class="copy-link icon-btn p-1 flex-shrink-0" 
