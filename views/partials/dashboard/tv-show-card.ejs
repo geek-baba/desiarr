@@ -25,9 +25,17 @@
   const allReleases = [...(show.newShows || []), ...(show.existingShows || []), ...(show.unmatched || [])];
 %>
 
-<article class="card overflow-hidden mb-4" 
+<article class="card overflow-hidden mb-4 relative" 
          data-show-id="<%= show.tvdbId || show.tmdbId || 'unknown' %>"
          data-status="<%= decision.toLowerCase() %>">
+  <!-- Type Indicator Icon -->
+  <% if (typeof showTypeIcon !== 'undefined' && showTypeIcon) { %>
+    <div class="absolute top-2 right-2 z-10 bg-purple-600 text-white rounded-full p-1.5 shadow-lg" title="TV Show">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+      </svg>
+    </div>
+  <% } %>
   <div class="p-4 flex gap-4">
     <!-- Poster and Action Button -->
     <div class="flex-shrink-0 flex flex-col gap-3">
@@ -149,59 +157,44 @@
         <div class="mt-1 text-xs text-gray-500 dark:text-gray-400"><%= decisionReason %></div>
       <% } %>
 
-      <!-- Releases List -->
-      <div class="mt-3 space-y-2">
+      <!-- Releases List - Compact Display -->
+      <div class="mt-3 space-y-1.5">
         <% allReleases.forEach((release, index) => { %>
-          <div class="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div class="flex items-start justify-between gap-2 mb-2">
-              <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm text-gray-900 dark:text-white truncate">
+          <div class="flex items-center justify-between gap-2 py-1.5 px-2 bg-gray-50 dark:bg-gray-800/30 rounded">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-medium text-sm text-gray-900 dark:text-white truncate max-w-md" title="<%= release.title || release.show_name || 'Unknown Release' %>">
                   <%= release.title || release.show_name || 'Unknown Release' %>
-                </div>
+                </span>
                 <% if (release.season_number !== null && release.season_number !== undefined) { %>
-                  <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Season <%= release.season_number %>
-                  </div>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">S<%= release.season_number %></span>
                 <% } %>
-              </div>
-              <div class="flex items-center gap-2 flex-shrink-0">
-                <% if (release.status === 'NEW_SHOW' || release.status === 'NEW_SEASON') { %>
-                  <span class="badge badge-success text-xs">NEW</span>
-                <% } else if (release.status === 'IGNORED' || release.status === 'ADDED') { %>
-                  <span class="badge badge-info text-xs">EXISTING</span>
-                <% } else { %>
-                  <span class="badge badge-neutral text-xs">UNMATCHED</span>
+                <% if (release.feedName) { %>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">•</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400"><%= release.feedName %></span>
                 <% } %>
               </div>
             </div>
-            
-            <!-- Release Metadata -->
-            <div class="flex flex-wrap gap-1 items-center text-xs">
-              <% if (release.feedName) { %>
-                <span class="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded">
-                  <%= release.feedName %>
-                </span>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <% if (release.status === 'NEW_SHOW' || release.status === 'NEW_SEASON') { %>
+                <span class="badge badge-success text-xs">NEW</span>
+              <% } else if (release.status === 'IGNORED' || release.status === 'ADDED') { %>
+                <span class="badge badge-info text-xs">EXISTING</span>
+              <% } else { %>
+                <span class="badge badge-neutral text-xs">UNMATCHED</span>
               <% } %>
-              <% if (release.published_at) { %>
-                <span class="text-gray-500 dark:text-gray-400">
-                  <%= new Date(release.published_at).toLocaleDateString() %>
-                </span>
-              <% } %>
-            </div>
-            
-            <!-- Release Link -->
-            <% if (release.link) { %>
-              <div class="mt-2">
+              <% if (release.link) { %>
                 <a 
                   href="<%= release.link %>" 
                   target="_blank" 
                   rel="noreferrer"
                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  title="View Release"
                 >
-                  View Release
+                  View
                 </a>
-              </div>
-            <% } %>
+              <% } %>
+            </div>
           </div>
         <% }); %>
       </div>

@@ -146,15 +146,36 @@
             return 'older';
           }
           
-          // Combine all movie groups and TV show groups
-          const allCombinedItems = [];
+          // Organize by status: New, Existing, Ignored
+          const combinedByStatus = {
+            new: [],
+            existing: [],
+            ignored: []
+          };
+          
+          // Helper to determine status
+          function getItemStatus(item) {
+            if (item.type === 'movie') {
+              const movie = item.group;
+              if (movie.add && movie.add.length > 0) return 'new';
+              if (movie.upgrade && movie.upgrade.length > 0) return 'new';
+              if (movie.existing && movie.existing.length > 0) return 'existing';
+              if (movie.ignored && movie.ignored.length > 0) return 'ignored';
+            } else {
+              const show = item.group;
+              if (show.newShows && show.newShows.length > 0) return 'new';
+              if (show.existingShows && show.existingShows.length > 0) return 'existing';
+              if (show.unmatched && show.unmatched.length > 0) return 'ignored';
+            }
+            return 'existing';
+          }
           
           // Add movies
           if (newMoviesByPeriod) {
             ['today', 'yesterday', 'older'].forEach(period => {
               if (newMoviesByPeriod[period]) {
                 newMoviesByPeriod[period].forEach(movie => {
-                  allCombinedItems.push({ type: 'movie', group: movie, period: categorizeByTimePeriod(getLatestDateCombined(movie)) });
+                  combinedByStatus.new.push({ type: 'movie', group: movie });
                 });
               }
             });
@@ -163,14 +184,14 @@
             ['today', 'yesterday', 'older'].forEach(period => {
               if (existingMoviesByPeriod[period]) {
                 existingMoviesByPeriod[period].forEach(movie => {
-                  allCombinedItems.push({ type: 'movie', group: movie, period: categorizeByTimePeriod(getLatestDateCombined(movie)) });
+                  combinedByStatus.existing.push({ type: 'movie', group: movie });
                 });
               }
             });
           }
           if (unmatchedItems) {
             unmatchedItems.forEach(movie => {
-              allCombinedItems.push({ type: 'movie', group: movie, period: 'older' });
+              combinedByStatus.ignored.push({ type: 'movie', group: movie });
             });
           }
           
@@ -179,7 +200,7 @@
             ['today', 'yesterday', 'older'].forEach(period => {
               if (newTvShowsByPeriod[period]) {
                 newTvShowsByPeriod[period].forEach(show => {
-                  allCombinedItems.push({ type: 'tv', group: show, period: categorizeByTimePeriod(getLatestDateCombined(show)) });
+                  combinedByStatus.new.push({ type: 'tv', group: show });
                 });
               }
             });
@@ -188,38 +209,27 @@
             ['today', 'yesterday', 'older'].forEach(period => {
               if (existingTvShowsByPeriod[period]) {
                 existingTvShowsByPeriod[period].forEach(show => {
-                  allCombinedItems.push({ type: 'tv', group: show, period: categorizeByTimePeriod(getLatestDateCombined(show)) });
+                  combinedByStatus.existing.push({ type: 'tv', group: show });
                 });
               }
             });
           }
           if (unmatchedItemsTv) {
             unmatchedItemsTv.forEach(show => {
-              allCombinedItems.push({ type: 'tv', group: show, period: 'older' });
+              combinedByStatus.ignored.push({ type: 'tv', group: show });
             });
           }
           
-          // Group by time period
-          const combinedByPeriod = {
-            today: [],
-            yesterday: [],
-            older: []
-          };
-          
-          allCombinedItems.forEach(item => {
-            combinedByPeriod[item.period].push(item);
-          });
-          
-          // Sort each period by date (newest first)
-          ['today', 'yesterday', 'older'].forEach(period => {
-            combinedByPeriod[period].sort((a, b) => {
+          // Sort each status by date (newest first)
+          ['new', 'existing', 'ignored'].forEach(status => {
+            combinedByStatus[status].sort((a, b) => {
               const dateA = getLatestDateCombined(a.group);
               const dateB = getLatestDateCombined(b.group);
               return dateB - dateA;
             });
           });
           
-          const hasCombined = combinedByPeriod.today.length > 0 || combinedByPeriod.yesterday.length > 0 || combinedByPeriod.older.length > 0;
+          const hasCombined = combinedByStatus.new.length > 0 || combinedByStatus.existing.length > 0 || combinedByStatus.ignored.length > 0;
         %>
         
         <% if (!hasCombined) { %>
@@ -270,38 +280,34 @@
             </div>
           </div>
           
-          <!-- Time Period Tabs -->
-          <div class="mb-4">
-            <nav class="flex gap-2" aria-label="Time Periods">
-              <% const combinedPeriods = [
-                { key: 'today', label: 'Today', count: combinedByPeriod.today.length },
-                { key: 'yesterday', label: 'Yesterday', count: combinedByPeriod.yesterday.length },
-                { key: 'older', label: 'Older', count: combinedByPeriod.older.length }
+          <!-- Status Tabs (New, Existing, Ignored) -->
+          <div class="mb-6">
+            <nav class="flex gap-2 items-center flex-wrap" aria-label="Status Sections">
+              <% const statusTabs = [
+                { key: 'new', label: 'New', count: combinedByStatus.new.length, color: 'green' },
+                { key: 'existing', label: 'Existing', count: combinedByStatus.existing.length, color: 'blue' },
+                { key: 'ignored', label: 'Ignored', count: combinedByStatus.ignored.length, color: 'gray' }
               ]; %>
               <% 
-                let firstCombinedIndex = -1;
-                combinedPeriods.forEach((period, index) => {
-                  if (period.count > 0 && firstCombinedIndex === -1) {
-                    firstCombinedIndex = index;
-                  }
-                });
+                let firstStatusIndex = statusTabs.findIndex(tab => tab.count > 0);
+                if (firstStatusIndex === -1) firstStatusIndex = 0;
               %>
-              <% combinedPeriods.forEach((period, index) => { %>
-                <% if (period.count > 0) { %>
+              <% statusTabs.forEach((tab, index) => { %>
+                <% if (tab.count > 0 || index === 0) { %>
                   <button 
-                    onclick="showCombinedPeriod('<%= period.key %>')" 
-                    id="combined-tab-<%= period.key %>"
-                    class="<%= index === firstCombinedIndex 
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                      : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                      px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                    onclick="showCombinedStatus('<%= tab.key %>')" 
+                    id="combined-tab-<%= tab.key %>"
+                    class="<%= index === firstStatusIndex 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+                      px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
                   >
-                    <span><%= period.label %></span>
-                    <span class="<%= index === firstCombinedIndex 
-                      ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                      px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                      <%= period.count %>
+                    <span><%= tab.label %></span>
+                    <span class="<%= index === firstStatusIndex 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' %> 
+                      px-2 py-0.5 rounded-full text-xs font-semibold min-w-[1.75rem] text-center">
+                      <%= tab.count %>
                     </span>
                   </button>
                 <% } %>
@@ -309,16 +315,17 @@
             </nav>
           </div>
           
-          <!-- Combined List by Time Period -->
-          <% combinedPeriods.forEach((period, index) => { %>
-            <% if (combinedByPeriod[period.key] && combinedByPeriod[period.key].length > 0) { %>
-              <div id="combined-period-<%= period.key %>" class="combined-section <%= index === firstCombinedIndex ? '' : 'hidden' %>">
+          <!-- Combined List by Status -->
+          <% statusTabs.forEach((tab, index) => { %>
+            <% const statusData = combinedByStatus[tab.key]; %>
+            <% if (statusData && statusData.length > 0) { %>
+              <div id="combined-status-<%= tab.key %>" class="combined-section <%= index === firstStatusIndex ? '' : 'hidden' %>">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  <% combinedByPeriod[period.key].forEach(item => { %>
+                  <% statusData.forEach(item => { %>
                     <% if (item.type === 'movie') { %>
-                      <%- include('partials/dashboard/movie-card', { movie: item.group, radarrBaseUrl }) %>
+                      <%- include('partials/dashboard/movie-card', { movie: item.group, radarrBaseUrl, showTypeIcon: true }) %>
                     <% } else { %>
-                      <%- include('partials/dashboard/tv-show-card', { show: item.group, sonarrBaseUrl }) %>
+                      <%- include('partials/dashboard/tv-show-card', { show: item.group, sonarrBaseUrl, showTypeIcon: true }) %>
                     <% } %>
                   <% }); %>
                 </div>
@@ -1036,32 +1043,32 @@
       }
     }
 
-    // Combined view tab switching
-    function showCombinedPeriod(period) {
+    // Combined view status tab switching
+    function showCombinedStatus(status) {
       document.querySelectorAll('.combined-section').forEach(section => {
         section.classList.add('hidden');
       });
-      document.getElementById(`combined-period-${period}`).classList.remove('hidden');
+      document.getElementById(`combined-status-${status}`).classList.remove('hidden');
       
       document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
-        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
-        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        tab.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
+        tab.classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
         
         const badge = tab.querySelector('span:last-child');
         if (badge) {
-          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
-          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+          badge.classList.remove('bg-blue-500', 'text-white');
+          badge.classList.add('bg-gray-300', 'dark:bg-gray-600', 'text-gray-700', 'dark:text-gray-300');
         }
       });
       
-      const activeTab = document.getElementById(`combined-tab-${period}`);
-      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
-      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      const activeTab = document.getElementById(`combined-tab-${status}`);
+      activeTab.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+      activeTab.classList.add('bg-blue-600', 'text-white', 'shadow-md');
       
       const activeBadge = activeTab.querySelector('span:last-child');
       if (activeBadge) {
-        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
-        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+        activeBadge.classList.remove('bg-gray-300', 'dark:bg-gray-600', 'text-gray-700', 'dark:text-gray-300');
+        activeBadge.classList.add('bg-blue-500', 'text-white');
       }
     }
 
@@ -1548,6 +1555,15 @@
           section.classList.remove('hidden');
           section.style.display = '';
         });
+        // Restore status tab visibility (hide tabs with 0 count)
+        document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
+          const badge = tab.querySelector('span:last-child');
+          if (badge && badge.textContent.trim() === '0') {
+            tab.style.display = 'none';
+          } else {
+            tab.style.display = '';
+          }
+        });
         return;
       }
       
@@ -1565,6 +1581,10 @@
       document.querySelectorAll('.combined-section').forEach(section => {
         section.classList.remove('hidden');
         section.style.display = 'block';
+      });
+      // Show all status tabs when searching
+      document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
+        tab.classList.remove('hidden');
       });
       
       // Get all card containers (movies and TV)
