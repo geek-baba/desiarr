@@ -1258,7 +1258,7 @@
         return;
       }
       
-      const clearSearchBtn = document.getElementById('clearSearchBtn');
+      const clearSearchBtn = document.getElementById('clearGlobalSearch');
       const searchResultsCount = document.getElementById('searchResultsCount');
       const query = searchInput.value.trim().toLowerCase();
       
@@ -1276,8 +1276,12 @@
         if (searchResultsCount) {
           searchResultsCount.classList.add('hidden');
         }
-        // Restore normal tab behavior - show all cards and restore tab visibility
+        // Restore normal tab behavior - show all cards (movies + TV) and restore tab visibility
         document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
+          card.style.display = '';
+          card.classList.remove('hidden');
+        });
+        document.querySelectorAll('article.card[data-show-id]').forEach(card => {
           card.style.display = '';
           card.classList.remove('hidden');
         });
@@ -1306,6 +1310,7 @@
       
       // Get all movie card containers
       const movieCards = document.querySelectorAll('article.card[data-movie-id]');
+      const tvCards = document.querySelectorAll('article.card[data-show-id]');
       let visibleCount = 0;
       
       movieCards.forEach(card => {
@@ -1346,13 +1351,39 @@
         }
       });
       
+      // Filter TV show cards
+      tvCards.forEach(card => {
+        const showTitle = card.querySelector('h3')?.textContent?.toLowerCase() || '';
+        const releaseBlocks = card.querySelectorAll('.p-3');
+        
+        let hasMatchingRelease = false;
+        releaseBlocks.forEach(block => {
+          const blockText = block.textContent?.toLowerCase() || '';
+          if (blockText.includes(query)) {
+            hasMatchingRelease = true;
+          }
+        });
+        
+        const cardText = card.textContent?.toLowerCase() || '';
+        const matches = showTitle.includes(query) || hasMatchingRelease || cardText.includes(query);
+        
+        if (matches) {
+          card.classList.remove('hidden');
+          card.style.display = 'block';
+          visibleCount++;
+        } else {
+          card.classList.add('hidden');
+          card.style.display = 'none';
+        }
+      });
+      
       // Update search results count
       if (searchResultsCount) {
         if (visibleCount === 0) {
-          searchResultsCount.textContent = 'No movies found matching "' + searchInput.value + '"';
+          searchResultsCount.textContent = 'No releases found matching "' + searchInput.value + '"';
           searchResultsCount.classList.remove('hidden');
         } else {
-          searchResultsCount.textContent = `Found ${visibleCount} movie${visibleCount !== 1 ? 's' : ''} matching "${searchInput.value}"`;
+          searchResultsCount.textContent = `Found ${visibleCount} result${visibleCount !== 1 ? 's' : ''} matching "${searchInput.value}"`;
           searchResultsCount.classList.remove('hidden');
         }
       }
@@ -1363,14 +1394,23 @@
       const globalSearch = document.getElementById('globalSearch');
       const searchResultsCount = document.getElementById('searchResultsCount');
       
+      const clearSearchBtn = document.getElementById('clearGlobalSearch');
+      
       if (globalSearch) globalSearch.value = '';
       if (searchResultsCount) searchResultsCount.classList.add('hidden');
-      clearSearchBtn.classList.add('hidden');
-      searchResultsCount.classList.add('hidden');
+      if (clearSearchBtn) {
+        clearSearchBtn.classList.add('hidden');
+        clearSearchBtn.style.display = 'none';
+      }
       
-      // Show all movie cards
+      // Show all movie & TV cards
       document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
         card.style.display = '';
+        card.classList.remove('hidden');
+      });
+      document.querySelectorAll('article.card[data-show-id]').forEach(card => {
+        card.style.display = '';
+        card.classList.remove('hidden');
       });
       
       // Restore normal tab sections visibility (let the tab system handle it)
