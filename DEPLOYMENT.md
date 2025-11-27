@@ -22,18 +22,17 @@ If you prefer to deploy manually:
 docker stop desiarr
 docker rm desiarr
 
-# Pull latest image
+# Pull latest image (choose :latest, :main, :tv-integration, etc.)
 docker pull ghcr.io/geek-baba/desiarr:latest
 
 # Run new container
 docker run -d \
   --name desiarr \
   -p 8085:8085 \
-  -e RADARR_API_URL=http://10.10.10.20:7880/api/v3 \
-  -e RADARR_API_KEY=8131da6e33fe4aac86806fa2fafe7466 \
   -v "/Users/shwet/my_daily_chore:/app/data" \
   ghcr.io/geek-baba/desiarr:latest
 ```
+> After the container starts, visit `/settings` to enter Radarr/Sonarr/TMDB/OMDB/Brave/TVDB credentials and RSS feeds. These values are stored in SQLite and no longer passed via environment variables.
 
 ## Automatic Deployment
 
@@ -81,3 +80,4 @@ If deployment fails:
 1. Check GitHub Actions status: `gh run list --limit 1`
 2. Check container logs: `docker logs desiarr`
 3. Verify image exists: `docker images ghcr.io/geek-baba/desiarr:latest`
+4. Review branch/version context in `docs/REFERENCE.md`

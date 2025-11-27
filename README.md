@@ -1,6 +1,6 @@
 # Radarr Indian Helper
 
-Internal dashboard for orchestrating Indian-language movie releases with Radarr by combining RSS feeds, TMDB metadata, custom quality scoring, and one-click automation.
+Internal dashboard for orchestrating Indian-language **movie and TV** releases with Radarr/Sonarr by combining RSS feeds, TMDB/TVDB metadata, custom quality scoring, and one-click automation. See `docs/REFERENCE.md` for the latest release, branch, and deployment context.
 
 ## Table of Contents
 - [Overview](#overview)
@@ -30,13 +30,14 @@ Radarr Indian Helper is a Node.js + TypeScript + Express application with an EJS
 
 ## Feature Highlights
 
-- **Insightful dashboard**: Grouped cards show new releases, upgrade candidates, attention-needed items, ignored titles, and stats. Global search, tabbed filters, dark mode, and sticky headers keep navigation fast.
+- **Insightful dashboards**: Movies (`/movies`) and TV (`/tv`) views group new releases, upgrade candidates, attention-needed items, ignored titles, and stats. Global search, tabbed filters, dark mode, and sticky headers keep navigation fast.
 - **Flattened Releases view**: Dedicated `/data/releases` page lists every release with poster art, TMDB/IMDB IDs, quality metadata, actions (Add/Upgrade/Ignore), and exportable links.
-- **Radarr & RSS data explorers**: `/data/radarr` surfaces synced Radarr library metadata, while `/data/rss` exposes raw feed items with parsed tags for debugging matching issues.
-- **One-click Sync & Match**: Triggers a full Radarr sync → RSS sync → matching-engine pass. Inline progress shows per-step metrics (e.g., “3 new movies from Radarr”, “2 RSS updates”), includes granular log lines, reloads automatically on success, and surfaces dismissible errors with guidance.
-- **Smart matching engine**: Normalizes RSS titles, scores resolution/source/codec/audio, detects dubbed content, enforces size deltas, and enriches each release with TMDB posters and identifiers for later rendering.
+- **Radarr/Sonarr & RSS data explorers**: `/data/radarr`, `/data/tv-releases`, and `/data/rss` expose synced library metadata and raw feed items with parsed tags for debugging matching issues.
+- **One-click Sync & Match**: Triggers a full Radarr/Sonarr sync → RSS sync → movie and TV matching-engine passes. Inline progress shows per-step metrics (e.g., “3 new movies from Radarr”, “2 RSS updates”), includes granular log lines, reloads automatically on success, and surfaces dismissible errors with guidance.
+- **Smart matching engines**: Movie and TV pipelines normalize RSS titles, score quality attributes, detect dubbed content, enforce size deltas, and enrich releases with TMDB/TVDB posters and identifiers for later rendering.
 - **Manual actions with guardrails**: Add, upgrade, or ignore releases directly from the UI via `/actions` endpoints. TMDB ID is required (Radarr constraint), but releases can be added regardless of their status (NEW / ATTENTION_NEEDED / IGNORED).
 - **Comprehensive Settings UI**: Manage Radarr credentials, feed definitions, and quality rules (weights, preferred languages, dubbed penalties, upgrade thresholds) with instant validation. All settings live in SQLite, not env vars.
+- **App-level controls**: Dedicated “Connections” and “App Settings” tabs let you manage API credentials, sync cadences (Radarr/Sonarr/RSS), and dashboard auto-refresh intervals without editing env vars.
 - **Structured logging & log explorer**: Persistent `structured_logs` table plus `/data/logs` and `/api/logs` endpoints enable timeline filtering, severity breakdowns, and deep dives without shell access.
 - **Global search & keyboard shortcuts**: Cmd/Ctrl+K focuses the search bar. Dashboard search filters cards client-side; data pages leverage server-side queries.
 - **Responsive shell & dark mode**: Tailwind-based layout adapts to mobile/desktop, with saved dark/light preference and mobile-friendly sidebar controls.
@@ -53,28 +54,28 @@ Radarr Indian Helper is a Node.js + TypeScript + Express application with an EJS
 ### Data Flow
 ```
 Radarr API -> syncRadarrMovies() -> radarr_movies table
-RSS feeds -> syncRssFeeds() -> rss_feed_items table
-                  \                       /
-                   \                     /
-                    -> matchingEngine() -> releases table (with TMDB metadata)
-                                              |
-                                              v
-                                     Dashboard & Data Pages
+Sonarr API -> syncSonarrShows()  -> sonarr_shows table
+Movie RSS  -> syncRssFeeds(movie) -> rss_feed_items -> matchingEngine()  -> movie_releases
+TV RSS     -> syncRssFeeds(tv)    -> tvMatchingEngine()                  -> tv_releases
+                                                |
+                                                v
+                                       Dashboards & Data Pages
 ```
-`syncProgress` tracks the state of manual “Sync & Match” jobs, while `structuredLogging` captures rich diagnostics through every stage.
+`syncProgress` tracks the state of manual “Sync & Match” jobs, while `structuredLogging` captures diagnostics through every stage.
 
 ### Key Modules
 - `src/server.ts`: Express bootstrap, static assets, router mounting, startup sync + schedule orchestration.
-- `src/routes/`: HTTP handlers for dashboard, data explorers, actions, settings, logs, and refresh-stat endpoints.
+- `src/routes/`: HTTP handlers for dashboards (`/movies`, `/tv`), data explorers, actions, settings, logs, and refresh-stat endpoints.
 - `src/services/`:
   - `radarrSync.ts`: Radarr movie ingestion, quality profile lookup, library caching.
   - `rssSync.ts`: Feed polling, release parsing, Brave/TMDB/IMDB enrichment, duplicate handling.
   - `matchingEngine.ts`: Core matching/scoring engine, TMDB poster extraction, Radarr history merging.
+  - `tvMatchingEngine.ts`: TV-specific enrichment pipeline with Sonarr awareness.
   - `syncProgress.ts`: In-memory progress + detail lines for long-running jobs.
   - `structuredLogging.ts` & `logStorage.ts`: Centralized logging helpers and pruning.
 - `src/models/`: lightweight repo layer for feeds, releases, settings.
 - `src/tmdb`, `src/imdb`, `src/brave`, `src/radarr`: API clients and type adapters.
-- `views/`: EJS templates for dashboard and supporting pages; `partials/` share shell, header, sidebar, and card components.
+- `views/`: EJS templates for movie & TV dashboards and supporting pages; `partials/` share shell, header, sidebar, and card components.
 - `public/js/ui.js`: Handles dark mode, sidebar controls, global search wiring, icon rendering, timestamp formatting, copy-to-clipboard, and Sync & Match polling UI.
 
 ## Data Model
@@ -103,9 +104,11 @@ SQLite schema (see `src/db/index.ts`) includes:
 ## UI Pages & Routes
 | Route | Purpose |
 | --- | --- |
-| `/` | Dashboard with summary cards, stats, Sync & Match control, and grouped release tables. |
-| `/data/releases` | Flattened releases list with posters, metadata, actions, and global search. |
+| `/movies` | Movies dashboard with summary cards, stats, Sync & Match control, and grouped release tables. |
+| `/tv` | TV dashboard highlighting new shows, seasons, and attention-needed items. |
+| `/data/releases` | Flattened movie releases list with posters, metadata, actions, and global search. |
 | `/data/radarr` | View cached Radarr library, quality profiles, root folders, and sync timestamps. |
+| `/data/tv-releases` | Inspect normalized TV releases, Sonarr linkage, and manual actions. |
 | `/data/rss` | Inspect RSS feeds, raw items, parsed tags, and manual ID overrides. |
 | `/settings` | Manage Radarr API credentials, RSS feeds, quality preferences, and sync intervals. |
 | `/actions/*` | POST endpoints for add/upgrade/ignore operations tied to UI buttons. |
@@ -115,6 +118,7 @@ Shared header (`views/partials/app-header.ejs`) injects global search, dark-mode
 
 ## External Integrations
 - **Radarr API** (`src/radarr/client.ts`): Library sync, movie lookup/add, search queue triggers, quality profile and root folder reads.
+- **Sonarr API** (`src/sonarr/client.ts`): Show sync, series lookup/add, and status detection.
 - **TMDB API** (`src/tmdb/client.ts`): Title search, metadata retrieval, poster paths for releases (stored as full URLs).
 - **IMDB/OMDB & Brave Search** (`src/imdb`, `src/brave`): Backup ID resolution when TMDB lacks results; Brave rate limiting handled gracefully.
 - **RSS feeds** (`src/services/rssSync.ts`): Parser-based ingestion with per-feed enablement and normalized metadata extraction.
@@ -142,7 +146,7 @@ Located under `/settings`:
 All values serialize to JSON inside `app_settings`.
 
 ### Environment Variables
-Only a handful are read in `src/config.ts` (e.g., `PORT`, optional DB paths). All user-level configuration flows through the UI to the database.
+Only `PORT`, `DB_PATH`, and other infrastructure concerns are read in `src/config.ts`. Radarr/Sonarr/TMDB/OMDB/Brave/TVDB credentials, feed definitions, and quality rules are stored in SQLite via the Settings UI.
 
 ## Local Development
 

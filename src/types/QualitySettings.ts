@@ -22,8 +22,12 @@ export interface QualitySettings {
   sizeBonusEnabled: boolean;
   minSizeIncreasePercentForUpgrade: number;
   upgradeThreshold: number;
+}
+
+export interface AppSettings {
   pollIntervalMinutes: number;
   radarrSyncIntervalHours: number;
+  sonarrSyncIntervalHours: number;
   rssSyncIntervalHours: number;
 }
 

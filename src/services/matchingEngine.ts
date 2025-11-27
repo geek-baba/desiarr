@@ -80,8 +80,12 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         // Check if we've already processed this item (by guid)
         const existingRelease = releasesModel.getByGuid(item.guid);
         // Note: We still process items with ADDED/UPGRADED status to update metadata
-        // but we preserve their status at the end
-        const preserveStatus = existingRelease && (existingRelease.status === 'ADDED' || existingRelease.status === 'UPGRADED');
+        // but we preserve their status at the end (including manual ignores)
+        const preserveStatus =
+          existingRelease &&
+          (existingRelease.status === 'ADDED' ||
+            existingRelease.status === 'UPGRADED' ||
+            existingRelease.manually_ignored);
 
         // Check if release is allowed
         const parsed = {
@@ -489,6 +493,10 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         // Create or update release - ALWAYS create/update, even if IGNORED
         // This ensures all RSS items appear in the dashboard
         // Preserve ADDED/UPGRADED status if item was already processed
+        if (existingRelease?.manually_ignored) {
+          status = 'IGNORED';
+        }
+
         const finalStatus = preserveStatus ? existingRelease!.status : status;
         
         const release: any = {
@@ -516,6 +524,7 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           existing_file_path: existingFilePath,
           existing_file_attributes: existingFileAttributes,
           radarr_history: radarrHistory,
+          manually_ignored: existingRelease?.manually_ignored || false,
           status: finalStatus,
           last_checked_at: new Date().toISOString(),
         };

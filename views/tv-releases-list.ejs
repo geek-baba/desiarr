@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Releases — desiarr</title>
+  <title>TV Releases — desiarr</title>
   <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
-  <%- include('partials/app-sidebar', { currentPage: 'releases' }) %>
+  <%- include('partials/app-sidebar', { currentPage: 'tv-releases' }) %>
   
   <div class="lg:pl-64">
     <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', hideRefresh: true, lastRefresh: typeof lastRefresh !== 'undefined' ? lastRefresh : null }) %>
@@ -18,29 +18,29 @@
       <div class="mb-6">
         <div class="flex justify-between items-center">
           <button 
-            id="startMatchingBtn"
-            onclick="startMatchingEngine()" 
+            id="startTvMatchingBtn"
+            onclick="startTvMatchingEngine()" 
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
           >
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
             </svg>
-            Start Matching Engine
+            Start TV Matching Engine
           </button>
           <div class="text-sm text-gray-600 dark:text-gray-400">
-            Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> releases
+            Showing <span class="font-semibold"><%= filteredCount %></span> of <span class="font-semibold"><%= totalReleases %></span> TV releases
           </div>
         </div>
         <!-- Progress Bar -->
-        <div id="matchingProgressContainer" class="mt-4 hidden">
+        <div id="tvMatchingProgressContainer" class="mt-4 hidden">
           <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
-            <div id="matchingProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            <div id="tvMatchingProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
           </div>
           <div class="flex justify-between items-center text-sm">
-            <span id="matchingProgressText" class="text-gray-600 dark:text-gray-400">Starting...</span>
-            <span id="matchingProgressDetails" class="text-gray-500 dark:text-gray-500 text-xs"></span>
+            <span id="tvMatchingProgressText" class="text-gray-600 dark:text-gray-400">Starting...</span>
+            <span id="tvMatchingProgressDetails" class="text-gray-500 dark:text-gray-500 text-xs"></span>
           </div>
-          <div id="matchingProgressError" class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"></div>
+          <div id="tvMatchingProgressError" class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"></div>
         </div>
       </div>
 
@@ -48,9 +48,9 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
           <p class="text-gray-600 dark:text-gray-400">
             <% if (typeof search !== 'undefined' && search) { %>
-              No releases found matching "<%= search %>"
+              No TV releases found matching "<%= search %>"
             <% } else { %>
-              No releases found. Go to Settings to add RSS feeds and sync data.
+              No TV releases found. Add TV RSS feeds in Settings and sync data.
             <% } %>
           </p>
         </div>
@@ -61,7 +61,7 @@
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Poster</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Movie</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Show</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Release Name</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Source</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Status</th>
@@ -73,13 +73,17 @@
                 <% releases.forEach(r => { %>
                   <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                     <td class="px-4 py-3">
-                      <% if (r.posterUrl) { %>
+                      <% if (r.posterUrl || r.tmdb_poster_url || r.tvdb_poster_url) { %>
                         <img 
-                          src="<%= r.posterUrl %>" 
-                          alt="<%= (r.tmdb_title || r.radarr_movie_title || r.title) %> poster" 
+                          src="<%= r.posterUrl || r.tmdb_poster_url || r.tvdb_poster_url %>" 
+                          alt="<%= r.show_name || r.sonarr_series_title || 'TV Show' %> poster" 
                           class="w-16 h-24 object-cover rounded-lg shadow"
                           loading="lazy"
+                          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                         />
+                        <div class="w-16 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg shadow flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs text-center p-1" style="display: none;">
+                          No Poster
+                        </div>
                       <% } else { %>
                         <div class="w-16 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg shadow flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs text-center p-1">
                           No Poster
@@ -88,10 +92,13 @@
                     </td>
                     <td class="px-4 py-3 text-sm">
                       <div class="font-semibold text-gray-900 dark:text-gray-100">
-                        <%= r.radarr_movie_title || r.tmdb_title || 'Unknown Movie' %>
+                        <%= r.sonarr_series_title || r.show_name || 'Unknown Show' %>
                       </div>
-                      <% if (r.year) { %>
-                        <div class="text-xs text-gray-500 dark:text-gray-400"><%= r.year %></div>
+                      <% if (r.season_number !== null && r.season_number !== undefined) { %>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Season <%= r.season_number %></div>
+                      <% } %>
+                      <% if (r.tvdb_id) { %>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">TVDB: <%= r.tvdb_id %></div>
                       <% } %>
                       <% if (r.tmdb_id) { %>
                         <div class="text-xs text-gray-500 dark:text-gray-400">TMDB: <%= r.tmdb_id %></div>
@@ -123,7 +130,7 @@
                         
                         <!-- Quality Attributes, Size Below Release Name -->
                         <div class="space-y-1">
-                          <!-- Quality Attributes - Match Radarr Style -->
+                          <!-- Quality Attributes - Match Movie Releases Style -->
                           <div class="flex gap-1 flex-wrap items-center">
                             <% if (r.resolution) { %>
                               <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded text-xs"><%= r.resolution %></span>
@@ -165,37 +172,30 @@
                             <% } %>
                           </div>
                           
-                          <!-- Movie Title (if available) -->
-                          <% if (r.tmdb_title || r.radarr_movie_title) { %>
+                          <!-- Show Title (if available) -->
+                          <% if (r.sonarr_series_title || r.show_name) { %>
                             <div class="text-xs text-gray-600 dark:text-gray-400">
-                              Movie: <span class="font-medium"><%= r.radarr_movie_title || r.tmdb_title %></span>
-                              <% if (r.year) { %>
-                                (<%= r.year %>)
+                              Show: <span class="font-medium"><%= r.sonarr_series_title || r.show_name %></span>
+                              <% if (r.season_number !== null && r.season_number !== undefined) { %>
+                                - Season <%= r.season_number %>
                               <% } %>
-                            </div>
-                          <% } %>
-                          
-                          <!-- Audio Languages -->
-                          <% if (r.audio_languages) { %>
-                            <div class="text-xs text-gray-600 dark:text-gray-400">
-                              Languages: <%= JSON.parse(r.audio_languages).join(', ') %>
                             </div>
                           <% } %>
                         </div>
                       </div>
                     </td>
                     <td class="px-4 py-3 text-sm">
-                      <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feedName || r.source_site || 'Unknown' %></div>
+                      <div class="font-medium text-gray-900 dark:text-gray-100"><%= r.feed_name || r.source_site || 'Unknown' %></div>
                     </td>
                     <td class="px-4 py-3 text-sm">
-                      <% if (r.status === 'NEW') { %>
-                        <span class="badge badge-success text-xs">NEW</span>
+                      <% if (r.status === 'NEW_SHOW') { %>
+                        <span class="badge badge-success text-xs">NEW SHOW</span>
+                      <% } else if (r.status === 'NEW_SEASON') { %>
+                        <span class="badge badge-info text-xs">NEW SEASON</span>
                       <% } else if (r.status === 'ATTENTION_NEEDED') { %>
                         <span class="badge badge-warning text-xs">ATTENTION NEEDED</span>
-                      <% } else if (r.status === 'EXISTING' || r.status === 'IGNORED' && r.radarr_movie_id) { %>
-                        <span class="badge badge-info text-xs">EXISTING</span>
-                      <% } else if (r.status === 'UPGRADE_CANDIDATE' || r.status === 'UPGRADED') { %>
-                        <span class="badge badge-warning text-xs">UPGRADE</span>
+                      <% } else if (r.status === 'ADDED') { %>
+                        <span class="badge badge-purple text-xs">ADDED</span>
                       <% } else if (r.status === 'IGNORED') { %>
                         <span class="badge badge-neutral text-xs">IGNORED</span>
                       <% } else { %>
@@ -257,46 +257,46 @@
       }
     });
 
-    // Matching Engine functionality
-    let matchingProgressInterval = null;
+    // TV Matching Engine functionality
+    let tvMatchingProgressInterval = null;
 
-    async function startMatchingEngine() {
-      const btn = document.getElementById('startMatchingBtn');
-      const progressContainer = document.getElementById('matchingProgressContainer');
-      const progressBar = document.getElementById('matchingProgressBar');
-      const progressText = document.getElementById('matchingProgressText');
-      const progressDetails = document.getElementById('matchingProgressDetails');
-      const progressError = document.getElementById('matchingProgressError');
+    async function startTvMatchingEngine() {
+      const btn = document.getElementById('startTvMatchingBtn');
+      const progressContainer = document.getElementById('tvMatchingProgressContainer');
+      const progressBar = document.getElementById('tvMatchingProgressBar');
+      const progressText = document.getElementById('tvMatchingProgressText');
+      const progressDetails = document.getElementById('tvMatchingProgressDetails');
+      const progressError = document.getElementById('tvMatchingProgressError');
 
       btn.disabled = true;
       btn.textContent = 'Starting...';
       progressContainer.classList.remove('hidden');
       progressError.classList.add('hidden');
       progressBar.style.width = '0%';
-      progressText.textContent = 'Starting matching engine...';
+      progressText.textContent = 'Starting TV matching engine...';
       progressDetails.textContent = '';
 
       try {
-        const res = await fetch('/data/releases/match', {
+        const res = await fetch('/data/tv-releases/match', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
         const data = await res.json();
         
         if (!data.success) {
-          throw new Error(data.message || 'Failed to start matching engine');
+          throw new Error(data.message || 'Failed to start TV matching engine');
         }
 
         // Start polling for progress
-        matchingProgressInterval = setInterval(async () => {
+        tvMatchingProgressInterval = setInterval(async () => {
           try {
-            const progressRes = await fetch('/data/releases/match/progress');
+            const progressRes = await fetch('/data/tv-releases/match/progress');
             const progressData = await progressRes.json();
             
             if (progressData.success && progressData.progress) {
               const p = progressData.progress;
               
-              if (p.type === 'matching') {
+              if (p.type === 'tv-matching') {
                 if (p.isRunning) {
                   const percent = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
                   progressBar.style.width = percent + '%';
@@ -304,13 +304,13 @@
                   progressDetails.textContent = p.current > 0 ? `${p.current} / ${p.total}` : '';
                 } else {
                   // Completed
-                  clearInterval(matchingProgressInterval);
-                  matchingProgressInterval = null;
+                  clearInterval(tvMatchingProgressInterval);
+                  tvMatchingProgressInterval = null;
                   progressBar.style.width = '100%';
-                  progressText.textContent = 'Matching completed!';
+                  progressText.textContent = 'TV matching completed!';
                   progressDetails.textContent = '';
                   btn.disabled = false;
-                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
                   
                   setTimeout(() => {
                     window.location.reload();
@@ -320,10 +320,10 @@
                 if (p.error) {
                   progressError.textContent = p.error;
                   progressError.classList.remove('hidden');
-                  clearInterval(matchingProgressInterval);
-                  matchingProgressInterval = null;
+                  clearInterval(tvMatchingProgressInterval);
+                  tvMatchingProgressInterval = null;
                   btn.disabled = false;
-                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+                  btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
                 }
               }
             }
@@ -335,10 +335,9 @@
         progressError.textContent = 'Error: ' + error.message;
         progressError.classList.remove('hidden');
         btn.disabled = false;
-        btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start Matching Engine';
+        btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> Start TV Matching Engine';
       }
     }
   </script>
 </body>
 </html>
-

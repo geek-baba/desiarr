@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Radarr Data — desiarr</title>
+  <title>Sonarr Data — desiarr</title>
   <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
-  <%- include('partials/app-sidebar', { currentPage: 'radarr' }) %>
+  <%- include('partials/app-sidebar', { currentPage: 'sonarr' }) %>
   
   <div class="lg:pl-64">
     <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', lastRefresh: typeof lastRefresh !== 'undefined' ? lastRefresh : null }) %>
@@ -21,10 +21,10 @@
         <div class="flex items-center gap-4">
           <div class="text-right">
             <div class="text-sm text-gray-600 dark:text-gray-400">
-              Total: <span class="font-semibold"><%= totalMovies %></span> movies
+              Total: <span class="font-semibold"><%= totalShows %></span> shows
             </div>
             <div class="text-sm text-gray-600 dark:text-gray-400">
-              With files: <span class="font-semibold"><%= moviesWithFiles %></span>
+              Monitored: <span class="font-semibold"><%= monitoredShows %></span>
             </div>
           </div>
           <button 
@@ -64,46 +64,58 @@
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TVDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Has File</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Monitored</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Path</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Date Added</th>
             </tr>
           </thead>
-          <tbody id="moviesTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            <% movies.forEach(movie => { %>
-              <tr class="movie-row hover:bg-gray-50 dark:hover:bg-gray-700" data-title="<%= (movie.title || '').toLowerCase() %>" data-year="<%= movie.year || '' %>" data-tmdb="<%= movie.tmdb_id || '' %>" data-imdb="<%= (movie.imdb_id || '').toLowerCase() %>">
-                <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><%= movie.title %></td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= movie.year || '-' %></td>
+          <tbody id="showsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <% shows.forEach(show => { %>
+              <tr class="show-row hover:bg-gray-50 dark:hover:bg-gray-700" data-title="<%= (show.title || '').toLowerCase() %>" data-year="<%= show.year || '' %>" data-tvdb="<%= show.tvdb_id || '' %>" data-tmdb="<%= show.tmdb_id || '' %>" data-imdb="<%= (show.imdb_id || '').toLowerCase() %>">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><%= show.title %></td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= show.year || '-' %></td>
                 <td class="px-4 py-3 text-sm text-gray-600">
-                  <% if (movie.tmdb_id) { %>
-                    <a href="https://www.themoviedb.org/movie/<%= movie.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
-                      <%= movie.tmdb_id %>
+                  <% if (show.tvdb_id && show.tvdb_url) { %>
+                    <a href="<%= show.tvdb_url %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.tvdb_id %>
+                    </a>
+                  <% } else if (show.tvdb_id) { %>
+                    <%= show.tvdb_id %>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600">
+                  <% if (show.tmdb_id) { %>
+                    <a href="https://www.themoviedb.org/tv/<%= show.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.tmdb_id %>
                     </a>
                   <% } else { %>
                     -
                   <% } %>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600">
-                  <% if (movie.imdb_id) { %>
-                    <a href="https://www.imdb.com/title/<%= movie.imdb_id %>" target="_blank" class="text-blue-600 hover:underline">
-                      <%= movie.imdb_id %>
+                  <% if (show.imdb_id) { %>
+                    <a href="https://www.imdb.com/title/<%= show.imdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                      <%= show.imdb_id %>
                     </a>
                   <% } else { %>
                     -
                   <% } %>
                 </td>
                 <td class="px-4 py-3 text-sm">
-                  <span class="<%= movie.has_file ? 'text-green-600' : 'text-gray-400' %>">
-                    <%= movie.has_file ? '✓' : '✗' %>
+                  <span class="<%= show.monitored ? 'text-green-600' : 'text-gray-400' %>">
+                    <%= show.monitored ? '✓' : '✗' %>
                   </span>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 font-mono text-xs">
-                  <%= movie.path || '-' %>
+                  <%= show.path || '-' %>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600">
-                  <%= movie.date_added ? new Date(movie.date_added).toLocaleString() : '-' %>
+                  <%= show.date_added ? new Date(show.date_added).toLocaleString() : '-' %>
                 </td>
               </tr>
             <% }); %>
@@ -255,7 +267,7 @@
       progressBar.style.width = '0%';
       
       try {
-        const response = await fetch('/data/radarr/sync', {
+        const response = await fetch('/data/sonarr/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -288,11 +300,11 @@
 
     async function checkProgress() {
       try {
-        const response = await fetch('/data/radarr/sync/progress');
+        const response = await fetch('/data/sonarr/sync/progress');
         const data = await response.json();
         
-        // Only show progress if it's a Radarr sync (page-specific)
-        if (data.progress && data.progress.type === 'radarr') {
+        // Only show progress if it's a Sonarr sync (page-specific)
+        if (data.progress && data.progress.type === 'sonarr') {
           const progress = data.progress;
           const progressBar = document.getElementById('progressBar');
           const progressPercent = document.getElementById('progressPercent');
@@ -352,8 +364,8 @@
               }
             }
           }
-          // If progress type changed (not radarr), stop polling
-          else if (progress.type !== 'radarr') {
+          // If progress type changed (not sonarr) while still running, stop polling
+          else if (progress.type !== 'sonarr') {
             clearInterval(progressInterval);
             progressInterval = null;
             resetButton();
@@ -409,11 +421,11 @@
     // Check for existing sync on page load (only once, don't auto-poll)
     window.addEventListener('load', async () => {
       try {
-        const response = await fetch('/data/radarr/sync/progress');
+        const response = await fetch('/data/sonarr/sync/progress');
         const data = await response.json();
         
-        // Only start polling if there's an active Radarr sync (page-specific)
-        if (data.progress && data.progress.isRunning && data.progress.type === 'radarr') {
+        // Only start polling if there's an active Sonarr sync (page-specific)
+        if (data.progress && data.progress.isRunning && data.progress.type === 'sonarr') {
           // Show progress bar
           const progressContainer = document.getElementById('progressContainer');
           if (progressContainer) {

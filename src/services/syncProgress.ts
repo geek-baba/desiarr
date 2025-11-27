@@ -1,7 +1,7 @@
 // Simple in-memory sync progress tracker
 interface SyncProgress {
   isRunning: boolean;
-  type: 'radarr' | 'rss' | 'matching' | 'full';
+  type: 'radarr' | 'rss' | 'matching' | 'full' | 'sonarr' | 'tv-matching';
   currentStep: string;
   progress: number; // 0-100
   total: number;
@@ -15,7 +15,7 @@ interface SyncProgress {
 let currentProgress: SyncProgress | null = null;
 
 export const syncProgress = {
-  start: (type: 'radarr' | 'rss' | 'matching' | 'full', total: number = 0) => {
+  start: (type: 'radarr' | 'rss' | 'matching' | 'full' | 'sonarr' | 'tv-matching', total: number = 0) => {
     currentProgress = {
       isRunning: true,
       type,
@@ -60,6 +60,15 @@ export const syncProgress = {
 
   clear: () => {
     currentProgress = null;
+  },
+
+  error: (message: string) => {
+    if (currentProgress) {
+      currentProgress.currentStep = message;
+      currentProgress.isRunning = false;
+      currentProgress.errors = currentProgress.errors + 1;
+      currentProgress.endTime = new Date();
+    }
   },
 };
 

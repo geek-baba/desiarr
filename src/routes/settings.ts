@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { feedsModel } from '../models/feeds';
 import { settingsModel } from '../models/settings';
-import { QualitySettings } from '../types/QualitySettings';
+import { AppSettings, QualitySettings } from '../types/QualitySettings';
 import { backfillRadarrLinks } from '../tasks/backfillRadarr';
 
 const router = Router();
@@ -10,6 +10,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const feeds = feedsModel.getAll();
     const qualitySettings = settingsModel.getQualitySettings();
+    const appSettings = settingsModel.getAppSettings();
     const allSettings = settingsModel.getAll();
     
     console.log('=== Loading Settings Page ===');
@@ -21,19 +22,30 @@ router.get('/', async (req: Request, res: Response) => {
     const braveApiKey = allSettings.find(s => s.key === 'brave_api_key')?.value || '';
     const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value || '';
     const radarrApiKey = allSettings.find(s => s.key === 'radarr_api_key')?.value || '';
+    const sonarrApiUrl = allSettings.find(s => s.key === 'sonarr_api_url')?.value || '';
+    const sonarrApiKey = allSettings.find(s => s.key === 'sonarr_api_key')?.value || '';
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value || '';
+    const tvdbUserPin = allSettings.find(s => s.key === 'tvdb_user_pin')?.value || '';
     
     console.log('Radarr URL found:', radarrApiUrl ? 'Yes' : 'No');
     console.log('Radarr Key found:', radarrApiKey ? 'Yes' : 'No');
+    console.log('Sonarr URL found:', sonarrApiUrl ? 'Yes' : 'No');
+    console.log('Sonarr Key found:', sonarrApiKey ? 'Yes' : 'No');
     console.log('Database path:', process.env.DB_PATH || './data/app.db');
 
     res.render('settings', {
       feeds,
       qualitySettings,
+      appSettings,
       tmdbApiKey,
       omdbApiKey,
       braveApiKey,
       radarrApiUrl,
       radarrApiKey,
+      sonarrApiUrl,
+      sonarrApiKey,
+      tvdbApiKey,
+      tvdbUserPin,
     });
   } catch (error) {
     console.error('Settings page error:', error);
@@ -59,16 +71,19 @@ router.get('/feeds/:id', async (req: Request, res: Response) => {
 
 router.post('/feeds', async (req: Request, res: Response) => {
   try {
-    const { name, url, enabled } = req.body;
+    const { name, url, enabled, feed_type } = req.body;
     
     if (!name || !url) {
       return res.status(400).json({ error: 'Name and URL are required' });
     }
 
+    const feedType = feed_type === 'tv' ? 'tv' : 'movie'; // Default to 'movie' if not specified
+
     const feed = feedsModel.create({
       name,
       url,
       enabled: enabled === 'true' || enabled === true,
+      feed_type: feedType,
     });
 
     res.json({ success: true, feed });
@@ -81,7 +96,7 @@ router.post('/feeds', async (req: Request, res: Response) => {
 router.put('/feeds/:id', async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name, url, enabled } = req.body;
+    const { name, url, enabled, feed_type } = req.body;
 
     const updates: any = {};
     if (name !== undefined) updates.name = name;
@@ -90,6 +105,9 @@ router.put('/feeds/:id', async (req: Request, res: Response) => {
       updates.enabled = typeof enabled === 'string' 
         ? (enabled === 'true' || enabled === '1') 
         : Boolean(enabled);
+    }
+    if (feed_type !== undefined) {
+      updates.feed_type = feed_type === 'tv' ? 'tv' : 'movie';
     }
 
     const feed = feedsModel.update(id, updates);
@@ -135,6 +153,23 @@ router.post('/quality', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Update quality settings error:', error);
     res.status(500).json({ error: 'Failed to update quality settings' });
+  }
+});
+
+router.post('/app-settings', async (req: Request, res: Response) => {
+  try {
+    const payload: Partial<AppSettings> = req.body;
+    const appSettings: AppSettings = {
+      pollIntervalMinutes: Math.max(0, parseInt(String(payload.pollIntervalMinutes ?? 60), 10) || 0),
+      radarrSyncIntervalHours: Math.max(1, parseFloat(String(payload.radarrSyncIntervalHours ?? 6)) || 1),
+      sonarrSyncIntervalHours: Math.max(1, parseFloat(String(payload.sonarrSyncIntervalHours ?? 6)) || 1),
+      rssSyncIntervalHours: Math.max(0.25, parseFloat(String(payload.rssSyncIntervalHours ?? 1)) || 1),
+    };
+    settingsModel.setAppSettings(appSettings);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update app settings error:', error);
+    res.status(500).json({ error: 'Failed to update app settings' });
   }
 });
 
@@ -416,6 +451,78 @@ router.post('/radarr-config', async (req: Request, res: Response) => {
     console.error('Save Radarr config error:', error);
     console.error('Error stack:', error?.stack);
     res.status(500).json({ success: false, error: 'Failed to save Radarr configuration: ' + (error?.message || 'Unknown error') });
+  }
+});
+
+router.post('/sonarr-config', async (req: Request, res: Response) => {
+  console.log('=== POST /settings/sonarr-config RECEIVED ===');
+  try {
+    const { apiUrl, apiKey } = req.body;
+
+    if (!apiUrl || !apiKey) {
+      return res.status(400).json({ success: false, error: 'Sonarr API URL and Key are required' });
+    }
+
+    const trimmedUrl = apiUrl.trim();
+    const trimmedKey = apiKey.trim();
+
+    try {
+      new URL(trimmedUrl);
+    } catch (error) {
+      console.error('Sonarr config validation failed: Invalid URL format', trimmedUrl);
+      return res.status(400).json({ success: false, error: 'Invalid Sonarr API URL format' });
+    }
+
+    settingsModel.set('sonarr_api_url', trimmedUrl);
+    settingsModel.set('sonarr_api_key', trimmedKey);
+
+    const allSettings = settingsModel.getAll();
+    const savedUrl = allSettings.find(s => s.key === 'sonarr_api_url')?.value;
+    const savedKey = allSettings.find(s => s.key === 'sonarr_api_key')?.value;
+
+    if (!savedUrl || !savedKey || savedUrl !== trimmedUrl || savedKey !== trimmedKey) {
+      return res.status(500).json({ success: false, error: 'Sonarr configuration was not saved correctly. Please try again.' });
+    }
+
+    const sonarrClient = (await import('../sonarr/client')).default;
+    sonarrClient.updateConfig();
+
+    res.json({ success: true, message: 'Sonarr configuration saved successfully' });
+  } catch (error: any) {
+    console.error('Save Sonarr config error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to save Sonarr configuration: ' + (error?.message || 'Unknown error') });
+  }
+});
+
+router.post('/tvdb-config', async (req: Request, res: Response) => {
+  try {
+    const { apiKey, userPin } = req.body;
+
+    if (!apiKey) {
+      return res.status(400).json({ success: false, error: 'TVDB API key is required' });
+    }
+
+    const trimmedKey = apiKey.trim();
+    const trimmedPin = (userPin || '').trim();
+
+    settingsModel.set('tvdb_api_key', trimmedKey);
+    settingsModel.set('tvdb_user_pin', trimmedPin);
+
+    const allSettings = settingsModel.getAll();
+    const savedKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
+    const savedPin = allSettings.find(s => s.key === 'tvdb_user_pin')?.value ?? '';
+
+    if (savedKey !== trimmedKey || savedPin !== trimmedPin) {
+      return res.status(500).json({ success: false, error: 'TVDB credentials were not saved correctly. Please try again.' });
+    }
+
+    const tvdbClient = (await import('../tvdb/client')).default;
+    tvdbClient.updateConfig();
+
+    res.json({ success: true, message: 'TVDB credentials saved successfully' });
+  } catch (error: any) {
+    console.error('Save TVDB config error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save TVDB configuration: ' + (error?.message || 'Unknown error') });
   }
 });
 

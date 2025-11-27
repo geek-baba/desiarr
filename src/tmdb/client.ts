@@ -90,8 +90,14 @@ class TMDBClient {
       });
       
       return response.data;
-    } catch (error) {
-      console.error('TMDB get movie error:', error);
+    } catch (error: any) {
+      // 404 errors are expected when TMDB ID is invalid - handle gracefully
+      if (error?.response?.status === 404) {
+        console.log(`TMDB movie ${tmdbId} not found (404) - ID may be invalid or movie removed`);
+        return null;
+      }
+      // Log other errors (network issues, rate limits, etc.)
+      console.error('TMDB get movie error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
@@ -118,8 +124,14 @@ class TMDBClient {
       }
       
       return null;
-    } catch (error) {
-      console.error('TMDB find by IMDB ID error:', error);
+    } catch (error: any) {
+      // 404 errors are expected when IMDB ID doesn't map to a TMDB movie
+      if (error?.response?.status === 404) {
+        console.log(`TMDB movie not found for IMDB ID ${imdbId} (404) - may not exist in TMDB`);
+        return null;
+      }
+      // Log other errors
+      console.error('TMDB find by IMDB ID error:', error?.response?.status || error?.message || error);
       return null;
     }
   }
@@ -127,6 +139,57 @@ class TMDBClient {
   getPosterUrl(posterPath: string | null | undefined): string | null {
     if (!posterPath) return null;
     return `https://image.tmdb.org/t/p/w500${posterPath}`;
+  }
+
+  async searchTv(query: string): Promise<any[] | null> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping TV search');
+      return null;
+    }
+
+    try {
+      const response = await this.client.get<any>('/search/tv', {
+        params: {
+          api_key: this.apiKey,
+          query: query,
+          language: 'en-US',
+        },
+      });
+      
+      return response.data.results || [];
+    } catch (error: any) {
+      // Log search errors (usually not 404s, but network/rate limit issues)
+      console.error('TMDB TV search error:', error?.response?.status || error?.message || error);
+      return null;
+    }
+  }
+
+  async getTvShow(tmdbId: number): Promise<any | null> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping TV show fetch');
+      return null;
+    }
+
+    try {
+      const response = await this.client.get<any>(`/tv/${tmdbId}`, {
+        params: {
+          api_key: this.apiKey,
+          language: 'en-US',
+          append_to_response: 'external_ids',
+        },
+      });
+      
+      return response.data;
+    } catch (error: any) {
+      // 404 errors are expected when TMDB ID is invalid - handle gracefully
+      if (error?.response?.status === 404) {
+        console.log(`TMDB TV show ${tmdbId} not found (404) - ID may be invalid or show removed`);
+        return null;
+      }
+      // Log other errors
+      console.error('TMDB get TV show error:', error?.response?.status || error?.message || error);
+      return null;
+    }
   }
 }
 

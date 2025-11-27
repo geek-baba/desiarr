@@ -79,69 +79,26 @@
   // Connect global search based on current page
   if (search) {
     const path = window.location.pathname;
-    
-    // Dashboard page - filter movies client-side
-    if (path === '/' || path === '/dashboard') {
-      // Use event delegation and direct function call
-      function setupDashboardSearch() {
-        const globalSearch = document.getElementById('globalSearch');
-        if (!globalSearch) {
-          setTimeout(setupDashboardSearch, 50);
-          return;
+
+    // Generic handler: on any page, if dashboard filterMovies is defined, call it
+    // This makes dashboard search work on /, /movies, /tv, /dashboard, etc.
+    function genericDashboardFilterHandler() {
+      if (typeof window.filterMovies === 'function') {
+        try {
+          window.filterMovies();
+        } catch (error) {
+          console.error('Error calling filterMovies:', error);
         }
-        
-        // Remove any existing listeners by using a flag or one-time setup
-        if (globalSearch.dataset.dashboardConnected === 'true') {
-          return; // Already connected
-        }
-        
-        // Mark as connected
-        globalSearch.dataset.dashboardConnected = 'true';
-        
-        // Create a handler that calls filterMovies
-        function triggerFilter() {
-          // Wait for function to be available, then call it
-          if (typeof window.filterMovies === 'function') {
-            try {
-              window.filterMovies();
-            } catch (error) {
-              console.error('Error calling filterMovies:', error);
-            }
-          } else {
-            // Function not ready yet, try again after a short delay
-            setTimeout(() => {
-              if (typeof window.filterMovies === 'function') {
-                try {
-                  window.filterMovies();
-                } catch (error) {
-                  console.error('Error calling filterMovies (delayed):', error);
-                }
-              }
-            }, 100);
-          }
-        }
-        
-        // Attach listeners
-        globalSearch.addEventListener('input', triggerFilter);
-        globalSearch.addEventListener('keyup', triggerFilter);
-        globalSearch.addEventListener('change', triggerFilter);
       }
-      
-      // Try multiple times
-      setupDashboardSearch();
-      setTimeout(setupDashboardSearch, 100);
-      setTimeout(setupDashboardSearch, 300);
-      setTimeout(setupDashboardSearch, 500);
-      setTimeout(setupDashboardSearch, 1000);
-      
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupDashboardSearch);
-      }
-      window.addEventListener('load', setupDashboardSearch);
     }
-    // Radarr Data page - URL-based search
-    else if (path === '/data/releases') {
-      // All Releases page - URL-based search with debouncing
+
+    search.addEventListener('input', genericDashboardFilterHandler);
+    search.addEventListener('keyup', genericDashboardFilterHandler);
+    search.addEventListener('change', genericDashboardFilterHandler);
+
+    // URL-based search pages
+    if (path === '/data/releases' || path === '/data/tv-releases') {
+      // All Releases & TV Releases pages - URL-based search with debouncing
       let searchTimeout = null;
       
       // Show/hide clear button based on search value
@@ -159,7 +116,7 @@
       // Initial check for clear button
       updateClearButton();
       
-      search.addEventListener('input', (e) => {
+      search.addEventListener('input', () => {
         updateClearButton();
         
         // Clear existing timeout
@@ -201,8 +158,17 @@
           window.location.href = url.toString();
         }
       });
+
+      // Clear button support (used by header)
+      window.clearGlobalSearch = function() {
+        search.value = '';
+        updateClearButton();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('search');
+        window.location.href = url.toString();
+      };
     }
-    else if (path === '/data/radarr') {
+    else if (path === '/data/radarr' || path === '/data/sonarr') {
     let searchTimeout = null;
     
     // Show/hide clear button based on search value
@@ -376,6 +342,8 @@
   const iconSet = {
     'layout-dashboard': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>',
     'list': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>',
+    'movie': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><path d="M7 4v16M17 4v16M2 8h20M2 12h20M2 16h20"></path></svg>',
+    'tv': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>',
     'database': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>',
     'rss': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"></path><path d="M4 4a16 16 0 0 1 16 16"></path><circle cx="5" cy="19" r="1"></circle></svg>',
     'file-text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>',

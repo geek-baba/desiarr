@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { releasesModel } from '../models/releases';
+import { tvReleasesModel } from '../models/tvReleases';
+import { ignoredShowsModel } from '../models/ignoredShows';
 import radarrClient from '../radarr/client';
+import sonarrClient from '../sonarr/client';
 import { Release } from '../types/Release';
 import tmdbClient from '../tmdb/client';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
@@ -63,6 +66,28 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       });
     }
 
+    // First, check if movie already exists in Radarr by TMDB ID
+    const existingMovie = await radarrClient.getMovie(release.tmdb_id);
+    
+    if (existingMovie) {
+      // Movie already exists in Radarr - just update our database
+      console.log(`Movie with TMDB ID ${release.tmdb_id} already exists in Radarr with ID ${existingMovie.id}`);
+      const updatedRelease: Omit<Release, 'id'> = {
+        ...release,
+        radarr_movie_id: existingMovie.id,
+        radarr_movie_title: existingMovie.title,
+        status: 'ADDED',
+      };
+      releasesModel.upsert(updatedRelease);
+
+      return res.json({ 
+        success: true, 
+        message: `Movie "${existingMovie.title}" already exists in Radarr. Database updated.`,
+        radarrMovieId: existingMovie.id,
+      });
+    }
+
+
     // Lookup movie by TMDB ID (required for Radarr)
     let movie = await radarrClient.lookupMovieByTmdbId(release.tmdb_id);
     
@@ -80,7 +105,75 @@ router.post('/:id/add', async (req: Request, res: Response) => {
     }
 
     // Add to Radarr with selected options
-    const addedMovie = await radarrClient.addMovie(movie, parseInt(qualityProfileId, 10), rootFolderPath);
+    let addedMovie: any;
+    try {
+      addedMovie = await radarrClient.addMovie(movie, parseInt(qualityProfileId, 10), rootFolderPath);
+    } catch (error: any) {
+      // If we get a "path already exists" error, find which movie is using that path
+      const errorMessage = error?.response?.data?.message || error?.message || '';
+      const errorData = error?.response?.data;
+      
+      if (errorMessage.includes('already configured') || errorMessage.includes('already exists') || 
+          (errorData && Array.isArray(errorData) && errorData.some((e: any) => e.errorCode === 'MoviePathValidator'))) {
+        console.log(`Movie add failed with "path already exists" error, finding conflicting movie...`);
+        
+        // Extract the path from the error if available
+        let conflictingPath = rootFolderPath;
+        if (errorData && Array.isArray(errorData)) {
+          const pathError = errorData.find((e: any) => e.errorCode === 'MoviePathValidator');
+          if (pathError && pathError.attemptedValue) {
+            conflictingPath = pathError.attemptedValue;
+          }
+        }
+        
+        // Find which movie is using this path
+        const existingMoviesRetry = await radarrClient.getAllMovies();
+        const conflictingMovie = existingMoviesRetry.find(m => {
+          const moviePath = m.path || '';
+          return moviePath === conflictingPath || 
+                 moviePath.startsWith(conflictingPath) || 
+                 conflictingPath.startsWith(moviePath);
+        });
+        
+        if (conflictingMovie) {
+          // If it's the same movie (by TMDB ID), just update our database
+          if (conflictingMovie.tmdbId === release.tmdb_id) {
+            const updatedRelease: Omit<Release, 'id'> = {
+              ...release,
+              radarr_movie_id: conflictingMovie.id,
+              radarr_movie_title: conflictingMovie.title,
+              status: 'ADDED',
+            };
+            releasesModel.upsert(updatedRelease);
+
+            return res.json({ 
+              success: true, 
+              message: `Movie "${conflictingMovie.title}" already exists in Radarr. Database updated.`,
+              radarrMovieId: conflictingMovie.id,
+            });
+          } else {
+            // Different movie is using the path
+            return res.status(400).json({ 
+              error: `Path conflict: The path "${conflictingPath}" is already used by another movie: "${conflictingMovie.title}" (TMDB ID: ${conflictingMovie.tmdbId}). Please choose a different root folder or remove the conflicting movie from Radarr.`,
+              conflictingMovie: {
+                id: conflictingMovie.id,
+                title: conflictingMovie.title,
+                tmdbId: conflictingMovie.tmdbId,
+                path: conflictingMovie.path,
+              }
+            });
+          }
+        } else {
+          // Path conflict but couldn't find the movie - provide generic error
+          return res.status(400).json({ 
+            error: `Path conflict: The path "${conflictingPath}" is already configured for another movie in Radarr. Please choose a different root folder or check Radarr for duplicate movies.`,
+            details: errorData
+          });
+        }
+      }
+      // Re-throw if we can't handle it
+      throw error;
+    }
 
     // Update release with Radarr movie ID
     const updatedRelease: Omit<Release, 'id'> = {
@@ -103,6 +196,125 @@ router.post('/:id/add', async (req: Request, res: Response) => {
       error: `Failed to add movie: ${errorMessage}`,
       details: error?.response?.data || undefined,
     });
+  }
+});
+
+router.get('/sonarr-options', async (req: Request, res: Response) => {
+  try {
+    const qualityProfiles = await sonarrClient.getQualityProfiles();
+    const rootFolders = await sonarrClient.getRootFolders();
+    
+    res.json({
+      success: true,
+      qualityProfiles,
+      rootFolders,
+    });
+  } catch (error: any) {
+    console.error('Get Sonarr options error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch Sonarr options',
+      details: error?.message || undefined,
+    });
+  }
+});
+
+router.post('/tv/:id/add', async (req: Request, res: Response) => {
+  try {
+    const release = tvReleasesModel.getById(parseInt(req.params.id, 10));
+    
+    if (!release) {
+      return res.status(404).json({ error: 'TV release not found' });
+    }
+
+    console.log(`Add TV show request for release ID ${req.params.id}: status=${release.status}, tvdb_id=${release.tvdb_id}, sonarr_series_id=${release.sonarr_series_id}`);
+
+    // Check if show already exists in Sonarr
+    if (release.sonarr_series_id) {
+      return res.status(400).json({ 
+        error: 'TV show already exists in Sonarr.' 
+      });
+    }
+
+    // TVDB ID is required - Sonarr primarily uses TVDB ID
+    if (!release.tvdb_id) {
+      return res.status(400).json({ 
+        error: 'TVDB ID is required to add TV show to Sonarr. Please ensure the release has a valid TVDB ID.' 
+      });
+    }
+
+    const { qualityProfileId, rootFolderPath } = req.body;
+
+    if (!qualityProfileId || !rootFolderPath) {
+      return res.status(400).json({ 
+        error: 'Quality profile ID and root folder path are required' 
+      });
+    }
+
+    // Lookup series by TVDB ID (required for Sonarr)
+    let series = await sonarrClient.lookupSeriesByTvdbId(release.tvdb_id);
+    
+    // Fallback to term lookup if TVDB ID lookup fails
+    if (!series) {
+      console.log(`TVDB ID lookup failed for ${release.tvdb_id}, trying term lookup...`);
+      const lookupResults = await sonarrClient.lookupSeries(release.show_name || release.title);
+      series = lookupResults.find((s: any) => s.tvdbId === release.tvdb_id) || null;
+    }
+
+    if (!series) {
+      return res.status(404).json({ 
+        error: `TV show not found in Sonarr lookup. TVDB ID: ${release.tvdb_id}, Title: ${release.show_name || release.title}` 
+      });
+    }
+
+    // Add to Sonarr with selected options
+    const addedSeries = await sonarrClient.addSeries(series, parseInt(qualityProfileId, 10), rootFolderPath);
+
+    // Update release with Sonarr series ID
+    const updatedRelease = {
+      ...release,
+      sonarr_series_id: addedSeries.id,
+      sonarr_series_title: addedSeries.title,
+      status: 'ADDED' as const,
+    };
+    tvReleasesModel.upsert(updatedRelease);
+
+    res.json({ 
+      success: true, 
+      message: `TV show "${addedSeries.title}" added to Sonarr successfully`,
+      sonarrSeriesId: addedSeries.id,
+    });
+  } catch (error: any) {
+    console.error('Add TV show error:', error);
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    res.status(500).json({ 
+      error: `Failed to add TV show: ${errorMessage}`,
+      details: error?.response?.data || undefined,
+    });
+  }
+});
+
+router.post('/tv/:id/ignore', async (req: Request, res: Response) => {
+  try {
+    const release = tvReleasesModel.getById(parseInt(req.params.id, 10));
+    if (!release) {
+      return res.status(404).json({ error: 'TV release not found' });
+    }
+
+    ignoredShowsModel.add({
+      tvdbId: release.tvdb_id || null,
+      tmdbId: release.tmdb_id || null,
+      showName: release.show_name,
+    });
+
+    tvReleasesModel.markShowIgnoreByIdentifiers(
+      { tvdbId: release.tvdb_id || null, tmdbId: release.tmdb_id || null, showName: release.show_name },
+      true
+    );
+
+    res.json({ success: true, message: `TV show "${release.show_name}" ignored` });
+  } catch (error: any) {
+    console.error('Ignore TV show error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to ignore TV show' });
   }
 });
 
@@ -150,8 +362,8 @@ router.post('/:id/ignore', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Release not found' });
     }
 
-    // Update release status
-    releasesModel.updateStatus(release.id!, 'IGNORED');
+    // Update release status and mark as manually ignored
+    releasesModel.updateStatus(release.id!, 'IGNORED', { manuallyIgnored: true });
 
     res.json({ success: true, message: 'Release ignored' });
   } catch (error) {

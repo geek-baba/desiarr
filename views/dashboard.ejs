@@ -47,22 +47,295 @@
     
     <main class="p-4 lg:p-6">
       <% 
-        // Define these variables for search functionality
-        const hasNewMovies = newMoviesByPeriod && (
+        const currentViewType = typeof viewType !== 'undefined' ? viewType : 'movies';
+        
+        // Movies view variables
+        const hasNewMovies = currentViewType === 'movies' && newMoviesByPeriod && (
           (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
           (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
           (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
         );
-        const hasExistingMovies = existingMoviesByPeriod && (
+        const hasExistingMovies = currentViewType === 'movies' && existingMoviesByPeriod && (
           (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
           (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
           (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
         );
-        const hasUnmatched = unmatchedItems && unmatchedItems.length > 0;
+        const hasUnmatched = currentViewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
+        
+        // TV view variables
+        const hasNewTvShows = currentViewType === 'tv' && newTvShowsByPeriod && (
+          (newTvShowsByPeriod.today && newTvShowsByPeriod.today.length > 0) ||
+          (newTvShowsByPeriod.yesterday && newTvShowsByPeriod.yesterday.length > 0) ||
+          (newTvShowsByPeriod.older && newTvShowsByPeriod.older.length > 0)
+        );
+        const hasExistingTvShows = currentViewType === 'tv' && existingTvShowsByPeriod && (
+          (existingTvShowsByPeriod.today && existingTvShowsByPeriod.today.length > 0) ||
+          (existingTvShowsByPeriod.yesterday && existingTvShowsByPeriod.yesterday.length > 0) ||
+          (existingTvShowsByPeriod.older && existingTvShowsByPeriod.older.length > 0)
+        );
+        const hasUnmatchedTv = currentViewType === 'tv' && unmatchedItems && unmatchedItems.length > 0;
       %>
 
+      <!-- Movies/TV View Selector Tabs -->
+      <div class="mb-6">
+        <nav class="flex gap-2 items-center" aria-label="View Type">
+          <a 
+            href="/dashboard"
+            class="<%= currentViewType === 'combined' 
+              ? 'bg-blue-600 text-white shadow-md' 
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+            </svg>
+            <span>Combined</span>
+          </a>
+          <a 
+            href="/movies"
+            class="<%= currentViewType === 'movies' 
+              ? 'bg-blue-600 text-white shadow-md' 
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path>
+            </svg>
+            <span>Movies</span>
+          </a>
+          <a 
+            href="/tv"
+            class="<%= currentViewType === 'tv' 
+              ? 'bg-blue-600 text-white shadow-md' 
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+            </svg>
+            <span>TV Shows</span>
+          </a>
+        </nav>
+      </div>
+
+      <% if (currentViewType === 'combined') { %>
+        <% 
+          // Combined view: merge movies and TV shows into unified list
+          // Helper to get latest date from a group
+          function getLatestDateCombined(group) {
+            let allReleases = [];
+            if (group.add) {
+              allReleases = [...(group.add || []), ...(group.existing || []), ...(group.upgrade || [])];
+            } else {
+              allReleases = [...(group.newShows || []), ...(group.existingShows || []), ...(group.unmatched || [])];
+            }
+            if (allReleases.length === 0) return 0;
+            const dates = allReleases.map(r => new Date(r.published_at).getTime());
+            return Math.max(...dates);
+          }
+          
+          // Helper to categorize by time period
+          function categorizeByTimePeriod(dateMs) {
+            const now = Date.now();
+            const today = new Date(now);
+            today.setHours(0, 0, 0, 0);
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (dateMs >= today.getTime()) return 'today';
+            if (dateMs >= yesterday.getTime()) return 'yesterday';
+            return 'older';
+          }
+          
+          // Organize by status: New, Existing, Ignored
+          const combinedByStatus = {
+            new: [],
+            existing: [],
+            ignored: []
+          };
+          
+          // Helper to determine status
+          function getItemStatus(item) {
+            if (item.type === 'movie') {
+              const movie = item.group;
+              if (movie.add && movie.add.length > 0) return 'new';
+              if (movie.upgrade && movie.upgrade.length > 0) return 'new';
+              if (movie.existing && movie.existing.length > 0) return 'existing';
+              if (movie.ignored && movie.ignored.length > 0) return 'ignored';
+            } else {
+              const show = item.group;
+              if (show.newShows && show.newShows.length > 0) return 'new';
+              if (show.existingShows && show.existingShows.length > 0) return 'existing';
+              if (show.unmatched && show.unmatched.length > 0) return 'ignored';
+            }
+            return 'existing';
+          }
+          
+          // Add movies
+          if (newMoviesByPeriod) {
+            ['today', 'yesterday', 'older'].forEach(period => {
+              if (newMoviesByPeriod[period]) {
+                newMoviesByPeriod[period].forEach(movie => {
+                  combinedByStatus.new.push({ type: 'movie', group: movie });
+                });
+              }
+            });
+          }
+          if (existingMoviesByPeriod) {
+            ['today', 'yesterday', 'older'].forEach(period => {
+              if (existingMoviesByPeriod[period]) {
+                existingMoviesByPeriod[period].forEach(movie => {
+                  combinedByStatus.existing.push({ type: 'movie', group: movie });
+                });
+              }
+            });
+          }
+          if (unmatchedItems) {
+            unmatchedItems.forEach(movie => {
+              combinedByStatus.ignored.push({ type: 'movie', group: movie });
+            });
+          }
+          
+          // Add TV shows
+          if (newTvShowsByPeriod) {
+            ['today', 'yesterday', 'older'].forEach(period => {
+              if (newTvShowsByPeriod[period]) {
+                newTvShowsByPeriod[period].forEach(show => {
+                  combinedByStatus.new.push({ type: 'tv', group: show });
+                });
+              }
+            });
+          }
+          if (existingTvShowsByPeriod) {
+            ['today', 'yesterday', 'older'].forEach(period => {
+              if (existingTvShowsByPeriod[period]) {
+                existingTvShowsByPeriod[period].forEach(show => {
+                  combinedByStatus.existing.push({ type: 'tv', group: show });
+                });
+              }
+            });
+          }
+          if (unmatchedItemsTv) {
+            unmatchedItemsTv.forEach(show => {
+              combinedByStatus.ignored.push({ type: 'tv', group: show });
+            });
+          }
+          
+          // Sort each status by date (newest first)
+          ['new', 'existing', 'ignored'].forEach(status => {
+            combinedByStatus[status].sort((a, b) => {
+              const dateA = getLatestDateCombined(a.group);
+              const dateB = getLatestDateCombined(b.group);
+              return dateB - dateA;
+            });
+          });
+          
+          const hasCombined = combinedByStatus.new.length > 0 || combinedByStatus.existing.length > 0 || combinedByStatus.ignored.length > 0;
+        %>
+        
+        <% if (!hasCombined) { %>
+          <p class="text-gray-600 dark:text-gray-400">No releases found. Go to Settings to add RSS feeds and sync data.</p>
+        <% } else { %>
+          <!-- Sync & Match Button -->
+          <div class="mb-6 flex justify-end">
+            <button 
+              id="syncMatchBtn" 
+              class="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              type="button"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              <span id="syncMatchBtnText">Sync & Match</span>
+            </button>
+          </div>
+          
+          <!-- Progress Container -->
+          <div id="syncProgressContainer" class="hidden mb-6 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex-1">
+                <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+                  <div id="syncProgressBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div id="syncProgressText" class="text-sm text-gray-700 dark:text-gray-300 font-medium"></div>
+                <div id="syncProgressDetails" class="hidden mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1"></div>
+                <div id="syncProgressError" class="hidden mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="flex-1">
+                      <div class="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Error</div>
+                      <div id="syncProgressErrorText" class="text-sm text-red-700 dark:text-red-400"></div>
+                    </div>
+                    <button 
+                      id="dismissErrorBtn"
+                      onclick="dismissSyncError()"
+                      class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 flex-shrink-0"
+                      aria-label="Dismiss error"
+                    >
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Status Tabs (New, Existing, Ignored) -->
+          <div class="mb-6">
+            <nav class="flex gap-2 items-center flex-wrap" aria-label="Status Sections">
+              <% const statusTabs = [
+                { key: 'new', label: 'New', count: combinedByStatus.new.length, color: 'green' },
+                { key: 'existing', label: 'Existing', count: combinedByStatus.existing.length, color: 'blue' },
+                { key: 'ignored', label: 'Ignored', count: combinedByStatus.ignored.length, color: 'gray' }
+              ]; %>
+              <% 
+                let firstStatusIndex = statusTabs.findIndex(tab => tab.count > 0);
+                if (firstStatusIndex === -1) firstStatusIndex = 0;
+              %>
+              <% statusTabs.forEach((tab, index) => { %>
+                <% if (tab.count > 0 || index === 0) { %>
+                  <button 
+                    onclick="showCombinedStatus('<%= tab.key %>')" 
+                    id="combined-tab-<%= tab.key %>"
+                    class="<%= index === firstStatusIndex 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+                      px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+                  >
+                    <span><%= tab.label %></span>
+                    <span class="<%= index === firstStatusIndex 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' %> 
+                      px-2 py-0.5 rounded-full text-xs font-semibold min-w-[1.75rem] text-center">
+                      <%= tab.count %>
+                    </span>
+                  </button>
+                <% } %>
+              <% }); %>
+            </nav>
+          </div>
+          
+          <!-- Combined List by Status - Single Column Layout -->
+          <% statusTabs.forEach((tab, index) => { %>
+            <% const statusData = combinedByStatus[tab.key]; %>
+            <% if (statusData && statusData.length > 0) { %>
+              <div id="combined-status-<%= tab.key %>" class="combined-section <%= index === firstStatusIndex ? '' : 'hidden' %>">
+                <div class="space-y-4">
+                  <% statusData.forEach(item => { %>
+                    <% if (item.type === 'movie') { %>
+                      <%- include('partials/dashboard/movie-card', { movie: item.group, radarrBaseUrl, showTypeIcon: true }) %>
+                    <% } else { %>
+                      <%- include('partials/dashboard/tv-show-card', { show: item.group, sonarrBaseUrl, showTypeIcon: true }) %>
+                    <% } %>
+                  <% }); %>
+                </div>
+              </div>
+            <% } %>
+          <% }); %>
+        <% } %>
+      <% } else if (currentViewType === 'movies') { %>
       <% if (!hasNewMovies && !hasExistingMovies && !hasUnmatched) { %>
-        <p class="text-gray-600 dark:text-gray-400">No releases found. Go to Settings to add RSS feeds and sync data.</p>
+          <p class="text-gray-600 dark:text-gray-400">No movie releases found. Go to Settings to add RSS feeds and sync data.</p>
       <% } else { %>
         
         <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
@@ -264,7 +537,213 @@
         </div>
         <% } %>
 
+      <% } %>
 
+      <% } else if (currentViewType === 'tv') { %>
+        <% if (!hasNewTvShows && !hasExistingTvShows && !hasUnmatchedTv) { %>
+          <p class="text-gray-600 dark:text-gray-400">No TV releases found. Go to Settings to add RSS feeds and sync data.</p>
+        <% } else { %>
+          
+          <!-- Top-level Tabs with Sync & Match Button - Modern Design -->
+          <div class="mb-6">
+            <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
+              <% 
+                const mainTabs = [
+                  { key: 'new', label: 'New TVShows', count: (newTvShowsByPeriod.today?.length || 0) + (newTvShowsByPeriod.yesterday?.length || 0) + (newTvShowsByPeriod.older?.length || 0), visible: hasNewTvShows },
+                  { key: 'existing', label: 'Existing TVShows', count: (existingTvShowsByPeriod.today?.length || 0) + (existingTvShowsByPeriod.yesterday?.length || 0) + (existingTvShowsByPeriod.older?.length || 0), visible: hasExistingTvShows },
+                  { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatchedTv },
+                ];
+                let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
+                if (firstVisibleTab === -1) firstVisibleTab = 0;
+              %>
+              <% mainTabs.forEach((tab, index) => { %>
+                <% if (tab.visible) { %>
+                  <button 
+                    onclick="showMainSection('<%= tab.key %>')" 
+                    id="main-tab-<%= tab.key %>"
+                    class="<%= index === firstVisibleTab 
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
+                      px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
+                  >
+                    <span><%= tab.label %></span>
+                    <span class="<%= index === firstVisibleTab 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300' %> 
+                      px-2 py-0.5 rounded-full text-xs font-semibold min-w-[1.75rem] text-center">
+                      <%= tab.count %>
+                    </span>
+                  </button>
+                <% } %>
+              <% }); %>
+              
+              <!-- Sync & Match Button -->
+              <div class="ml-auto flex items-center gap-3">
+                <button 
+                  id="syncMatchBtn" 
+                  class="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  type="button"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                  </svg>
+                  <span id="syncMatchBtnText">Sync & Match</span>
+                </button>
+              </div>
+            </nav>
+            
+            <!-- Progress Container (shown below tabs when active) -->
+            <div id="syncProgressContainer" class="hidden mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex-1">
+                  <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+                    <div id="syncProgressBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                  </div>
+                  <div id="syncProgressText" class="text-sm text-gray-700 dark:text-gray-300 font-medium"></div>
+                  <div id="syncProgressDetails" class="hidden mt-2 text-xs text-gray-600 dark:text-gray-400 space-y-1"></div>
+                  <div id="syncProgressError" class="hidden mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="flex-1">
+                        <div class="text-sm font-medium text-red-800 dark:text-red-300 mb-1">Error</div>
+                        <div id="syncProgressErrorText" class="text-sm text-red-700 dark:text-red-400"></div>
+                      </div>
+                      <button 
+                        id="dismissErrorBtn"
+                        onclick="dismissSyncError()"
+                        class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 flex-shrink-0"
+                        aria-label="Dismiss error"
+                      >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- New TVShows Section -->
+          <% if (hasNewTvShows) { %>
+            <div id="main-section-new" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for New TVShows -->
+              <div class="mb-4">
+                <nav class="flex gap-2" aria-label="Time Periods">
+                  <% const newTvShowsPeriods = [
+                    { key: 'today', label: 'Today', count: newTvShowsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: newTvShowsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: newTvShowsByPeriod.older?.length || 0 }
+                  ]; %>
+                  <% 
+                    let firstNewTvShowsIndex = -1;
+                    newTvShowsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstNewTvShowsIndex === -1) {
+                        firstNewTvShowsIndex = index;
+                      }
+                    });
+                  %>
+                  <% newTvShowsPeriods.forEach((period, index) => { %>
+                    <% if (period.count > 0) { %>
+                      <button 
+                        onclick="showNewTvShowsPeriod('<%= period.key %>')" 
+                        id="new-tvshows-tab-<%= period.key %>"
+                        class="<%= index === firstNewTvShowsIndex 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                      >
+                        <span><%= period.label %></span>
+                        <span class="<%= index === firstNewTvShowsIndex 
+                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                          <%= period.count %>
+                        </span>
+                      </button>
+                    <% } %>
+                  <% }); %>
+                </nav>
+              </div>
+
+              <!-- New TVShows Time Period Sections -->
+              <% newTvShowsPeriods.forEach((period, index) => { %>
+                <% if (newTvShowsByPeriod[period.key] && newTvShowsByPeriod[period.key].length > 0) { %>
+                  <div id="new-tvshows-period-<%= period.key %>" class="new-tvshows-section <%= index === firstNewTvShowsIndex ? '' : 'hidden' %>">
+                    <% newTvShowsByPeriod[period.key].forEach(show => { %>
+                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+                    <% }); %>
+                  </div>
+                <% } %>
+              <% }); %>
+            </div>
+          <% } %>
+
+          <!-- Existing TVShows Section -->
+          <% if (hasExistingTvShows) { %>
+            <div id="main-section-existing" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
+              <!-- Time Period Tabs for Existing TVShows -->
+              <div class="mb-4">
+                <nav class="flex gap-2" aria-label="Time Periods">
+                  <% const existingTvShowsPeriods = [
+                    { key: 'today', label: 'Today', count: existingTvShowsByPeriod.today?.length || 0 },
+                    { key: 'yesterday', label: 'Yesterday', count: existingTvShowsByPeriod.yesterday?.length || 0 },
+                    { key: 'older', label: 'Older', count: existingTvShowsByPeriod.older?.length || 0 }
+                  ]; %>
+                  <% 
+                    let firstExistingTvShowsIndex = -1;
+                    existingTvShowsPeriods.forEach((period, index) => {
+                      if (period.count > 0 && firstExistingTvShowsIndex === -1) {
+                        firstExistingTvShowsIndex = index;
+                      }
+                    });
+                  %>
+                  <% existingTvShowsPeriods.forEach((period, index) => { %>
+                    <% if (period.count > 0) { %>
+                      <button 
+                        onclick="showExistingTvShowsPeriod('<%= period.key %>')" 
+                        id="existing-tvshows-tab-<%= period.key %>"
+                        class="<%= index === firstExistingTvShowsIndex 
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                      >
+                        <span><%= period.label %></span>
+                        <span class="<%= index === firstExistingTvShowsIndex 
+                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                          <%= period.count %>
+                        </span>
+                      </button>
+                    <% } %>
+                  <% }); %>
+                </nav>
+              </div>
+
+              <!-- Existing TVShows Time Period Sections -->
+              <% existingTvShowsPeriods.forEach((period, index) => { %>
+                <% if (existingTvShowsByPeriod[period.key] && existingTvShowsByPeriod[period.key].length > 0) { %>
+                  <div id="existing-tvshows-period-<%= period.key %>" class="existing-tvshows-section <%= index === firstExistingTvShowsIndex ? '' : 'hidden' %>">
+                    <% existingTvShowsByPeriod[period.key].forEach(show => { %>
+                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+                    <% }); %>
+                  </div>
+                <% } %>
+              <% }); %>
+            </div>
+          <% } %>
+
+          <!-- Unmatched Items Section -->
+          <% if (hasUnmatchedTv) { %>
+            <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
+              <% unmatchedItems.forEach(show => { %>
+                <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
+              <% }); %>
+            </div>
+          <% } %>
+
+        <% } %>
       <% } %>
     </main>
   </div>
@@ -289,6 +768,36 @@
         </div>
         <div class="flex justify-end space-x-2">
           <button type="button" onclick="hideAddMovieModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+            Cancel
+          </button>
+          <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+            Add
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add TV Show Modal -->
+  <div id="addTvShowModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Add TV Show to Sonarr</h3>
+      <form id="addTvShowForm" onsubmit="submitAddTvShow(event)">
+        <input type="hidden" id="addTvShowReleaseId" name="releaseId">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Quality Profile:</label>
+          <select id="qualityProfileSelectTv" name="qualityProfileId" required class="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Root Folder:</label>
+          <select id="rootFolderSelectTv" name="rootFolderPath" required class="w-full border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideAddTvShowModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
           <button type="submit" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
@@ -477,8 +986,181 @@
       }
     }
 
+    // TV View Tab Switching Functions
+    function showNewTvShowsPeriod(period) {
+      document.querySelectorAll('.new-tvshows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-tvshows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-tvshows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-tvshows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showExistingTvShowsPeriod(period) {
+      document.querySelectorAll('.existing-tvshows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`existing-tvshows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="existing-tvshows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`existing-tvshows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    // Combined view status tab switching
+    function showCombinedStatus(status) {
+      document.querySelectorAll('.combined-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`combined-status-${status}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
+        tab.classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-500', 'text-white');
+          badge.classList.add('bg-gray-300', 'dark:bg-gray-600', 'text-gray-700', 'dark:text-gray-300');
+        }
+      });
+      
+      const activeTab = document.getElementById(`combined-tab-${status}`);
+      activeTab.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+      activeTab.classList.add('bg-blue-600', 'text-white', 'shadow-md');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-300', 'dark:bg-gray-600', 'text-gray-700', 'dark:text-gray-300');
+        activeBadge.classList.add('bg-blue-500', 'text-white');
+      }
+    }
+
+    // Legacy functions for backward compatibility (can be removed later)
+    function showNewShowsPeriod(period) {
+      document.querySelectorAll('.new-shows-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-shows-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-shows-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-shows-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showNewSeasonsPeriod(period) {
+      document.querySelectorAll('.new-seasons-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`new-seasons-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="new-seasons-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`new-seasons-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
+    function showAttentionPeriod(period) {
+      document.querySelectorAll('.attention-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      document.getElementById(`attention-period-${period}`).classList.remove('hidden');
+      
+      document.querySelectorAll('[id^="attention-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`attention-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
     let currentReleaseId = null;
+    let currentTvReleaseId = null;
     let radarrOptions = null;
+    let sonarrOptions = null;
 
     async function loadRadarrOptions() {
       if (radarrOptions) return radarrOptions;
@@ -530,6 +1212,127 @@
     function hideAddMovieModal() {
       document.getElementById('addMovieModal').classList.add('hidden');
       currentReleaseId = null;
+    }
+
+    async function loadSonarrOptions() {
+      if (sonarrOptions) return sonarrOptions;
+      
+      try {
+        const res = await fetch('/actions/sonarr-options');
+        const data = await res.json();
+        if (data.success) {
+          sonarrOptions = data;
+          return data;
+        } else {
+          throw new Error(data.error || 'Failed to load options');
+        }
+      } catch (error) {
+        console.error('Error loading Sonarr options:', error);
+        showToast('Error loading Sonarr options: ' + error.message, 'error');
+        return null;
+      }
+    }
+
+    async function addTvShow(id) {
+      currentTvReleaseId = id;
+      
+      const options = await loadSonarrOptions();
+      if (!options) return;
+
+      const qualitySelect = document.getElementById('qualityProfileSelectTv');
+      qualitySelect.innerHTML = '';
+      options.qualityProfiles.forEach(profile => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name;
+        qualitySelect.appendChild(option);
+      });
+
+      const rootFolderSelect = document.getElementById('rootFolderSelectTv');
+      rootFolderSelect.innerHTML = '';
+      options.rootFolders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder.path;
+        option.textContent = folder.path;
+        rootFolderSelect.appendChild(option);
+      });
+
+      document.getElementById('addTvShowModal').classList.remove('hidden');
+      document.getElementById('addTvShowReleaseId').value = id;
+    }
+
+    function hideAddTvShowModal() {
+      document.getElementById('addTvShowModal').classList.add('hidden');
+      currentTvReleaseId = null;
+    }
+
+    async function submitAddTvShow(event) {
+      event.preventDefault();
+      
+      const releaseId = document.getElementById('addTvShowReleaseId').value;
+      const qualityProfileId = document.getElementById('qualityProfileSelectTv').value;
+      const rootFolderPath = document.getElementById('rootFolderSelectTv').value;
+
+      if (!qualityProfileId || !rootFolderPath) {
+        showToast('Please select both quality profile and root folder', 'warning');
+        return;
+      }
+
+      const submitBtn = event.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Adding...';
+
+      try {
+        const res = await fetch(`/actions/tv/${releaseId}/add`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            qualityProfileId,
+            rootFolderPath,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(data.message || 'TV show added to Sonarr successfully', 'success');
+          hideAddTvShowModal();
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        } else {
+          showToast(data.error || 'Failed to add TV show to Sonarr', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
+      } catch (error) {
+        console.error('Add TV show error:', error);
+        showToast('Error adding TV show: ' + error.message, 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+    }
+
+    async function ignoreTvShow(id) {
+      if (!id) {
+        return;
+      }
+      try {
+        const res = await fetch(`/actions/tv/${id}/ignore`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TV show ignored', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast(data.error || 'Failed to ignore TV show', 'error');
+        }
+      } catch (error) {
+        console.error('Ignore TV show error:', error);
+        showToast('Error ignoring TV show: ' + error.message, 'error');
+      }
     }
 
     async function submitAddMovie(event) {
@@ -677,6 +1480,31 @@
       }
     }
 
+    window.isSyncInProgress = false;
+
+    (function setupAutoRefresh() {
+      const refreshMinutes = Number(<%= appSettings && appSettings.pollIntervalMinutes ? appSettings.pollIntervalMinutes : 0 %>);
+      if (!refreshMinutes || refreshMinutes <= 0) return;
+      const intervalMs = refreshMinutes * 60 * 1000;
+      let refreshTimer;
+      const schedule = () => {
+        refreshTimer = setTimeout(() => {
+          if (document.hidden || window.isSyncInProgress) {
+            schedule();
+            return;
+          }
+          window.location.reload();
+        }, intervalMs);
+      };
+      schedule();
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          clearTimeout(refreshTimer);
+          schedule();
+        }
+      });
+    })();
+
     // Search functionality
     // Define and expose filterMovies to window immediately
     function filterMovies() {
@@ -686,7 +1514,7 @@
         return;
       }
       
-      const clearSearchBtn = document.getElementById('clearSearchBtn');
+      const clearSearchBtn = document.getElementById('clearGlobalSearch');
       const searchResultsCount = document.getElementById('searchResultsCount');
       const query = searchInput.value.trim().toLowerCase();
       
@@ -704,8 +1532,12 @@
         if (searchResultsCount) {
           searchResultsCount.classList.add('hidden');
         }
-        // Restore normal tab behavior - show all cards and restore tab visibility
+        // Restore normal tab behavior - show all cards (movies + TV) and restore tab visibility
         document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
+          card.style.display = '';
+          card.classList.remove('hidden');
+        });
+        document.querySelectorAll('article.card[data-show-id]').forEach(card => {
           card.style.display = '';
           card.classList.remove('hidden');
         });
@@ -717,6 +1549,20 @@
         document.querySelectorAll('.new-movies-section, .existing-movies-section').forEach(section => {
           section.classList.remove('hidden');
           section.style.display = '';
+        });
+        // Also restore combined sections
+        document.querySelectorAll('.combined-section').forEach(section => {
+          section.classList.remove('hidden');
+          section.style.display = '';
+        });
+        // Restore status tab visibility (hide tabs with 0 count)
+        document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
+          const badge = tab.querySelector('span:last-child');
+          if (badge && badge.textContent.trim() === '0') {
+            tab.style.display = 'none';
+          } else {
+            tab.style.display = '';
+          }
         });
         return;
       }
@@ -731,9 +1577,20 @@
         section.classList.remove('hidden');
         section.style.display = 'block';
       });
+      // Also show combined sections for combined view
+      document.querySelectorAll('.combined-section').forEach(section => {
+        section.classList.remove('hidden');
+        section.style.display = 'block';
+      });
+      // Show all status tabs when searching
+      document.querySelectorAll('[id^="combined-tab-"]').forEach(tab => {
+        tab.classList.remove('hidden');
+      });
       
-      // Get all movie card containers
+      // Get all card containers (movies and TV)
+      // Note: movie and TV cards are rendered without section wrappers, so select all cards by data attributes
       const movieCards = document.querySelectorAll('article.card[data-movie-id]');
+      const tvCards = document.querySelectorAll('article.card[data-show-id]');
       let visibleCount = 0;
       
       movieCards.forEach(card => {
@@ -774,13 +1631,39 @@
         }
       });
       
+      // Filter TV show cards
+      tvCards.forEach(card => {
+        const showTitle = card.querySelector('h3')?.textContent?.toLowerCase() || '';
+        const releaseBlocks = card.querySelectorAll('.p-3');
+        
+        let hasMatchingRelease = false;
+        releaseBlocks.forEach(block => {
+          const blockText = block.textContent?.toLowerCase() || '';
+          if (blockText.includes(query)) {
+            hasMatchingRelease = true;
+          }
+        });
+        
+        const cardText = card.textContent?.toLowerCase() || '';
+        const matches = showTitle.includes(query) || hasMatchingRelease || cardText.includes(query);
+        
+        if (matches) {
+          card.classList.remove('hidden');
+          card.style.display = 'block';
+          visibleCount++;
+        } else {
+          card.classList.add('hidden');
+          card.style.display = 'none';
+        }
+      });
+      
       // Update search results count
       if (searchResultsCount) {
         if (visibleCount === 0) {
-          searchResultsCount.textContent = 'No movies found matching "' + searchInput.value + '"';
+          searchResultsCount.textContent = 'No releases found matching "' + searchInput.value + '"';
           searchResultsCount.classList.remove('hidden');
         } else {
-          searchResultsCount.textContent = `Found ${visibleCount} movie${visibleCount !== 1 ? 's' : ''} matching "${searchInput.value}"`;
+          searchResultsCount.textContent = `Found ${visibleCount} result${visibleCount !== 1 ? 's' : ''} matching "${searchInput.value}"`;
           searchResultsCount.classList.remove('hidden');
         }
       }
@@ -791,14 +1674,23 @@
       const globalSearch = document.getElementById('globalSearch');
       const searchResultsCount = document.getElementById('searchResultsCount');
       
+      const clearSearchBtn = document.getElementById('clearGlobalSearch');
+      
       if (globalSearch) globalSearch.value = '';
       if (searchResultsCount) searchResultsCount.classList.add('hidden');
+      if (clearSearchBtn) {
       clearSearchBtn.classList.add('hidden');
-      searchResultsCount.classList.add('hidden');
+        clearSearchBtn.style.display = 'none';
+      }
       
-      // Show all movie cards
+      // Show all movie & TV cards
       document.querySelectorAll('article.card[data-movie-id]').forEach(card => {
         card.style.display = '';
+        card.classList.remove('hidden');
+      });
+      document.querySelectorAll('article.card[data-show-id]').forEach(card => {
+        card.style.display = '';
+        card.classList.remove('hidden');
       });
       
       // Restore normal tab sections visibility (let the tab system handle it)
@@ -817,6 +1709,9 @@
         showMainSection(sectionKey);
       }
     }
+
+    // Expose dashboard clear function under the global name used in the header
+    window.clearGlobalSearch = clearSearch;
     
     function handleSearchKeydown(event) {
       // Clear search on Escape key
@@ -918,7 +1813,18 @@
             return res.json();
           })
           .then(data => {
-            if (!data || !data.isRunning) {
+            // Only show progress if it's a full sync (page-specific for dashboard)
+            if (!data || (data.type !== 'full' && data.isRunning)) {
+              // Wrong sync type or no data - hide progress
+              if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+              }
+              syncProgressContainer.classList.add('hidden');
+              return;
+            }
+            
+            if (!data.isRunning) {
               // Sync completed
               if (progressInterval) {
                 clearInterval(progressInterval);
@@ -929,11 +1835,13 @@
               if (data && data.currentStep && data.currentStep.startsWith('Error:')) {
                 syncMatchBtn.disabled = false;
                 syncMatchBtnText.textContent = 'Sync & Match';
+                window.isSyncInProgress = false;
                 showError(data.currentStep.replace('Error: ', ''), false); // Don't auto-dismiss errors
               } else {
                 // Success
                 syncMatchBtn.disabled = false;
                 syncMatchBtnText.textContent = 'Sync & Match';
+                window.isSyncInProgress = false;
                 syncProgressError.classList.add('hidden');
                 
                 // Show completion message
@@ -973,11 +1881,15 @@
             if (data.type === 'full') {
               // Full sync cycle - show which step we're on
               if (data.currentStep.includes('RSS')) {
-                progressText = `Step 1/3: Syncing RSS Feeds${data.total > 0 ? ` (${data.processed || 0}/${data.total} feeds)` : '...'}`;
+                progressText = `Step 1/5: Syncing RSS Feeds${data.total > 0 ? ` (${data.processed || 0}/${data.total} feeds)` : '...'}`;
               } else if (data.currentStep.includes('Radarr')) {
-                progressText = `Step 2/3: Syncing Radarr Movies${data.total > 0 ? ` (${data.processed || 0}/${data.total} movies)` : '...'}`;
-              } else if (data.currentStep.includes('matching') || data.currentStep.includes('Matching')) {
-                progressText = `Step 3/3: Running Matching Engine${data.total > 0 ? ` (${data.processed || 0}/${data.total} items)` : '...'}`;
+                progressText = `Step 2/5: Syncing Radarr Movies${data.total > 0 ? ` (${data.processed || 0}/${data.total} movies)` : '...'}`;
+              } else if (data.currentStep.includes('Sonarr')) {
+                progressText = `Step 3/5: Syncing Sonarr Shows${data.total > 0 ? ` (${data.processed || 0}/${data.total} shows)` : '...'}`;
+              } else if (data.currentStep.includes('movie matching') || (data.currentStep.includes('matching') && !data.currentStep.includes('TV'))) {
+                progressText = `Step 4/5: Running Movie Matching Engine${data.total > 0 ? ` (${data.processed || 0}/${data.total} items)` : '...'}`;
+              } else if (data.currentStep.includes('TV matching') || data.currentStep.includes('tv-matching')) {
+                progressText = `Step 5/5: Running TV Matching Engine${data.total > 0 ? ` (${data.processed || 0}/${data.total} items)` : '...'}`;
               }
             } else if (data.total > 0) {
               progressText += ` (${data.processed || 0}/${data.total})`;
@@ -1035,6 +1947,7 @@
         syncProgressDetails.classList.add('hidden');
         syncProgressBar.style.width = '0%';
         syncProgressText.textContent = 'Initializing sync...';
+        window.isSyncInProgress = true;
 
         // Start sync
         fetch('/build-match', { method: 'POST' })
@@ -1052,6 +1965,7 @@
             } else {
               syncMatchBtn.disabled = false;
               syncMatchBtnText.textContent = 'Sync & Match';
+              window.isSyncInProgress = false;
               showError(data.message || 'Failed to start sync. Please check your configuration and try again.', false);
             }
           })
@@ -1059,6 +1973,7 @@
             console.error('Error starting sync:', error);
             syncMatchBtn.disabled = false;
             syncMatchBtnText.textContent = 'Sync & Match';
+            window.isSyncInProgress = false;
             showError(`Failed to start sync: ${error.message}. Please check your network connection and try again.`, false);
           });
       });

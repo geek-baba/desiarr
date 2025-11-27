@@ -98,12 +98,42 @@
       <!-- All Feeds Card -->
       <div 
         onclick="window.location.href = '/data/rss'"
-        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= !selectedFeedId ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= !selectedFeedId && !selectedFeedType ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
       >
         <h3 class="font-semibold mb-2 text-gray-900 dark:text-gray-100">All Feeds</h3>
         <div class="text-sm text-gray-600 dark:text-gray-400">
           <div>Items: <span class="font-semibold"><%= totalItems %></span></div>
           <div>Last sync: <%= lastSync ? new Date(lastSync).toLocaleString() : 'Never' %></div>
+        </div>
+      </div>
+      
+      <!-- Movie Feeds Card -->
+      <div 
+        onclick="window.location.href = '/data/rss?feedType=movie'"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= selectedFeedType === 'movie' ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-gray-900 dark:text-gray-100">Movie Feeds</h3>
+          <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Movie</span>
+        </div>
+        <div class="text-sm text-gray-600 dark:text-gray-400">
+          <div>Items: <span class="font-semibold"><%= itemsByFeed.filter(f => f.feedType === 'movie').reduce((sum, f) => sum + f.itemCount, 0) %></span></div>
+          <div>Feeds: <span class="font-semibold"><%= itemsByFeed.filter(f => f.feedType === 'movie').length %></span></div>
+        </div>
+      </div>
+      
+      <!-- TVShow Feeds Card -->
+      <div 
+        onclick="window.location.href = '/data/rss?feedType=tv'"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= selectedFeedType === 'tv' ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-gray-900 dark:text-gray-100">TVShow Feeds</h3>
+          <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">TV</span>
+        </div>
+        <div class="text-sm text-gray-600 dark:text-gray-400">
+          <div>Items: <span class="font-semibold"><%= itemsByFeed.filter(f => f.feedType === 'tv').reduce((sum, f) => sum + f.itemCount, 0) %></span></div>
+          <div>Feeds: <span class="font-semibold"><%= itemsByFeed.filter(f => f.feedType === 'tv').length %></span></div>
         </div>
       </div>
       
@@ -113,7 +143,12 @@
           onclick="window.location.href = '/data/rss?feedId=<%= feed.feedId %>'"
           class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 cursor-pointer transition-all duration-200 <%= selectedFeedId === feed.feedId ? 'ring-2 ring-blue-500 shadow-lg' : 'hover:shadow-md hover:ring-1 hover:ring-gray-300 dark:hover:ring-gray-600' %>"
         >
-          <h3 class="font-semibold mb-2 text-gray-900 dark:text-gray-100"><%= feed.feedName %></h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold text-gray-900 dark:text-gray-100"><%= feed.feedName %></h3>
+            <span class="px-2 py-1 text-xs rounded-full <%= feed.feedType === 'tv' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' %>">
+              <%= feed.feedType === 'tv' ? 'TV' : 'Movie' %>
+            </span>
+          </div>
           <div class="text-sm text-gray-600 dark:text-gray-400">
             <div>Items: <span class="font-semibold"><%= feed.itemCount %></span></div>
             <div>Last sync: <%= new Date(feed.lastSync).toLocaleString() %></div>
@@ -130,10 +165,12 @@
           <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Feed</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Size</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Published</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TVDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
@@ -143,6 +180,11 @@
             <% items.forEach(item => { %>
               <tr class="item-row" data-title="<%= (item.title || '').toLowerCase() %>" data-feed="<%= (item.feed_name || '').toLowerCase() %>" data-year="<%= item.year || '' %>" data-tmdb="<%= item.tmdb_id || '' %>" data-imdb="<%= (item.imdb_id || '').toLowerCase() %>">
                 <td class="px-4 py-3 text-sm"><%= item.feed_name %></td>
+                <td class="px-4 py-3 text-sm">
+                  <span class="px-2 py-1 text-xs rounded-full <%= (item.feed_type || 'movie') === 'tv' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' %>">
+                    <%= (item.feed_type || 'movie') === 'tv' ? 'TV' : 'Movie' %>
+                  </span>
+                </td>
                 <td class="px-4 py-3 text-sm">
                   <a href="<%= item.link %>" target="_blank" class="text-blue-600 hover:underline">
                     <%= item.title %>
@@ -157,10 +199,38 @@
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   <div class="flex flex-col gap-1">
-                    <% if (item.tmdb_id) { %>
-                      <a href="https://www.themoviedb.org/movie/<%= item.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
-                        <%= item.tmdb_id %>
+                    <% if (item.tvdb_id && item.tvdb_url) { %>
+                      <a href="<%= item.tvdb_url %>" target="_blank" class="text-blue-600 hover:underline">
+                        <%= item.tvdb_id %>
                       </a>
+                    <% } else if (item.tvdb_id) { %>
+                      <%= item.tvdb_id %>
+                    <% } else { %>
+                      <span>-</span>
+                    <% } %>
+                    <% if ((item.feed_type || 'movie') === 'tv') { %>
+                      <button 
+                        onclick="overrideTvdbId(<%= item.id %>)" 
+                        class="bg-teal-500 hover:bg-teal-600 text-white px-2 py-1 rounded text-xs w-fit"
+                        title="Override/Update TVDB ID (will persist)"
+                      >
+                        Override
+                      </button>
+                    <% } %>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                  <div class="flex flex-col gap-1">
+                    <% if (item.tmdb_id) { %>
+                      <% if ((item.feed_type || 'movie') === 'tv') { %>
+                        <a href="https://www.themoviedb.org/tv/<%= item.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                          <%= item.tmdb_id %>
+                        </a>
+                      <% } else { %>
+                        <a href="https://www.themoviedb.org/movie/<%= item.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                          <%= item.tmdb_id %>
+                        </a>
+                      <% } %>
                     <% } else { %>
                       <span>-</span>
                     <% } %>
@@ -230,6 +300,9 @@
           <button type="button" onclick="hideOverrideTmdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
+          <button type="button" onclick="clearTmdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
+          </button>
           <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded">
             Save
           </button>
@@ -240,28 +313,65 @@
 
   <!-- Override IMDB ID Modal -->
   <div id="overrideImdbModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-      <h3 class="text-xl font-semibold mb-4">Override IMDB ID</h3>
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Override IMDB ID</h3>
       <form id="overrideImdbForm" onsubmit="submitOverrideImdb(event)">
         <input type="hidden" id="overrideImdbItemId" name="itemId">
         <div class="mb-4">
-          <label for="imdbIdInput" class="block text-sm font-medium mb-2">IMDB ID:</label>
+          <label for="imdbIdInput" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">IMDB ID:</label>
           <input 
             type="text" 
             id="imdbIdInput" 
             name="imdbId" 
             required 
-            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white"
             placeholder="Enter IMDB ID (e.g., tt1234567)"
             pattern="^tt\d{7,}$"
           >
-          <p class="text-xs text-gray-500 mt-1">Format: tt1234567</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Format: tt1234567</p>
         </div>
         <div class="flex justify-end space-x-2">
           <button type="button" onclick="hideOverrideImdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
+          <button type="button" onclick="clearImdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
+          </button>
           <button type="submit" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Override TVDB ID Modal -->
+  <div id="overrideTvdbModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+      <h3 class="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Override TVDB ID</h3>
+      <form id="overrideTvdbForm" onsubmit="submitOverrideTvdb(event)">
+        <input type="hidden" id="overrideTvdbItemId" name="itemId">
+        <div class="mb-4">
+          <label for="tvdbIdInput" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">TVDB ID:</label>
+          <input 
+            type="number" 
+            id="tvdbIdInput" 
+            name="tvdbId" 
+            required 
+            class="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Enter TVDB ID (e.g., 123456)"
+            min="1"
+          >
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter the TVDB series ID</p>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="hideOverrideTvdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+            Cancel
+          </button>
+          <button type="button" onclick="clearTvdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
+          </button>
+          <button type="submit" class="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded">
             Save
           </button>
         </div>
@@ -398,6 +508,44 @@
       }
     }
 
+    async function clearTmdbId(event) {
+      const itemId = document.getElementById('overrideTmdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-tmdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TMDB ID cleared', 'success');
+          hideOverrideTmdbModal();
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
     function overrideImdbId(itemId) {
       currentOverrideItemId = itemId;
       document.getElementById('overrideImdbItemId').value = itemId;
@@ -409,6 +557,97 @@
     function hideOverrideImdbModal() {
       document.getElementById('overrideImdbModal').classList.add('hidden');
       currentOverrideItemId = null;
+    }
+
+    function overrideTvdbId(itemId) {
+      currentOverrideItemId = itemId;
+      document.getElementById('overrideTvdbItemId').value = itemId;
+      document.getElementById('tvdbIdInput').value = '';
+      document.getElementById('overrideTvdbModal').classList.remove('hidden');
+      document.getElementById('tvdbIdInput').focus();
+    }
+
+    function hideOverrideTvdbModal() {
+      document.getElementById('overrideTvdbModal').classList.add('hidden');
+      currentOverrideItemId = null;
+    }
+
+    async function submitOverrideTvdb(event) {
+      event.preventDefault();
+      const itemId = document.getElementById('overrideTvdbItemId').value;
+      const tvdbId = document.getElementById('tvdbIdInput').value;
+      const button = event.target.querySelector('button[type="submit"]');
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Saving...';
+
+      const id = parseInt(tvdbId, 10);
+      if (isNaN(id) || id <= 0) {
+        showToast('Invalid TVDB ID', 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/data/rss/override-tvdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tvdbId: id }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`TVDB ID updated to ${data.tvdbId} (${data.seriesName || 'Unknown'})${data.tmdbId ? ` - TMDB: ${data.tmdbId}` : ''}${data.imdbId ? ` - IMDB: ${data.imdbId}` : ''} - This will persist`, 'success');
+          hideOverrideTvdbModal();
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    async function clearTvdbId(event) {
+      const itemId = document.getElementById('overrideTvdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-tvdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TVDB ID cleared', 'success');
+          hideOverrideTvdbModal();
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
 
     async function submitOverrideImdb(event) {
@@ -438,6 +677,44 @@
           showToast(`IMDB ID updated to ${data.imdbId}${data.tmdbTitle ? ` (${data.tmdbTitle})` : ''}${data.tmdbId ? ` - TMDB: ${data.tmdbId}` : ' - TMDB not found'} - This will persist`, 'success');
           hideOverrideImdbModal();
           setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    async function clearImdbId(event) {
+      const itemId = document.getElementById('overrideImdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-imdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'IMDB ID cleared', 'success');
+          hideOverrideImdbModal();
+          setTimeout(() => window.location.reload(), 800);
         } else {
           showToast('Error: ' + (data.error || 'Unknown error'), 'error');
           button.disabled = false;
@@ -553,7 +830,8 @@
       fetch('/data/rss/sync/progress')
         .then(response => response.json())
         .then(data => {
-          if (data.success && data.progress) {
+          // Only show progress if it's an RSS sync (page-specific)
+          if (data.success && data.progress && data.progress.type === 'rss') {
             const progress = data.progress;
             const progressBar = document.getElementById('progressBar');
             const progressPercent = document.getElementById('progressPercent');
@@ -594,6 +872,17 @@
                 window.location.reload();
               }, 2000);
             }
+            // If progress type changed (not rss), stop polling
+            else if (progress.type !== 'rss') {
+              clearInterval(progressInterval);
+              progressInterval = null;
+              resetButton();
+            }
+          } else if (data.success && data.progress && data.progress.type !== 'rss') {
+            // Wrong sync type - stop polling
+            clearInterval(progressInterval);
+            progressInterval = null;
+            resetButton();
           }
         })
         .catch(error => {
@@ -617,6 +906,41 @@
         progressInterval = null;
       }
     }
+
+    // Check for existing RSS sync on page load (only once, don't auto-poll)
+    window.addEventListener('load', async () => {
+      try {
+        const response = await fetch('/data/rss/sync/progress');
+        const data = await response.json();
+        
+        // Only start polling if there's an active RSS sync (page-specific)
+        if (data.success && data.progress && data.progress.isRunning && data.progress.type === 'rss') {
+          // Show progress bar
+          const progressContainer = document.getElementById('progressContainer');
+          if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+          }
+          
+          // Disable sync button
+          const button = document.getElementById('syncButton');
+          const buttonText = document.getElementById('syncButtonText');
+          const syncIcon = document.getElementById('syncIcon');
+          if (button) {
+            button.disabled = true;
+            button.classList.add('opacity-50', 'cursor-not-allowed');
+            if (buttonText) buttonText.textContent = 'Syncing...';
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+          }
+          
+          // Start polling for progress
+          progressInterval = setInterval(pollProgress, 500);
+          pollProgress();
+        }
+      } catch (error) {
+        // Silently fail - no active sync
+        console.log('No active RSS sync detected');
+      }
+    });
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {

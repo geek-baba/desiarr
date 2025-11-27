@@ -22,11 +22,15 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
     errors: [],
     lastSyncAt: new Date(),
   };
+  const parentProgress = syncProgress.get();
+  const nestedInFullSync = Boolean(parentProgress && parentProgress.isRunning && parentProgress.type === 'full');
 
   try {
     console.log('Starting Radarr movies sync...');
-    syncProgress.start('radarr', 0);
-    syncProgress.update('Connecting to Radarr...', 0);
+    if (!nestedInFullSync) {
+      syncProgress.start('radarr', 0);
+      syncProgress.update('Connecting to Radarr...', 0);
+    }
     
     // Update client config in case it changed
     console.log('Updating Radarr client configuration...');
@@ -51,7 +55,9 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
     
     if (movies.length === 0) {
       syncProgress.update('No movies found in Radarr (this might be normal if your Radarr library is empty)', 0, 0);
-      syncProgress.complete();
+      if (!nestedInFullSync) {
+        syncProgress.complete();
+      }
       return stats;
     }
     
@@ -228,7 +234,9 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
       stats.errors.length,
       details.length > 0 ? details : undefined
     );
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.complete();
+    }
     
     console.log(`Radarr sync completed: ${stats.synced} new, ${stats.updated} updated, ${stats.errors.length} errors`);
     return stats;
@@ -236,7 +244,9 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
     console.error('Radarr sync error:', error);
     const errorMessage = error?.message || error?.toString() || 'Unknown error';
     syncProgress.update(`Error: ${errorMessage}`, 0, 0, 1);
-    syncProgress.complete();
+    if (!nestedInFullSync) {
+      syncProgress.complete();
+    }
     throw error;
   }
 }

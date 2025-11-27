@@ -14,16 +14,67 @@
 
   <nav class="mt-4 px-3 text-sm">
     <% 
+      const currentPageValue = typeof currentPage !== 'undefined' ? currentPage : '';
+      const isDashboardPage = currentPageValue === 'dashboard' || currentPageValue === 'movies' || currentPageValue === 'tv';
+    %>
+    
+    <!-- Dashboard with submenu -->
+    <div class="mb-1">
+      <div class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors cursor-pointer dashboard-parent
+                  <%= isDashboardPage 
+                      ? 'bg-blue-600 text-white' 
+                      : 'hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300' %>"
+           onclick="this.nextElementSibling.classList.toggle('hidden')">
+        <span class="w-5 h-5 inline-block flex-shrink-0">
+          <i data-icon="layout-dashboard"></i>
+        </span>
+        <span class="flex-1">Dashboard</span>
+        <svg class="w-4 h-4 transition-transform dashboard-arrow <%= isDashboardPage ? 'rotate-90' : '' %>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+      </div>
+      <div class="ml-8 mt-1 space-y-1 dashboard-submenu <%= isDashboardPage ? '' : 'hidden' %>">
+        <a href="/dashboard" 
+           class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors
+                  <%= currentPageValue === 'dashboard' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400' %>"
+           aria-label="Dashboard (Combined)">
+          <span class="w-2 h-2 rounded-full bg-current"></span>
+          <span>All</span>
+        </a>
+        <a href="/movies" 
+           class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors
+                  <%= currentPageValue === 'movies' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400' %>"
+           aria-label="Movies">
+          <span class="w-2 h-2 rounded-full bg-current"></span>
+          <span>Movies</span>
+        </a>
+        <a href="/tv" 
+           class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors
+                  <%= currentPageValue === 'tv' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'hover:bg-gray-100 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400' %>"
+           aria-label="TV Shows">
+          <span class="w-2 h-2 rounded-full bg-current"></span>
+          <span>TV Shows</span>
+        </a>
+      </div>
+    </div>
+    
+    <!-- Other menu items -->
+    <% 
       const items = [
-        { href: '/', label: 'Dashboard', icon: 'layout-dashboard', page: 'dashboard' },
-        { href: '/data/releases', label: 'Releases', icon: 'list', page: 'releases' },
+        { href: '/data/releases', label: 'Movie Releases', icon: 'movie', page: 'releases' },
+        { href: '/data/tv-releases', label: 'TV Releases', icon: 'tv', page: 'tv-releases' },
         { href: '/data/radarr', label: 'Radarr Data', icon: 'database', page: 'radarr' },
+        { href: '/data/sonarr', label: 'Sonarr Data', icon: 'database', page: 'sonarr' },
         { href: '/data/rss', label: 'RSS Data', icon: 'rss', page: 'rss' },
         { href: '/logs', label: 'Logs', icon: 'file-text', page: 'logs' },
         { href: '/settings', label: 'Settings', icon: 'settings', page: 'settings' },
       ];
-      
-      const currentPageValue = typeof currentPage !== 'undefined' ? currentPage : '';
     %>
     
     <% items.forEach(i => { %>
