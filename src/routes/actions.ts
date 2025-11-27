@@ -67,8 +67,7 @@ router.post('/:id/add', async (req: Request, res: Response) => {
     }
 
     // First, check if movie already exists in Radarr by TMDB ID
-    const existingMovies = await radarrClient.getAllMovies();
-    const existingMovie = existingMovies.find(m => m.tmdbId === release.tmdb_id);
+    const existingMovie = await radarrClient.getMovie(release.tmdb_id);
     
     if (existingMovie) {
       // Movie already exists in Radarr - just update our database
