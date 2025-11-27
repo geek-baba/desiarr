@@ -300,6 +300,9 @@
           <button type="button" onclick="hideOverrideTmdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
+          <button type="button" onclick="clearTmdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
+          </button>
           <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded">
             Save
           </button>
@@ -331,6 +334,9 @@
           <button type="button" onclick="hideOverrideImdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
           </button>
+          <button type="button" onclick="clearImdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
+          </button>
           <button type="submit" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">
             Save
           </button>
@@ -361,6 +367,9 @@
         <div class="flex justify-end space-x-2">
           <button type="button" onclick="hideOverrideTvdbModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
             Cancel
+          </button>
+          <button type="button" onclick="clearTvdbId(event)" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Clear ID
           </button>
           <button type="submit" class="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded">
             Save
@@ -499,6 +508,44 @@
       }
     }
 
+    async function clearTmdbId(event) {
+      const itemId = document.getElementById('overrideTmdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-tmdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TMDB ID cleared', 'success');
+          hideOverrideTmdbModal();
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
     function overrideImdbId(itemId) {
       currentOverrideItemId = itemId;
       document.getElementById('overrideImdbItemId').value = itemId;
@@ -565,6 +612,44 @@
       }
     }
 
+    async function clearTvdbId(event) {
+      const itemId = document.getElementById('overrideTvdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-tvdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'TVDB ID cleared', 'success');
+          hideOverrideTvdbModal();
+          setTimeout(() => window.location.reload(), 800);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
     async function submitOverrideImdb(event) {
       event.preventDefault();
       const itemId = document.getElementById('overrideImdbItemId').value;
@@ -592,6 +677,44 @@
           showToast(`IMDB ID updated to ${data.imdbId}${data.tmdbTitle ? ` (${data.tmdbTitle})` : ''}${data.tmdbId ? ` - TMDB: ${data.tmdbId}` : ' - TMDB not found'} - This will persist`, 'success');
           hideOverrideImdbModal();
           setTimeout(() => window.location.reload(), 1000);
+        } else {
+          showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    async function clearImdbId(event) {
+      const itemId = document.getElementById('overrideImdbItemId').value;
+      if (!itemId) {
+        showToast('No RSS item selected', 'error');
+        return;
+      }
+      if (!confirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
+        return;
+      }
+
+      const button = event?.target;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch(`/data/rss/override-imdb/${itemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'clear' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'IMDB ID cleared', 'success');
+          hideOverrideImdbModal();
+          setTimeout(() => window.location.reload(), 800);
         } else {
           showToast('Error: ' + (data.error || 'Unknown error'), 'error');
           button.disabled = false;

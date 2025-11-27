@@ -722,17 +722,32 @@ router.post('/rss/backfill-ids', async (req: Request, res: Response) => {
 router.post('/rss/override-tmdb/:id', async (req: Request, res: Response) => {
   try {
     const itemId = parseInt(req.params.id, 10);
-    const { tmdbId } = req.body;
-    
-    if (!tmdbId || isNaN(parseInt(tmdbId, 10))) {
-      return res.status(400).json({ success: false, error: 'Valid TMDB ID is required' });
-    }
+    const { tmdbId, action } = req.body as { tmdbId?: string; action?: string };
 
-    // Get the RSS item from database
+    // Get the RSS item from database (needed for both override + clear)
     const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-    
     if (!item) {
       return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+
+    // Handle clear action
+    if (action === 'clear') {
+      db.prepare(`
+        UPDATE rss_feed_items 
+        SET tmdb_id = NULL, tmdb_id_manual = 1, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(itemId);
+
+      console.log(`Cleared TMDB ID for RSS item ${itemId}`);
+
+      return res.json({
+        success: true,
+        message: 'TMDB ID cleared. This item will remain unmatched until you set a new ID manually.',
+      });
+    }
+
+    if (!tmdbId || isNaN(parseInt(tmdbId, 10))) {
+      return res.status(400).json({ success: false, error: 'Valid TMDB ID is required' });
     }
 
     // Get API keys
@@ -786,15 +801,10 @@ router.post('/rss/override-tmdb/:id', async (req: Request, res: Response) => {
 router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
   try {
     const itemId = parseInt(req.params.id, 10);
-    const { tvdbId } = req.body;
+    const { tvdbId, action } = req.body as { tvdbId?: string; action?: string };
     
-    if (!tvdbId || isNaN(parseInt(tvdbId, 10))) {
-      return res.status(400).json({ success: false, error: 'Valid TVDB ID is required' });
-    }
-
     // Get the RSS item from database
     const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-    
     if (!item) {
       return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
@@ -803,6 +813,31 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
     if (!feed || feed.feed_type !== 'tv') {
       return res.status(400).json({ success: false, error: 'TVDB override is only available for TV feeds' });
+    }
+
+    if (action === 'clear') {
+      db.prepare(`
+        UPDATE rss_feed_items
+        SET tvdb_id = NULL, tvdb_id_manual = 1, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(itemId);
+
+      db.prepare(`
+        UPDATE tv_releases
+        SET tvdb_id = NULL, tvdb_slug = NULL, last_checked_at = datetime('now')
+        WHERE guid = ?
+      `).run(item.guid);
+
+      console.log(`Cleared TVDB ID for RSS item ${itemId}`);
+
+      return res.json({
+        success: true,
+        message: 'TVDB ID cleared. This show will remain unmatched until a new ID is set manually.',
+      });
+    }
+    
+    if (!tvdbId || isNaN(parseInt(tvdbId, 10))) {
+      return res.status(400).json({ success: false, error: 'Valid TVDB ID is required' });
     }
 
     // Get API keys
@@ -817,8 +852,6 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
 
     // Initialize TVDB client - update config and trigger authentication via a request
     tvdbClient.updateConfig();
-    // Trigger authentication by making a request (ensureAuthHeaders will be called internally)
-    // We'll verify the ID by calling getSeries which will authenticate automatically
 
     // Verify the TVDB ID by fetching series details
     const tvdbSeries = await tvdbClient.getSeries(parseInt(tvdbId, 10));
@@ -861,18 +894,14 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
 
     // Update tv_releases - update the specific release by guid, and also update all releases with the same TVDB ID
-    // This ensures consistency across all releases for the same show
     const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
     if (tvRelease) {
-      // Update the specific release by guid
       db.prepare(`
         UPDATE tv_releases 
         SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, last_checked_at = datetime('now')
         WHERE guid = ?
       `).run(parseInt(tvdbId, 10), tvdbSlug, tmdbId || null, imdbId || null, item.guid);
       
-      // Also update all other releases with the same TVDB ID to have the same slug
-      // This ensures the dashboard shows the correct URL for all releases of the same show
       if (tvdbSlug) {
         const updateCount = db.prepare(`
           UPDATE tv_releases 
@@ -887,7 +916,6 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       
       console.log(`Updated tv_release with TVDB ID ${tvdbId} and slug: ${tvdbSlug || 'none'}`);
     } else {
-      // If tv_release doesn't exist yet, update any existing releases with this TVDB ID
       if (tvdbSlug) {
         const updateCount = db.prepare(`
           UPDATE tv_releases 
@@ -926,17 +954,31 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
 router.post('/rss/override-imdb/:id', async (req: Request, res: Response) => {
   try {
     const itemId = parseInt(req.params.id, 10);
-    const { imdbId } = req.body;
+    const { imdbId, action } = req.body as { imdbId?: string; action?: string };
+    
+    // Get the RSS item from database
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+
+    if (action === 'clear') {
+      db.prepare(`
+        UPDATE rss_feed_items
+        SET imdb_id = NULL, imdb_id_manual = 1, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(itemId);
+
+      console.log(`Cleared IMDB ID for RSS item ${itemId}`);
+
+      return res.json({
+        success: true,
+        message: 'IMDB ID cleared. This item will remain unmatched until you set a new ID manually.',
+      });
+    }
     
     if (!imdbId || !imdbId.match(/^tt\d{7,}$/)) {
       return res.status(400).json({ success: false, error: 'Valid IMDB ID is required (format: tt1234567)' });
-    }
-
-    // Get the RSS item from database
-    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-    
-    if (!item) {
-      return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
 
     // Get API keys
