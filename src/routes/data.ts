@@ -481,7 +481,7 @@ router.get('/rss', (req: Request, res: Response) => {
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
         WHERE rss.feed_id = ?
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all(feedId);
     } else if (feedType) {
       items = db.prepare(`
@@ -494,9 +494,10 @@ router.get('/rss', (req: Request, res: Response) => {
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
         WHERE f.feed_type = ?
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all(feedType);
     } else {
+      // Sort by published_at DESC globally (latest first), with id as tiebreaker for consistent ordering
       items = db.prepare(`
         SELECT 
           rss.*,
@@ -506,7 +507,7 @@ router.get('/rss', (req: Request, res: Response) => {
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all();
     }
     
@@ -1361,9 +1362,33 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       console.log(`  ℹ No changes needed for RSS item ${itemId}`);
     }
 
+    // After enrichment, trigger matching engine for this specific item
+    // Get feed type to determine which matching engine to use
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const feedType = feed?.feed_type || 'movie';
+    
+    try {
+      if (feedType === 'tv') {
+        console.log(`  Triggering TV matching engine for item ${itemId}...`);
+        // For TV, we need to run the TV matching engine
+        // It will process all items, but our enriched item will be included
+        await runTvMatchingEngine();
+        console.log(`  ✓ TV matching engine completed for item ${itemId}`);
+      } else {
+        console.log(`  Triggering movie matching engine for item ${itemId}...`);
+        // For movies, run the movie matching engine
+        // It will process all items, but our enriched item will be included
+        await runMatchingEngine();
+        console.log(`  ✓ Movie matching engine completed for item ${itemId}`);
+      }
+    } catch (matchError: any) {
+      console.error(`  ⚠ Matching engine error (enrichment still succeeded):`, matchError);
+      // Don't fail the request if matching fails - enrichment succeeded
+    }
+
     res.json({ 
       success: true, 
-      message: 'Match completed',
+      message: 'Match and enrichment completed',
       tmdbId,
       imdbId,
     });

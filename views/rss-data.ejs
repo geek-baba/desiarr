@@ -168,7 +168,6 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Size</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Published</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TVDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
@@ -191,9 +190,6 @@
                   </a>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= item.year || '-' %></td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                  <%= item.rss_size_mb ? item.rss_size_mb.toFixed(2) + ' MB' : '-' %>
-                </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   <%= new Date(item.published_at).toLocaleString() %>
                 </td>
