@@ -1167,13 +1167,13 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
 
     // Get match parameters from request body (if provided from dialog)
     const matchParams: any = req.body || {};
-    const userTitle = typeof matchParams.title === 'string' ? matchParams.title.trim() || null : null;
-    const userYear = typeof matchParams.year === 'number' ? matchParams.year : (matchParams.year === null ? null : undefined);
-    const userTmdbId = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
-    const userImdbId = typeof matchParams.imdbId === 'string' ? matchParams.imdbId.trim() || null : null;
-    const userTvdbId = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
-    const userShowName = typeof matchParams.showName === 'string' ? matchParams.showName.trim() || null : null;
-    const userSeason = typeof matchParams.season === 'number' ? matchParams.season : (matchParams.season === null ? null : undefined);
+    const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
+    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
+    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userImdbId: string | null = typeof matchParams.imdbId === 'string' && matchParams.imdbId.trim() ? matchParams.imdbId.trim() : null;
+    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
+    const userSeason: number | null = typeof matchParams.season === 'number' ? matchParams.season : null;
 
     // Get API keys
     const allSettings = settingsModel.getAll();
