@@ -1298,6 +1298,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     let season = userSeason !== null ? userSeason : null;
     let year = userYear !== null ? userYear : null;
     let cleanTitle = userTitle !== null ? userTitle : null;
+    let parsed: any = null; // Will be set for movies
     
     if (feedType === 'tv') {
       // For TV shows, use parseTvTitle to extract show name, season, and year
@@ -1312,7 +1313,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       if (!cleanTitle) cleanTitle = showName;
     } else {
       // For movies, use parseRSSItem
-      const parsed = parseRSSItem({
+      parsed = parseRSSItem({
         title: item.title,
         link: item.link,
         guid: item.guid,
@@ -1482,8 +1483,8 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         }
       }
 
-      // Step 3b: Try normalized title
-      if (!tmdbId && tmdbApiKey && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
+      // Step 3b: Try normalized title (movies only)
+      if (!tmdbId && tmdbApiKey && parsed && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
         try {
           console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}`);
           const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined);
