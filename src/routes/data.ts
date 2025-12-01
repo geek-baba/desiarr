@@ -1166,7 +1166,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     console.log(`Manual match triggered for RSS item: "${item.title}" (ID: ${itemId})`);
 
     // Get match parameters from request body (if provided from dialog)
-    const matchParams: any = req.body || {};
+    const matchParams = (req.body as Record<string, any>) || {};
     const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
     const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
     const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
