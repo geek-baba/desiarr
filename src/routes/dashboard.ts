@@ -927,6 +927,7 @@ router.get('/movies', async (req: Request, res: Response) => {
       imdbId?: string;
       originalLanguage?: string;
       radarrInfo?: any;
+      rssItemId?: number | null;
       add: any[];
       existing: any[];
       upgrade: any[];
@@ -1473,6 +1474,7 @@ router.get('/tv', async (req: Request, res: Response) => {
       sonarrSeriesId?: number;
       sonarrSeriesTitle?: string;
       posterUrl?: string;
+      rssItemId?: number | null;
       newShows: any[];      // NEW_SHOW or NEW_SEASON status (not in Sonarr)
       existingShows: any[]; // IGNORED or ADDED status (in Sonarr)
       unmatched: any[];     // No IDs, not in Sonarr
