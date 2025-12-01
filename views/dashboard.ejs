@@ -1396,35 +1396,36 @@
       const targetLabel = targetType === 'tv' ? 'TV Shows' : 'Movies';
       const currentLabel = targetType === 'tv' ? 'Movies' : 'TV Shows';
       
-      if (!confirm(`Move this item from ${currentLabel} to ${targetLabel}? This will re-categorize the release and it will appear in the ${targetLabel} section after the next sync & match.`)) {
-        return;
-      }
-      
-      try {
-        const res = await fetch(`/data/rss/re-categorize/${rssItemId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetType }),
-        });
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+      showConfirm(
+        `Move this item from ${currentLabel} to ${targetLabel}? This will re-categorize the release and it will appear in the ${targetLabel} section after the next sync & match.`,
+        async () => {
+          try {
+            const res = await fetch(`/data/rss/re-categorize/${rssItemId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ targetType }),
+            });
+            
+            if (!res.ok) {
+              const errorText = await res.text();
+              throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+            }
+            
+            const data = await res.json();
+            
+            if (data.success) {
+              showToast(`Item re-categorized to ${targetLabel}. Please run "Sync & Match" to see it in the ${targetLabel} section.`, 'success');
+              // Optionally reload the page after a short delay
+              setTimeout(() => window.location.reload(), 1500);
+            } else {
+              throw new Error(data.error || 'Unknown error');
+            }
+          } catch (error) {
+            console.error('Re-categorize error:', error);
+            showToast('Error re-categorizing item: ' + (error.message || 'Unknown error'), 'error');
+          }
         }
-        
-        const data = await res.json();
-        
-        if (data.success) {
-          alert(`Item re-categorized to ${targetLabel}. Please run "Sync & Match" to see it in the ${targetLabel} section.`);
-          // Optionally reload the page after a short delay
-          setTimeout(() => window.location.reload(), 1000);
-        } else {
-          throw new Error(data.error || 'Unknown error');
-        }
-      } catch (error) {
-        console.error('Re-categorize error:', error);
-        alert('Error re-categorizing item: ' + (error.message || 'Unknown error'));
-      }
+      );
     }
 
     async function ignoreRelease(id) {

@@ -691,10 +691,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -721,6 +718,7 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
     function overrideImdbId(itemId) {
@@ -795,10 +793,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.', () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -825,6 +820,7 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
     async function submitOverrideImdb(event) {
@@ -872,10 +868,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -902,6 +895,7 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
     let currentMatchItemId = null;
@@ -1347,6 +1341,7 @@
       toast.innerHTML = `
         <span class="text-xl font-bold">${icons[type] || icons.info}</span>
         <span class="flex-1">${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 font-bold text-xl">&times;</button>
       `;
       
       container.appendChild(toast);
@@ -1356,6 +1351,44 @@
         toast.classList.add('toast-exit');
         setTimeout(() => toast.remove(), 300);
       }, duration);
+    }
+
+    function showConfirm(message, onConfirm, onCancel = null) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Confirm</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">${message}</p>
+          <div class="flex justify-end space-x-3">
+            <button class="cancel-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+              Cancel
+            </button>
+            <button class="confirm-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+              Confirm
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      overlay.querySelector('.confirm-btn').addEventListener('click', () => {
+        overlay.remove();
+        if (onConfirm) onConfirm();
+      });
+      
+      overlay.querySelector('.cancel-btn').addEventListener('click', () => {
+        overlay.remove();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.remove();
+          if (onCancel) onCancel();
+        }
+      });
     }
 
     function startSync() {
