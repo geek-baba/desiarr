@@ -1253,8 +1253,8 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
 
 // Match single RSS item
 router.post('/rss/match/:id', async (req: Request, res: Response) => {
+  const itemId = parseInt(req.params.id, 10);
   try {
-    const itemId = parseInt(req.params.id, 10);
     
     // Get the RSS item from database
     const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
