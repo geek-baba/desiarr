@@ -1347,16 +1347,18 @@ router.post('/rss/search/:id', async (req: Request, res: Response) => {
         if (tmdbApiKey && candidates.length < 10) {
           try {
             const tmdbResults = await tmdbClient.searchTv(userShowName);
-            for (const show of tmdbResults.slice(0, 10 - candidates.length)) {
-              // Check if we already have this in candidates (by TMDB ID)
-              if (!candidates.find(c => c.tmdbId === show.id)) {
-                candidates.push({
-                  tmdbId: show.id,
-                  name: show.name || 'Unknown Series',
-                  year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
-                  overview: show.overview || null,
-                  poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
-                });
+            if (tmdbResults && Array.isArray(tmdbResults)) {
+              for (const show of tmdbResults.slice(0, 10 - candidates.length)) {
+                // Check if we already have this in candidates (by TMDB ID)
+                if (!candidates.find(c => c.tmdbId === show.id)) {
+                  candidates.push({
+                    tmdbId: show.id,
+                    name: show.name || 'Unknown Series',
+                    year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
+                    overview: show.overview || null,
+                    poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                  });
+                }
               }
             }
           } catch (error) {
