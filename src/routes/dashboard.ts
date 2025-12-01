@@ -47,8 +47,8 @@ const LANGUAGE_NAMES: Record<string, string> = {
 /**
  * Get full language name from ISO code
  */
-function getLanguageName(code: string | null | undefined): string | null {
-  if (!code) return null;
+function getLanguageName(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
   const lowerCode = code.toLowerCase();
   return LANGUAGE_NAMES[lowerCode] || code.toUpperCase();
 }
@@ -535,7 +535,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         }
       }
       
-      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : null;
+      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : undefined;
       const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
       
       movieGroups.push({
@@ -544,7 +544,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId,
         imdbId: imdbIdFromRelease,
-        originalLanguage: originalLanguageName || undefined,
+        originalLanguage: originalLanguageName,
         originalLanguageCode: originalLanguageCode,
         isIndianLanguage: isIndian,
         rssItemId: rssItemId,
