@@ -545,6 +545,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     );
 
     const newMovies: typeof movieGroups = [];
+    const upgradeMovies: typeof movieGroups = [];
     const existingMovies: typeof movieGroups = [];
     const unmatchedMovies: typeof movieGroups = [];
 
@@ -562,6 +563,9 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
       if (!group.tmdbId && !group.radarrMovieId) {
         unmatchedMovies.push(group);
+      } else if (group.upgrade.length > 0 && (group.radarrMovieId || group.existing.length > 0)) {
+        // Movies with upgrades that are already in Radarr
+        upgradeMovies.push(group);
       } else if (group.radarrMovieId || group.existing.length > 0) {
         existingMovies.push(group);
       } else if (group.add.length > 0 || group.upgrade.length > 0) {
@@ -608,6 +612,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     };
 
     const newMoviesByPeriod = groupByTimePeriod(newMovies);
+    const upgradeMoviesByPeriod = groupByTimePeriod(upgradeMovies);
     const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
 
     // ========== PROCESS TV SHOWS (same logic as /tv route) ==========
@@ -814,6 +819,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       viewType: 'combined',
       // Movies data
       newMoviesByPeriod,
+      upgradeMoviesByPeriod,
       existingMoviesByPeriod,
       unmatchedItems: unmatchedMovies,
       // TV shows data
@@ -1291,8 +1297,9 @@ router.get('/movies', async (req: Request, res: Response) => {
       group.ignored.length > 0
     );
 
-    // Separate into New Movies, Existing Movies, and Unmatched Items
+    // Separate into New Movies, Upgrade Movies, Existing Movies, and Unmatched Items
     const newMovies: typeof movieGroups = [];
+    const upgradeMovies: typeof movieGroups = [];
     const existingMovies: typeof movieGroups = [];
     const unmatchedItems: typeof movieGroups = [];
 
@@ -1312,6 +1319,9 @@ router.get('/movies', async (req: Request, res: Response) => {
       if (!group.tmdbId && !group.radarrMovieId) {
         // All unmatched items go to "Unmatched Items" (including ignored ones)
         unmatchedItems.push(group);
+      } else if (group.upgrade.length > 0 && (group.radarrMovieId || group.existing.length > 0)) {
+        // Movies with upgrades that are already in Radarr
+        upgradeMovies.push(group);
       } else if (group.radarrMovieId || group.existing.length > 0) {
         // Movie is in Radarr or has existing releases - goes to "Existing Movies"
         // (ignored releases are included but don't create separate entries)
@@ -1366,6 +1376,7 @@ router.get('/movies', async (req: Request, res: Response) => {
     };
 
     const newMoviesByPeriod = groupByTimePeriod(newMovies);
+    const upgradeMoviesByPeriod = groupByTimePeriod(upgradeMovies);
     const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
     // Unmatched and Ignored items don't need time period grouping
 
@@ -1410,6 +1421,7 @@ router.get('/movies', async (req: Request, res: Response) => {
       currentPage: 'movies',
       viewType: 'movies',
       newMoviesByPeriod,
+      upgradeMoviesByPeriod,
       existingMoviesByPeriod,
       unmatchedItems,
       radarrBaseUrl,
