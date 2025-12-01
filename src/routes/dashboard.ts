@@ -17,6 +17,50 @@ import db from '../db';
 
 const router = Router();
 
+// Major Indian languages (ISO 639-1 codes)
+const MAJOR_INDIAN_LANGUAGES = new Set(['hi', 'bn', 'mr', 'te', 'ta', 'gu', 'kn', 'ml', 'pa']);
+
+// ISO 639-1 to full language name mapping
+const LANGUAGE_NAMES: Record<string, string> = {
+  'hi': 'Hindi',
+  'bn': 'Bengali',
+  'mr': 'Marathi',
+  'te': 'Telugu',
+  'ta': 'Tamil',
+  'gu': 'Gujarati',
+  'kn': 'Kannada',
+  'ml': 'Malayalam',
+  'pa': 'Punjabi',
+  'en': 'English',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'it': 'Italian',
+  'pt': 'Portuguese',
+  'ru': 'Russian',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'zh': 'Chinese',
+  'ar': 'Arabic',
+};
+
+/**
+ * Get full language name from ISO code
+ */
+function getLanguageName(code: string | null | undefined): string | null {
+  if (!code) return null;
+  const lowerCode = code.toLowerCase();
+  return LANGUAGE_NAMES[lowerCode] || code.toUpperCase();
+}
+
+/**
+ * Check if language is a major Indian language
+ */
+function isIndianLanguage(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return MAJOR_INDIAN_LANGUAGES.has(code.toLowerCase());
+}
+
 function sanitizeTitle(value: string): string {
   return value
     .replace(/[._]+/g, ' ')
@@ -480,12 +524,27 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       // Get RSS item ID from first release (for re-categorization)
       const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
       
+      // Get original language from release data (tmdb_original_language) first, then from Radarr
+      let originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
+      if (!originalLanguageCode && finalRadarrMovieId) {
+        const syncedMovie = getSyncedRadarrMovieByRadarrId(finalRadarrMovieId);
+        if (syncedMovie?.original_language) {
+          originalLanguageCode = syncedMovie.original_language;
+        }
+      }
+      
+      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : null;
+      const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId,
         imdbId: imdbIdFromRelease,
+        originalLanguage: originalLanguageName || undefined,
+        originalLanguageCode: originalLanguageCode,
+        isIndianLanguage: isIndian,
         rssItemId: rssItemId,
         radarrInfo,
         add,
@@ -532,8 +591,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
               movieGroup.imdbId = syncedMovie.imdb_id;
             }
             
-            if (syncedMovie.original_language && !movieGroup.originalLanguage) {
-              movieGroup.originalLanguage = syncedMovie.original_language;
+            // Update language from Radarr if not already set from TMDB
+            if (syncedMovie.original_language && !movieGroup.originalLanguageCode) {
+              movieGroup.originalLanguageCode = syncedMovie.original_language;
+              movieGroup.originalLanguage = getLanguageName(syncedMovie.original_language);
+              movieGroup.isIndianLanguage = isIndianLanguage(syncedMovie.original_language);
             }
             
             if (syncedMovie.tmdb_id && !movieGroup.tmdbId) {
@@ -549,6 +611,16 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
         if (releaseWithImdb?.imdb_id) {
           movieGroup.imdbId = releaseWithImdb.imdb_id;
+        }
+      }
+      
+      // Check for original language from release data (tmdb_original_language) if not already set
+      if (!movieGroup.originalLanguageCode) {
+        const releaseWithLanguage = groupReleases.find((r: any) => r.tmdb_original_language);
+        if (releaseWithLanguage?.tmdb_original_language) {
+          movieGroup.originalLanguageCode = releaseWithLanguage.tmdb_original_language;
+          movieGroup.originalLanguage = getLanguageName(releaseWithLanguage.tmdb_original_language);
+          movieGroup.isIndianLanguage = isIndianLanguage(releaseWithLanguage.tmdb_original_language);
         }
       }
       
@@ -999,6 +1071,8 @@ router.get('/movies', async (req: Request, res: Response) => {
       posterUrl?: string;
       imdbId?: string;
       originalLanguage?: string;
+      originalLanguageCode?: string;
+      isIndianLanguage?: boolean;
       radarrInfo?: any;
       rssItemId?: number | null;
       add: any[];
@@ -1285,12 +1359,27 @@ router.get('/movies', async (req: Request, res: Response) => {
         }
       }
       
+      // Get original language from release data (tmdb_original_language) first, then from Radarr
+      let originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
+      if (!originalLanguageCode && finalRadarrMovieId) {
+        const syncedMovie = getSyncedRadarrMovieByRadarrId(finalRadarrMovieId);
+        if (syncedMovie?.original_language) {
+          originalLanguageCode = syncedMovie.original_language;
+        }
+      }
+      
+      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : null;
+      const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId, // Use the verified Radarr movie ID
         imdbId: imdbIdFromRelease, // Add IMDB ID from releases
+        originalLanguage: originalLanguageName || undefined,
+        originalLanguageCode: originalLanguageCode,
+        isIndianLanguage: isIndian,
         rssItemId: releases.find(r => r.rss_item_id)?.rss_item_id || null,
         radarrInfo, // Add Radarr info to the movie group
         add,
