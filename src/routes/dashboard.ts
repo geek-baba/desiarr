@@ -1108,9 +1108,13 @@ router.get('/movies', async (req: Request, res: Response) => {
             if (radarrInfo) {
               // Extract languages from mediaInfo if available
               if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioLanguages) {
-                radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
-              } else if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioCodec) {
-                // Try to infer from audio codec metadata
+                // Ensure it's an array
+                if (Array.isArray(radarrInfo.mediaInfo.audioLanguages)) {
+                  radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
+                } else {
+                  radarrInfo.languages = null;
+                }
+              } else {
                 radarrInfo.languages = null;
               }
 

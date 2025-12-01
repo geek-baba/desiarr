@@ -278,7 +278,7 @@
             <% } %>
 
             <!-- Languages -->
-            <% if (movie.radarrInfo.languages && movie.radarrInfo.languages.length > 0) { %>
+            <% if (movie.radarrInfo.languages && Array.isArray(movie.radarrInfo.languages) && movie.radarrInfo.languages.length > 0) { %>
               <div>
                 <span class="text-gray-600 dark:text-gray-400 font-medium">Languages</span>
                 <div class="mt-1 flex flex-wrap gap-1">
