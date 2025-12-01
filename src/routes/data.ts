@@ -1517,15 +1517,18 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       // Don't fail the request if matching fails - enrichment succeeded
     }
 
-    res.json({ 
+    const response: any = {
       success: true, 
       message: 'Match and enrichment completed',
       tmdbId,
       imdbId,
-      tvdbId: feedType === 'tv' ? tvdbId : undefined,
       title: cleanTitle,
       year: year,
-    });
+    };
+    if (feedType === 'tv' && tvdbId !== null) {
+      response.tvdbId = tvdbId;
+    }
+    res.json(response);
   } catch (error: any) {
     console.error('Match RSS item error:', error);
     res.status(500).json({ 
