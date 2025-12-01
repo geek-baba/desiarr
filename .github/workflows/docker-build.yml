@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - tv-integration
+      - fix/**
   pull_request:
     branches:
       - main
