@@ -191,128 +191,164 @@
             <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Radarr Data</h4>
           </div>
 
-          <!-- Source Type (Prominent) -->
-          <% if (movie.radarrInfo.sourceTag && movie.radarrInfo.sourceTag !== 'OTHER') { %>
-            <div class="mb-3">
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Source</span>
-              <span class="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded-md font-semibold text-sm">
-                <% if (movie.radarrInfo.sourceTag === 'Bluray') { %>
-                  <span class="text-blue-600 dark:text-blue-400">Bluray</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'DVD') { %>
-                  <span class="text-green-600 dark:text-green-400">DVD</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'WEB-DL') { %>
-                  <span class="text-indigo-600 dark:text-indigo-400">WEB-DL</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'WEBRip') { %>
-                  <span class="text-indigo-500 dark:text-indigo-400">WEBRip</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'AMZN') { %>
-                  <span class="text-orange-600 dark:text-orange-400">AMZN</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'NF' || movie.radarrInfo.sourceTag === 'Netflix') { %>
-                  <span class="text-red-600 dark:text-red-400">NF</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'DSNP' || movie.radarrInfo.sourceTag === 'Disney' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
-                  <span class="text-blue-600 dark:text-blue-400">DSNP</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'ZEE5' || movie.radarrInfo.sourceTag === 'Zee5') { %>
-                  <span class="text-purple-600 dark:text-purple-400">ZEE5</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'JC' || movie.radarrInfo.sourceTag === 'JioCinema') { %>
-                  <span class="text-green-600 dark:text-green-400">JC</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'HS' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
-                  <span class="text-blue-600 dark:text-blue-400">HS</span>
-                <% } else if (movie.radarrInfo.sourceTag === 'SS') { %>
-                  <span class="text-indigo-600 dark:text-indigo-400">SS</span>
-                <% } else { %>
-                  <%= movie.radarrInfo.sourceTag %>
-                <% } %>
-              </span>
-            </div>
-          <% } %>
-
-          <!-- Last Downloaded Filename (Most Important - Preserved) -->
+          <!-- Last Downloaded Filename with Source and Size (Top Row) -->
           <% if (movie.radarrInfo.lastDownload && movie.radarrInfo.lastDownload.sourceTitle) { %>
             <div class="mb-3">
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Last Downloaded Filename</span>
-              <div class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs break-words font-mono" title="<%= movie.radarrInfo.lastDownload.sourceTitle %>">
-                <%= movie.radarrInfo.lastDownload.sourceTitle %>
+              <div class="flex items-start gap-3 flex-wrap">
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Last Downloaded Filename</span>
+                  <div class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs break-words font-mono" title="<%= movie.radarrInfo.lastDownload.sourceTitle %>">
+                    <%= movie.radarrInfo.lastDownload.sourceTitle %>
+                  </div>
+                </div>
+                <!-- Source -->
+                <% if (movie.radarrInfo.sourceTag && movie.radarrInfo.sourceTag !== 'OTHER') { %>
+                  <div class="flex-shrink-0">
+                    <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Source</span>
+                    <span class="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded-md font-semibold text-sm">
+                      <% if (movie.radarrInfo.sourceTag === 'Bluray') { %>
+                        <span class="text-blue-600 dark:text-blue-400">Bluray</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'DVD') { %>
+                        <span class="text-green-600 dark:text-green-400">DVD</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'WEB-DL') { %>
+                        <span class="text-indigo-600 dark:text-indigo-400">WEB-DL<% if (movie.radarrInfo.sourceSite) { %> <span class="text-orange-600 dark:text-orange-400"><%= movie.radarrInfo.sourceSite %></span><% } %></span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'WEBRip') { %>
+                        <span class="text-indigo-500 dark:text-indigo-400">WEBRip<% if (movie.radarrInfo.sourceSite) { %> <span class="text-orange-600 dark:text-orange-400"><%= movie.radarrInfo.sourceSite %></span><% } %></span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'AMZN') { %>
+                        <span class="text-orange-600 dark:text-orange-400">AMZN</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'NF' || movie.radarrInfo.sourceTag === 'Netflix') { %>
+                        <span class="text-red-600 dark:text-red-400">NF</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'DSNP' || movie.radarrInfo.sourceTag === 'Disney' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
+                        <span class="text-blue-600 dark:text-blue-400">DSNP</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'ZEE5' || movie.radarrInfo.sourceTag === 'Zee5') { %>
+                        <span class="text-purple-600 dark:text-purple-400">ZEE5</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'JC' || movie.radarrInfo.sourceTag === 'JioCinema') { %>
+                        <span class="text-green-600 dark:text-green-400">JC</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'HS' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
+                        <span class="text-blue-600 dark:text-blue-400">HS</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'SS') { %>
+                        <span class="text-indigo-600 dark:text-indigo-400">SS</span>
+                      <% } else { %>
+                        <%= movie.radarrInfo.sourceTag %>
+                      <% } %>
+                    </span>
+                  </div>
+                <% } %>
+                <!-- Size -->
+                <% if (movie.radarrInfo.sizeMb) { %>
+                  <div class="flex-shrink-0">
+                    <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Size</span>
+                    <%
+                      const sizeGiB = typeof movie.radarrInfo.sizeMb === 'number' ? (movie.radarrInfo.sizeMb / 1024) : (parseFloat(movie.radarrInfo.sizeMb) / 1024);
+                    %>
+                    <span class="inline-block px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md text-sm font-semibold"><%= sizeGiB.toFixed(2) %> GiB</span>
+                  </div>
+                <% } %>
               </div>
             </div>
           <% } else if (movie.radarrInfo.fileName) { %>
             <div class="mb-3">
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Filename</span>
-              <div class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs break-words font-mono" title="<%= movie.radarrInfo.fileName %>">
-                <%= movie.radarrInfo.fileName %>
+              <div class="flex items-start gap-3 flex-wrap">
+                <div class="flex-1 min-w-0">
+                  <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Filename</span>
+                  <div class="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs break-words font-mono" title="<%= movie.radarrInfo.fileName %>">
+                    <%= movie.radarrInfo.fileName %>
+                  </div>
+                </div>
+                <!-- Source -->
+                <% if (movie.radarrInfo.sourceTag && movie.radarrInfo.sourceTag !== 'OTHER') { %>
+                  <div class="flex-shrink-0">
+                    <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Source</span>
+                    <span class="inline-block px-3 py-1.5 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded-md font-semibold text-sm">
+                      <% if (movie.radarrInfo.sourceTag === 'Bluray') { %>
+                        <span class="text-blue-600 dark:text-blue-400">Bluray</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'DVD') { %>
+                        <span class="text-green-600 dark:text-green-400">DVD</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'WEB-DL') { %>
+                        <span class="text-indigo-600 dark:text-indigo-400">WEB-DL<% if (movie.radarrInfo.sourceSite) { %> <span class="text-orange-600 dark:text-orange-400"><%= movie.radarrInfo.sourceSite %></span><% } %></span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'WEBRip') { %>
+                        <span class="text-indigo-500 dark:text-indigo-400">WEBRip<% if (movie.radarrInfo.sourceSite) { %> <span class="text-orange-600 dark:text-orange-400"><%= movie.radarrInfo.sourceSite %></span><% } %></span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'AMZN') { %>
+                        <span class="text-orange-600 dark:text-orange-400">AMZN</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'NF' || movie.radarrInfo.sourceTag === 'Netflix') { %>
+                        <span class="text-red-600 dark:text-red-400">NF</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'DSNP' || movie.radarrInfo.sourceTag === 'Disney' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
+                        <span class="text-blue-600 dark:text-blue-400">DSNP</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'ZEE5' || movie.radarrInfo.sourceTag === 'Zee5') { %>
+                        <span class="text-purple-600 dark:text-purple-400">ZEE5</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'JC' || movie.radarrInfo.sourceTag === 'JioCinema') { %>
+                        <span class="text-green-600 dark:text-green-400">JC</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'HS' || movie.radarrInfo.sourceTag === 'Hotstar') { %>
+                        <span class="text-blue-600 dark:text-blue-400">HS</span>
+                      <% } else if (movie.radarrInfo.sourceTag === 'SS') { %>
+                        <span class="text-indigo-600 dark:text-indigo-400">SS</span>
+                      <% } else { %>
+                        <%= movie.radarrInfo.sourceTag %>
+                      <% } %>
+                    </span>
+                  </div>
+                <% } %>
+                <!-- Size -->
+                <% if (movie.radarrInfo.sizeMb) { %>
+                  <div class="flex-shrink-0">
+                    <span class="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 block">Size</span>
+                    <%
+                      const sizeGiB = typeof movie.radarrInfo.sizeMb === 'number' ? (movie.radarrInfo.sizeMb / 1024) : (parseFloat(movie.radarrInfo.sizeMb) / 1024);
+                    %>
+                    <span class="inline-block px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md text-sm font-semibold"><%= sizeGiB.toFixed(2) %> GiB</span>
+                  </div>
+                <% } %>
               </div>
             </div>
           <% } %>
 
-          <!-- Metadata Grid -->
-          <div class="grid grid-cols-2 gap-3 text-xs">
+          <!-- Metadata in One Line: Video Codec | Audio Info | Size | Quality | Release Group -->
+          <div class="flex flex-wrap items-center gap-2 text-xs">
             <!-- Video Codec -->
             <% if (movie.radarrInfo.codec && movie.radarrInfo.codec !== 'UNKNOWN') { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Video Codec</span>
-                <div class="mt-1">
-                  <span class="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded"><%= movie.radarrInfo.codec %></span>
-                </div>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Video Codec:</span>
+                <span class="px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded"><%= movie.radarrInfo.codec %></span>
               </div>
             <% } %>
 
             <!-- Audio Info -->
             <% if (movie.radarrInfo.audio && movie.radarrInfo.audio !== 'Unknown') { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Audio Info</span>
-                <div class="mt-1">
-                  <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded"><%= movie.radarrInfo.audio %></span>
-                </div>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Audio Info:</span>
+                <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded"><%= movie.radarrInfo.audio %></span>
               </div>
             <% } %>
 
-            <!-- Size -->
-            <% if (movie.radarrInfo.sizeMb) { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Size</span>
-                <div class="mt-1">
-                  <%
-                    const sizeGiB = typeof movie.radarrInfo.sizeMb === 'number' ? (movie.radarrInfo.sizeMb / 1024) : (parseFloat(movie.radarrInfo.sizeMb) / 1024);
-                  %>
-                  <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded"><%= sizeGiB.toFixed(2) %> GiB</span>
-                </div>
-              </div>
-            <% } %>
-
-            <!-- Languages -->
-            <% if (movie.radarrInfo.languages && Array.isArray(movie.radarrInfo.languages) && movie.radarrInfo.languages.length > 0) { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Languages</span>
-                <div class="mt-1 flex flex-wrap gap-1">
-                  <% movie.radarrInfo.languages.forEach(lang => { %>
-                    <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded text-xs uppercase"><%= lang %></span>
-                  <% }); %>
-                </div>
+            <!-- Size (if not shown above) -->
+            <% if (movie.radarrInfo.sizeMb && (!movie.radarrInfo.lastDownload || !movie.radarrInfo.lastDownload.sourceTitle) && !movie.radarrInfo.fileName) { %>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Size:</span>
+                <%
+                  const sizeGiB = typeof movie.radarrInfo.sizeMb === 'number' ? (movie.radarrInfo.sizeMb / 1024) : (parseFloat(movie.radarrInfo.sizeMb) / 1024);
+                %>
+                <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded"><%= sizeGiB.toFixed(2) %> GiB</span>
               </div>
             <% } %>
 
             <!-- Quality -->
             <% if (movie.radarrInfo.quality) { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Quality</span>
-                <div class="mt-1">
-                  <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded"><%= movie.radarrInfo.quality %></span>
-                </div>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Quality:</span>
+                <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded"><%= movie.radarrInfo.quality %></span>
               </div>
             <% } else if (movie.radarrInfo.resolution && movie.radarrInfo.resolution !== 'UNKNOWN') { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Quality</span>
-                <div class="mt-1">
-                  <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded"><%= movie.radarrInfo.resolution %></span>
-                </div>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Quality:</span>
+                <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 rounded"><%= movie.radarrInfo.resolution %></span>
               </div>
             <% } %>
 
             <!-- Release Group -->
             <% if (movie.radarrInfo.lastDownload && movie.radarrInfo.lastDownload.releaseGroup) { %>
-              <div>
-                <span class="text-gray-600 dark:text-gray-400 font-medium">Release Group</span>
-                <div class="mt-1">
-                  <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded font-mono"><%= movie.radarrInfo.lastDownload.releaseGroup %></span>
-                </div>
+              <div class="flex items-center gap-1">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">Release Group:</span>
+                <span class="px-2 py-1 bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 rounded font-mono"><%= movie.radarrInfo.lastDownload.releaseGroup %></span>
               </div>
             <% } %>
           </div>

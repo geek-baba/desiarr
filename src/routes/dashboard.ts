@@ -381,6 +381,27 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                           // Source type from lastDownload is highest priority
                           radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
                           
+                          // For WEB-DL/WEBRip, check if there's a streaming service in the filename
+                          if ((radarrInfo.sourceTag === 'WEB-DL' || radarrInfo.sourceTag === 'WEBRip') && lastDownload.sourceTitle) {
+                            const upperTitle = lastDownload.sourceTitle.toUpperCase();
+                            // Check for streaming services in filename
+                            if (/AMZN|AMAZON|PRIME/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'AMZN';
+                            } else if (/NF|NETFLIX/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'NF';
+                            } else if (/JC|JIOCINEMA/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'JC';
+                            } else if (/DSNP|DISNEY|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'DSNP';
+                            } else if (/ZEE5/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'ZEE5';
+                            } else if (/HS|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'HS';
+                            } else if (/\bSS\b/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'SS';
+                            }
+                          }
+                          
                           // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
                             radarrInfo.resolution = parsed.resolution;
@@ -1161,6 +1182,27 @@ router.get('/movies', async (req: Request, res: Response) => {
                           const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
                           // Source type from lastDownload is highest priority
                           radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
+                          
+                          // For WEB-DL/WEBRip, check if there's a streaming service in the filename
+                          if ((radarrInfo.sourceTag === 'WEB-DL' || radarrInfo.sourceTag === 'WEBRip') && lastDownload.sourceTitle) {
+                            const upperTitle = lastDownload.sourceTitle.toUpperCase();
+                            // Check for streaming services in filename
+                            if (/AMZN|AMAZON|PRIME/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'AMZN';
+                            } else if (/NF|NETFLIX/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'NF';
+                            } else if (/JC|JIOCINEMA/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'JC';
+                            } else if (/DSNP|DISNEY|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'DSNP';
+                            } else if (/ZEE5/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'ZEE5';
+                            } else if (/HS|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'HS';
+                            } else if (/\bSS\b/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'SS';
+                            }
+                          }
                           
                           // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
