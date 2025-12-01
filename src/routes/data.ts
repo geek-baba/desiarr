@@ -1166,14 +1166,14 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     console.log(`Manual match triggered for RSS item: "${item.title}" (ID: ${itemId})`);
 
     // Get match parameters from request body (if provided from dialog)
-    const matchParams = req.body || {};
-    const userTitle = matchParams.title?.trim() || null;
-    const userYear = matchParams.year || null;
-    const userTmdbId = matchParams.tmdbId || null;
-    const userImdbId = matchParams.imdbId?.trim() || null;
-    const userTvdbId = matchParams.tvdbId || null;
-    const userShowName = matchParams.showName?.trim() || null;
-    const userSeason = matchParams.season || null;
+    const matchParams: any = req.body || {};
+    const userTitle = typeof matchParams.title === 'string' ? matchParams.title.trim() || null : null;
+    const userYear = typeof matchParams.year === 'number' ? matchParams.year : (matchParams.year === null ? null : undefined);
+    const userTmdbId = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userImdbId = typeof matchParams.imdbId === 'string' ? matchParams.imdbId.trim() || null : null;
+    const userTvdbId = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userShowName = typeof matchParams.showName === 'string' ? matchParams.showName.trim() || null : null;
+    const userSeason = typeof matchParams.season === 'number' ? matchParams.season : (matchParams.season === null ? null : undefined);
 
     // Get API keys
     const allSettings = settingsModel.getAll();
@@ -1199,13 +1199,13 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       description: item.raw_data || '',
     } as any, item.feed_id, item.feed_name);
 
-    let tmdbId = userTmdbId || item.tmdb_id || (parsed as any).tmdb_id || null;
-    let imdbId = userImdbId || item.imdb_id || (parsed as any).imdb_id || null;
-    let cleanTitle = userTitle || (parsed as any).clean_title || item.clean_title || null;
-    let year = userYear !== null ? userYear : (parsed.year || item.year || null);
-    let tvdbId = userTvdbId || item.tvdb_id || null;
-    let showName = userShowName || null;
-    let season = userSeason !== null ? userSeason : null;
+    let tmdbId = userTmdbId !== null && userTmdbId !== undefined ? userTmdbId : (item.tmdb_id || (parsed as any).tmdb_id || null);
+    let imdbId = userImdbId !== null && userImdbId !== undefined ? userImdbId : (item.imdb_id || (parsed as any).imdb_id || null);
+    let cleanTitle = userTitle !== null && userTitle !== undefined ? userTitle : ((parsed as any).clean_title || item.clean_title || null);
+    let year = userYear !== null && userYear !== undefined ? userYear : (parsed.year || item.year || null);
+    let tvdbId = userTvdbId !== null && userTvdbId !== undefined ? userTvdbId : (item.tvdb_id || null);
+    let showName = userShowName !== null && userShowName !== undefined ? userShowName : null;
+    let season = userSeason !== null && userSeason !== undefined ? userSeason : null;
 
     console.log(`  Match attributes: Title="${cleanTitle}", Year=${year || 'none'}, TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}`);
     if (feedType === 'tv') {
