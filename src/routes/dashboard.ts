@@ -33,25 +33,9 @@ function getTvdbUrl(tvdbId: number | undefined, tvdbSlug?: string | null, showNa
   if (!tvdbId) {
     return '#';
   }
-  
-  // Use API-provided slug if available (most reliable)
-  if (tvdbSlug) {
-    return `https://thetvdb.com/series/${tvdbSlug}`;
-  }
-  
-  // Try to create slug from show name if available
-  if (showName) {
-    const slug = showName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
-      .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
-    
-    if (slug) {
-      return `https://thetvdb.com/series/${slug}`;
-    }
-  }
-  
-  // Fallback to numeric ID format (may not work for all series)
+
+  // Prefer numeric ID URLs so manual ID overrides are always respected,
+  // even if we have a stale or missing slug for older releases.
   return `https://thetvdb.com/series/${tvdbId}`;
 }
 
