@@ -1438,7 +1438,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         
         if (tvdbApiKey) {
           try {
-            tvdbClient.setApiKey(tvdbApiKey);
+            tvdbClient.updateConfig();
             const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
             if (tvdbExtended) {
               tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || null;
