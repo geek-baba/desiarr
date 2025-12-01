@@ -1060,16 +1060,16 @@
       const searchParams = {};
       if (isTv) {
         if (tvdbId) {
-          searchParams.tvdbId = tvdbId;
+          searchParams['tvdbId'] = tvdbId;
         } else if (showName) {
-          searchParams.showName = showName;
+          searchParams['showName'] = showName;
         }
       } else {
         if (tmdbId) {
-          searchParams.tmdbId = tmdbId;
+          searchParams['tmdbId'] = tmdbId;
         } else if (title) {
-          searchParams.title = title;
-          if (year) searchParams.year = year;
+          searchParams['title'] = title;
+          if (year) searchParams['year'] = year;
         }
       }
       
@@ -1196,15 +1196,15 @@
       const matchParams = {};
       
       if (isTv) {
-        if (selectedMatch.tvdbId) matchParams.tvdbId = selectedMatch.tvdbId;
-        if (selectedMatch.tmdbId) matchParams.tmdbId = selectedMatch.tmdbId;
-        if (selectedMatch.imdbId) matchParams.imdbId = selectedMatch.imdbId;
-        if (selectedMatch.name) matchParams.showName = selectedMatch.name;
+        if (selectedMatch.tvdbId) matchParams['tvdbId'] = selectedMatch.tvdbId;
+        if (selectedMatch.tmdbId) matchParams['tmdbId'] = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams['imdbId'] = selectedMatch.imdbId;
+        if (selectedMatch.name) matchParams['showName'] = selectedMatch.name;
       } else {
-        if (selectedMatch.tmdbId) matchParams.tmdbId = selectedMatch.tmdbId;
-        if (selectedMatch.imdbId) matchParams.imdbId = selectedMatch.imdbId;
-        if (selectedMatch.title) matchParams.title = selectedMatch.title;
-        if (selectedMatch.year) matchParams.year = selectedMatch.year;
+        if (selectedMatch.tmdbId) matchParams['tmdbId'] = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams['imdbId'] = selectedMatch.imdbId;
+        if (selectedMatch.title) matchParams['title'] = selectedMatch.title;
+        if (selectedMatch.year) matchParams['year'] = selectedMatch.year;
       }
       
       // Hide modal and show loading
