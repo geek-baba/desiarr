@@ -147,10 +147,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
     // ========== PROCESS MOVIES (same logic as /movies route) ==========
     const allMovieReleases = db.prepare(`
-      SELECT r.* FROM movie_releases r
+      SELECT r.*, rss.id as rss_item_id, rss.feed_type_override
+      FROM movie_releases r
       INNER JOIN rss_feed_items rss ON r.guid = rss.guid
       INNER JOIN rss_feeds f ON rss.feed_id = f.id
-      WHERE f.feed_type = 'movie'
+      WHERE f.feed_type = 'movie' OR rss.feed_type_override = 'movie'
       ORDER BY r.published_at DESC
     `).all() as any[];
     const movieFeeds = feedsModel.getAll().filter(f => f.feed_type === 'movie');
@@ -409,12 +410,16 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         }
       }
       
+      // Get RSS item ID from first release (for re-categorization)
+      const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId,
         imdbId: imdbIdFromRelease,
+        rssItemId: rssItemId,
         radarrInfo,
         add,
         existing,
@@ -1138,6 +1143,7 @@ router.get('/movies', async (req: Request, res: Response) => {
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId, // Use the verified Radarr movie ID
         imdbId: imdbIdFromRelease, // Add IMDB ID from releases
+        rssItemId: releases.find(r => r.rss_item_id)?.rss_item_id || null,
         radarrInfo, // Add Radarr info to the movie group
         add,
         existing,

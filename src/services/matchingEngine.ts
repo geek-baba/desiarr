@@ -9,6 +9,7 @@ import radarrClient from '../radarr/client';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from './radarrSync';
 import { getSyncedRssItems } from './rssSync';
+import db from '../db';
 
 export interface MatchingStats {
   totalRssItems: number;
@@ -53,10 +54,24 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
     radarrClient.updateConfig();
 
     // Get all synced RSS items
-    const rssItems = getSyncedRssItems();
+    const allRssItems = getSyncedRssItems();
+    
+    // Filter for movie items: feed_type_override = 'movie' OR (no override AND feed is movie/default)
+    const rssItems = allRssItems.filter(item => {
+      if (item.feed_type_override === 'movie') {
+        return true; // Explicitly overridden to movie
+      }
+      if (item.feed_type_override === 'tv') {
+        return false; // Explicitly overridden to TV, skip
+      }
+      // No override: check feed type (default to movie if not set)
+      const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+      return !feed || !feed.feed_type || feed.feed_type === 'movie';
+    });
+    
     stats.totalRssItems = rssItems.length;
 
-    console.log(`[MATCHING ENGINE] Processing ${rssItems.length} synced RSS items...`);
+    console.log(`[MATCHING ENGINE] Processing ${rssItems.length} movie RSS items (from ${allRssItems.length} total)...`);
     
     // Log sample of items being processed
     if (rssItems.length > 0) {

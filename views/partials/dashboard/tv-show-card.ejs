@@ -74,6 +74,18 @@
           Add to Sonarr
         </button>
       <% } %>
+      
+      <!-- Re-categorize button for unmatched items -->
+      <% if (!show.tvdbId && !show.tmdbId && !show.sonarrSeriesId && show.rssItemId) { %>
+        <button 
+          class="w-full px-3 py-2 rounded-xl bg-purple-500 text-white hover:bg-purple-600 transition-colors font-medium text-sm mt-2" 
+          onclick="reCategorizeItem(<%= show.rssItemId %>, 'movie')"
+          aria-label="Move to Movies"
+          title="This appears to be a movie. Move it to Movies section."
+        >
+          Move to Movies
+        </button>
+      <% } %>
       <% if (!show.manuallyIgnored && show.ignoreReleaseId) { %>
         <button 
           class="w-full px-3 py-2 rounded-xl bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors font-medium text-sm"

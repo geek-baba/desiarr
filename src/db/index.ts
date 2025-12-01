@@ -235,6 +235,11 @@ try {
     console.log('Added column: rss_feed_items.tvdb_id_manual');
   }
   
+  if (!rssColumnNames.includes('feed_type_override')) {
+    db.exec("ALTER TABLE rss_feed_items ADD COLUMN feed_type_override TEXT");
+    console.log('Added column: rss_feed_items.feed_type_override');
+  }
+  
   // Check radarr_movies table for date_added column
   const radarrColumns = db.prepare("PRAGMA table_info(radarr_movies)").all() as any[];
   const radarrColumnNames = radarrColumns.map((c: any) => c.name);

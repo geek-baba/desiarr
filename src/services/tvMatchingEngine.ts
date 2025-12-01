@@ -347,19 +347,31 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     const tvFeeds = feedsModel.getByType('tv');
     const tvFeedIds = tvFeeds.map(f => f.id!).filter((id): id is number => id !== undefined);
     
-    if (tvFeedIds.length === 0) {
-      console.log('No TV feeds configured. Skipping TV matching engine.');
+    // Get all RSS items and filter by override or feed type
+    const allRssItems = getSyncedRssItems();
+    
+    // Filter for TV items: feed_type_override = 'tv' OR (no override AND feed is tv)
+    const tvRssItems = allRssItems.filter(item => {
+      if (item.feed_type_override === 'tv') {
+        return true; // Explicitly overridden to TV
+      }
+      if (item.feed_type_override === 'movie') {
+        return false; // Explicitly overridden to movie, skip
+      }
+      // No override: check if feed is TV type
+      return tvFeedIds.includes(item.feed_id);
+    });
+    
+    stats.totalRssItems = tvRssItems.length;
+    
+    if (tvRssItems.length === 0 && tvFeedIds.length === 0) {
+      console.log('No TV feeds configured and no TV overrides. Skipping TV matching engine.');
       syncProgress.update('No TV feeds configured', 0, 0);
       if (!nestedInFullSync) {
         syncProgress.complete();
       }
       return stats;
     }
-
-    // Get all RSS items from TV feeds
-    const allRssItems = getSyncedRssItems();
-    const tvRssItems = allRssItems.filter(item => tvFeedIds.includes(item.feed_id));
-    stats.totalRssItems = tvRssItems.length;
     const ignoredShowKeys: Set<string> = ignoredShowsModel.getAllKeys();
 
     console.log(`[TV MATCHING ENGINE] Processing ${tvRssItems.length} TV RSS items from ${tvFeedIds.length} feed(s)...`);

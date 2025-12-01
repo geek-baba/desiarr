@@ -2110,5 +2110,77 @@ router.post('/tv/update-slug/:tvdbId', async (req: Request, res: Response) => {
   }
 });
 
+// Re-categorize RSS item (set feed_type_override)
+router.post('/rss/re-categorize/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id, 10);
+    const { targetType } = req.body as { targetType: 'movie' | 'tv' | null };
+    
+    if (targetType !== null && targetType !== 'movie' && targetType !== 'tv') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'targetType must be "movie", "tv", or null to clear override' 
+      });
+    }
+    
+    // Get the RSS item
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+    
+    // Get current feed type
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const currentFeedType = feed?.feed_type || 'movie';
+    const currentOverride = item.feed_type_override || null;
+    
+    // Update the override
+    db.prepare(`
+      UPDATE rss_feed_items 
+      SET feed_type_override = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(targetType, itemId);
+    
+    // Determine effective type after change
+    const effectiveType = targetType || currentFeedType;
+    const previousEffectiveType = currentOverride || currentFeedType;
+    
+    // If the effective type changed, we need to move the release between tables
+    if (effectiveType !== previousEffectiveType) {
+      if (previousEffectiveType === 'movie' && effectiveType === 'tv') {
+        // Moving from movie to TV: delete from movie_releases, will be created in tv_releases on next TV match
+        const movieRelease = db.prepare('SELECT * FROM movie_releases WHERE guid = ?').get(item.guid) as any;
+        if (movieRelease) {
+          db.prepare('DELETE FROM movie_releases WHERE guid = ?').run(item.guid);
+          console.log(`Deleted movie_release for guid ${item.guid} (moving to TV)`);
+        }
+      } else if (previousEffectiveType === 'tv' && effectiveType === 'movie') {
+        // Moving from TV to movie: delete from tv_releases, will be created in movie_releases on next movie match
+        const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
+        if (tvRelease) {
+          db.prepare('DELETE FROM tv_releases WHERE guid = ?').run(item.guid);
+          console.log(`Deleted tv_release for guid ${item.guid} (moving to movie)`);
+        }
+      }
+    }
+    
+    console.log(`Re-categorized RSS item ${itemId} from ${previousEffectiveType} to ${effectiveType}${targetType ? ' (override set)' : ' (override cleared)'}`);
+    
+    res.json({
+      success: true,
+      message: `Item re-categorized to ${effectiveType}`,
+      previousType: previousEffectiveType,
+      newType: effectiveType,
+      override: targetType,
+    });
+  } catch (error: any) {
+    console.error('Re-categorize RSS item error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to re-categorize item: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
 export default router;
 
