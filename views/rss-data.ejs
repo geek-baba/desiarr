@@ -906,6 +906,8 @@
 
     let currentMatchItemId = null;
     let currentMatchItemData = null;
+    let currentSearchResults = [];
+    let selectedMatch = null;
 
     async function matchItem(itemId) {
       currentMatchItemId = itemId;
@@ -1036,8 +1038,212 @@
     }
 
     function searchMatchTitle() {
-      // Placeholder for future search functionality
-      showToast('Title search coming soon', 'info');
+      // Trigger search when clicking the search icon
+      searchMatches();
+    }
+
+    async function searchMatches() {
+      if (!currentMatchItemId) {
+        showToast('No item selected', 'error');
+        return;
+      }
+      
+      const title = document.getElementById('matchTitle').value.trim();
+      const year = document.getElementById('matchYear').value ? parseInt(document.getElementById('matchYear').value, 10) : null;
+      const tmdbId = document.getElementById('matchTmdbId').value ? parseInt(document.getElementById('matchTmdbId').value, 10) : null;
+      const showName = document.getElementById('matchShowName')?.value.trim() || null;
+      const tvdbId = document.getElementById('matchTvdbId')?.value ? parseInt(document.getElementById('matchTvdbId').value, 10) : null;
+      
+      const isTv = currentMatchItemData?.feed_type === 'tv';
+      
+      // Build search parameters
+      const searchParams = {};
+      if (isTv) {
+        if (tvdbId) {
+          searchParams.tvdbId = tvdbId;
+        } else if (showName) {
+          searchParams.showName = showName;
+        }
+      } else {
+        if (tmdbId) {
+          searchParams.tmdbId = tmdbId;
+        } else if (title) {
+          searchParams.title = title;
+          if (year) searchParams.year = year;
+        }
+      }
+      
+      // Show loading
+      document.getElementById('matchSearchLoading').classList.remove('hidden');
+      document.getElementById('matchResultsContainer').classList.add('hidden');
+      document.getElementById('matchNoResults').classList.add('hidden');
+      const searchBtn = document.getElementById('matchSearchBtn');
+      const originalText = searchBtn.textContent;
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
+      
+      try {
+        const res = await fetch(`/data/rss/search/${currentMatchItemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(searchParams),
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          currentSearchResults = data.candidates || [];
+          selectedMatch = null;
+          
+          // Hide loading
+          document.getElementById('matchSearchLoading').classList.add('hidden');
+          
+          if (currentSearchResults.length === 0) {
+            document.getElementById('matchNoResults').classList.remove('hidden');
+            document.getElementById('matchResultsContainer').classList.add('hidden');
+          } else {
+            document.getElementById('matchNoResults').classList.add('hidden');
+            document.getElementById('matchResultsContainer').classList.remove('hidden');
+            renderSearchResults(currentSearchResults, isTv);
+          }
+          
+          document.getElementById('matchResultsSection').classList.remove('hidden');
+        } else {
+          throw new Error(data.error || 'Search failed');
+        }
+      } catch (error) {
+        console.error('[SEARCH] Error:', error);
+        showToast('Search error: ' + (error.message || 'Unknown error'), 'error');
+        document.getElementById('matchSearchLoading').classList.add('hidden');
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.textContent = originalText;
+      }
+    }
+
+    function renderSearchResults(results, isTv) {
+      const container = document.getElementById('matchResultsContainer');
+      container.innerHTML = '';
+      
+      results.forEach((candidate, index) => {
+        const card = document.createElement('div');
+        card.className = `border border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:border-orange-500 transition-colors ${selectedMatch === candidate ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'bg-gray-50 dark:bg-gray-800'}`;
+        card.onclick = () => selectMatch(candidate, card);
+        
+        const name = isTv ? candidate.name : candidate.title;
+        const year = candidate.year;
+        const poster = candidate.poster;
+        const overview = candidate.overview;
+        
+        card.innerHTML = `
+          <div class="flex gap-4">
+            ${poster ? `
+              <img src="${poster}" alt="${name}" class="w-24 h-36 object-cover rounded flex-shrink-0" onerror="this.style.display='none'">
+            ` : `
+              <div class="w-24 h-36 bg-gray-300 dark:bg-gray-700 rounded flex-shrink-0 flex items-center justify-center">
+                <span class="text-gray-500 dark:text-gray-400 text-xs">No Poster</span>
+              </div>
+            `}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <h4 class="text-lg font-semibold text-gray-900 dark:text-white">${name || 'Unknown'}</h4>
+                ${year ? `<span class="text-gray-500 dark:text-gray-400 ml-2">${year}</span>` : ''}
+              </div>
+              ${overview ? `
+                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-2">${overview}</p>
+              ` : ''}
+              <div class="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+                ${candidate.tmdbId ? `<span>TMDB: ${candidate.tmdbId}</span>` : ''}
+                ${candidate.tvdbId ? `<span>TVDB: ${candidate.tvdbId}</span>` : ''}
+                ${candidate.imdbId ? `<span>IMDB: ${candidate.imdbId}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+        
+        container.appendChild(card);
+      });
+    }
+
+    function selectMatch(candidate, cardElement) {
+      selectedMatch = candidate;
+      
+      // Update visual selection
+      document.querySelectorAll('#matchResultsContainer > div').forEach((el) => {
+        el.classList.remove('border-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+        el.classList.add('bg-gray-50', 'dark:bg-gray-800');
+      });
+      cardElement.classList.add('border-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+      cardElement.classList.remove('bg-gray-50', 'dark:bg-gray-800');
+      
+      // Show apply button
+      document.getElementById('matchApplyBtn').classList.remove('hidden');
+    }
+
+    async function applySelectedMatch() {
+      if (!selectedMatch || !currentMatchItemId) {
+        showToast('Please select a match first', 'error');
+        return;
+      }
+      
+      const isTv = currentMatchItemData?.feed_type === 'tv';
+      
+      // Build match parameters from selected match
+      const matchParams = {};
+      
+      if (isTv) {
+        if (selectedMatch.tvdbId) matchParams.tvdbId = selectedMatch.tvdbId;
+        if (selectedMatch.tmdbId) matchParams.tmdbId = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams.imdbId = selectedMatch.imdbId;
+        if (selectedMatch.name) matchParams.showName = selectedMatch.name;
+      } else {
+        if (selectedMatch.tmdbId) matchParams.tmdbId = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams.imdbId = selectedMatch.imdbId;
+        if (selectedMatch.title) matchParams.title = selectedMatch.title;
+        if (selectedMatch.year) matchParams.year = selectedMatch.year;
+      }
+      
+      // Hide modal and show loading
+      hideMatchModal();
+      const button = document.getElementById(`matchBtn${currentMatchItemId}`);
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Applying...';
+      
+      try {
+        const res = await fetch(`/data/rss/match/${currentMatchItemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(matchParams),
+        });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          const results = [];
+          if (data.tmdbId) results.push(`TMDB: ${data.tmdbId}`);
+          if (data.imdbId) results.push(`IMDB: ${data.imdbId}`);
+          if (data.tvdbId) results.push(`TVDB: ${data.tvdbId}`);
+          showToast(`Match applied! ${results.join(', ') || 'No IDs found'}`, 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          throw new Error(data.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('[MATCH] Error:', error);
+        showToast('Error: ' + (error.message || 'Unknown error'), 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
     }
 
     async function submitMatch() {
