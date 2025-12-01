@@ -1199,13 +1199,13 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       description: item.raw_data || '',
     } as any, item.feed_id, item.feed_name);
 
-    let tmdbId = userTmdbId !== null && userTmdbId !== undefined ? userTmdbId : (item.tmdb_id || (parsed as any).tmdb_id || null);
-    let imdbId = userImdbId !== null && userImdbId !== undefined ? userImdbId : (item.imdb_id || (parsed as any).imdb_id || null);
-    let cleanTitle = userTitle !== null && userTitle !== undefined ? userTitle : ((parsed as any).clean_title || item.clean_title || null);
-    let year = userYear !== null && userYear !== undefined ? userYear : (parsed.year || item.year || null);
-    let tvdbId = userTvdbId !== null && userTvdbId !== undefined ? userTvdbId : (item.tvdb_id || null);
-    let showName = userShowName !== null && userShowName !== undefined ? userShowName : null;
-    let season = userSeason !== null && userSeason !== undefined ? userSeason : null;
+    let tmdbId = userTmdbId !== null ? userTmdbId : (item.tmdb_id || (parsed as any).tmdb_id || null);
+    let imdbId = userImdbId !== null ? userImdbId : (item.imdb_id || (parsed as any).imdb_id || null);
+    let cleanTitle = userTitle !== null ? userTitle : ((parsed as any).clean_title || item.clean_title || null);
+    let year = userYear !== null ? userYear : (parsed.year || item.year || null);
+    let tvdbId = userTvdbId !== null ? userTvdbId : (item.tvdb_id || null);
+    let showName = userShowName !== null ? userShowName : null;
+    let season = userSeason !== null ? userSeason : null;
 
     console.log(`  Match attributes: Title="${cleanTitle}", Year=${year || 'none'}, TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}`);
     if (feedType === 'tv') {
