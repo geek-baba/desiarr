@@ -227,6 +227,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       imdbId?: string;
       originalLanguage?: string;
       radarrInfo?: any;
+      rssItemId?: number | null;
       add: any[];
       existing: any[];
       upgrade: any[];

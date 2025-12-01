@@ -9,7 +9,6 @@ import radarrClient from '../radarr/client';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId } from './radarrSync';
 import { getSyncedRssItems } from './rssSync';
-import db from '../db';
 
 export interface MatchingStats {
   totalRssItems: number;
