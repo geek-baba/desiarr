@@ -1518,6 +1518,9 @@ router.get('/tv', async (req: Request, res: Response) => {
       const tvdbSlug = primaryRelease.tvdb_slug;
       const tvdbUrl = getTvdbUrl(tvdbId, tvdbSlug, showName);
 
+      // Get RSS item ID from first release (for re-categorization)
+      const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
+
       showGroups.push({
         showKey,
         showName,
@@ -1528,6 +1531,7 @@ router.get('/tv', async (req: Request, res: Response) => {
         sonarrSeriesId: primaryRelease.sonarr_series_id,
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
+        rssItemId: rssItemId,
         newShows,
         existingShows,
         unmatched,
