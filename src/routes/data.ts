@@ -1251,6 +1251,182 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Search for matches (returns candidates without applying)
+router.post('/rss/search/:id', async (req: Request, res: Response) => {
+  const itemId = parseInt(req.params.id, 10);
+  try {
+    // Get the RSS item from database
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+
+    // Get feed type
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const feedType = feed?.feed_type || 'movie';
+
+    // Get match parameters from request body
+    const matchParams = (req.body as Record<string, any>) || {};
+    const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
+    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
+    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
+
+    // Get API keys
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
+    
+    if (tmdbApiKey) tmdbClient.setApiKey(tmdbApiKey);
+
+    let searchTitle: string | null = null;
+    let searchYear: number | null = null;
+    const candidates: any[] = [];
+
+    if (feedType === 'tv') {
+      // For TV shows
+      if (userTvdbId) {
+        // If TVDB ID is provided, fetch that specific series
+        try {
+          tvdbClient.updateConfig();
+          const series = await tvdbClient.getSeriesExtended(userTvdbId);
+          if (series) {
+            const seriesData = series as any;
+            candidates.push({
+              tvdbId: userTvdbId,
+              tvdbSlug: seriesData.slug || seriesData.nameSlug || null,
+              name: seriesData.name || seriesData.title || 'Unknown Series',
+              year: seriesData.year || seriesData.first_air_time ? new Date(seriesData.first_air_time).getFullYear() : null,
+              overview: seriesData.overview || seriesData.description || null,
+              poster: seriesData.poster || (seriesData.artwork && Array.isArray(seriesData.artwork) ? seriesData.artwork.find((a: any) => a.type === 2 || a.imageType === 'poster')?.image : null) || null,
+              tmdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'TheMovieDB.com')?.id || null,
+              imdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'IMDB')?.id || null,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching TVDB series:', error);
+        }
+      } else if (userShowName) {
+        // Search TVDB
+        searchTitle = userShowName;
+        if (tvdbApiKey) {
+          try {
+            tvdbClient.updateConfig();
+            const tvdbResults = await tvdbClient.searchSeries(userShowName);
+            for (const series of tvdbResults.slice(0, 10)) {
+              const seriesId = series.tvdb_id || series.id;
+              if (seriesId) {
+                try {
+                  const seriesExtended = await tvdbClient.getSeriesExtended(seriesId);
+                  if (seriesExtended) {
+                    const seriesData = seriesExtended as any;
+                    candidates.push({
+                      tvdbId: seriesId,
+                      tvdbSlug: seriesData.slug || seriesData.nameSlug || null,
+                      name: seriesData.name || seriesData.title || 'Unknown Series',
+                      year: seriesData.year || seriesData.first_air_time ? new Date(seriesData.first_air_time).getFullYear() : null,
+                      overview: seriesData.overview || seriesData.description || null,
+                      poster: seriesData.poster || (seriesData.artwork && Array.isArray(seriesData.artwork) ? seriesData.artwork.find((a: any) => a.type === 2 || a.imageType === 'poster')?.image : null) || null,
+                      tmdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'TheMovieDB.com')?.id || null,
+                      imdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'IMDB')?.id || null,
+                    });
+                  }
+                } catch (error) {
+                  // Skip this series if extended fetch fails
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error searching TVDB:', error);
+          }
+        }
+
+        // Also search TMDB for TV shows
+        if (tmdbApiKey && candidates.length < 10) {
+          try {
+            const tmdbResults = await tmdbClient.searchTv(userShowName);
+            for (const show of tmdbResults.slice(0, 10 - candidates.length)) {
+              // Check if we already have this in candidates (by TMDB ID)
+              if (!candidates.find(c => c.tmdbId === show.id)) {
+                candidates.push({
+                  tmdbId: show.id,
+                  name: show.name || 'Unknown Series',
+                  year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
+                  overview: show.overview || null,
+                  poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error searching TMDB TV:', error);
+          }
+        }
+      }
+    } else {
+      // For movies
+      if (userTmdbId) {
+        // If TMDB ID is provided, fetch that specific movie
+        try {
+          const movie = await tmdbClient.getMovie(userTmdbId);
+          if (movie) {
+            candidates.push({
+              tmdbId: movie.id,
+              title: movie.title || 'Unknown Movie',
+              year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+              overview: null, // TMDB getMovie doesn't return overview, would need to fetch details
+              poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+              imdbId: movie.imdb_id || null,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching TMDB movie:', error);
+        }
+      } else if (userTitle) {
+        // Search TMDB for movies
+        searchTitle = userTitle;
+        searchYear = userYear;
+        if (tmdbApiKey) {
+          try {
+            const movies = await tmdbClient.searchMovies(userTitle, userYear || undefined, 10);
+            for (const movie of movies) {
+              // Use overview from search result (TMDB search API includes overview)
+              const overview = movie.overview || null;
+              const imdbId = movie.imdb_id || null;
+              
+              candidates.push({
+                tmdbId: movie.id,
+                title: movie.title || 'Unknown Movie',
+                year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+                overview: overview,
+                poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+                imdbId: imdbId,
+              });
+            }
+          } catch (error) {
+            console.error('Error searching TMDB movies:', error);
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      query: searchTitle,
+      year: searchYear,
+      candidates: candidates,
+      count: candidates.length,
+    });
+  } catch (error: any) {
+    console.error('Search RSS item error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
 // Match single RSS item
 router.post('/rss/match/:id', async (req: Request, res: Response) => {
   const itemId = parseInt(req.params.id, 10);

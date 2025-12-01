@@ -477,6 +477,22 @@
         </div>
       </div>
       
+      <!-- Search Results Section -->
+      <div id="matchResultsSection" class="hidden mt-6">
+        <div class="border-t border-gray-300 dark:border-gray-600 pt-4">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Search Results</h3>
+          <div id="matchResultsContainer" class="space-y-4 max-h-96 overflow-y-auto">
+            <!-- Results will be inserted here -->
+          </div>
+          <div id="matchNoResults" class="hidden text-center py-8 text-gray-500 dark:text-gray-400">
+            <p>No matches found. Try adjusting your search criteria.</p>
+          </div>
+          <div id="matchSearchLoading" class="hidden text-center py-8">
+            <p class="text-gray-500 dark:text-gray-400">Searching...</p>
+          </div>
+        </div>
+      </div>
+      
       <!-- Action Buttons -->
       <div class="flex justify-end space-x-2 mt-6">
         <button 
@@ -488,10 +504,19 @@
         </button>
         <button 
           type="button" 
-          onclick="submitMatch()" 
+          id="matchSearchBtn"
+          onclick="searchMatches()" 
           class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded"
         >
           Search
+        </button>
+        <button 
+          type="button" 
+          id="matchApplyBtn"
+          onclick="applySelectedMatch()" 
+          class="hidden bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        >
+          Apply Match
         </button>
       </div>
     </div>
@@ -948,6 +973,12 @@
       document.getElementById('matchModal').classList.add('hidden');
       currentMatchItemId = null;
       currentMatchItemData = null;
+      currentSearchResults = [];
+      selectedMatch = null;
+      const resultsSection = document.getElementById('matchResultsSection');
+      const applyBtn = document.getElementById('matchApplyBtn');
+      if (resultsSection) resultsSection.classList.add('hidden');
+      if (applyBtn) applyBtn.classList.add('hidden');
     }
 
     function switchMatchTab(tab) {
