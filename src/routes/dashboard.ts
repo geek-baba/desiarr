@@ -44,21 +44,71 @@ const LANGUAGE_NAMES: Record<string, string> = {
   'ar': 'Arabic',
 };
 
+// Full language name to ISO code mapping (for Radarr which stores full names)
+const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
+  'Hindi': 'hi',
+  'Bengali': 'bn',
+  'Marathi': 'mr',
+  'Telugu': 'te',
+  'Tamil': 'ta',
+  'Gujarati': 'gu',
+  'Kannada': 'kn',
+  'Malayalam': 'ml',
+  'Punjabi': 'pa',
+  'English': 'en',
+  'Spanish': 'es',
+  'French': 'fr',
+  'German': 'de',
+  'Italian': 'it',
+  'Portuguese': 'pt',
+  'Russian': 'ru',
+  'Japanese': 'ja',
+  'Korean': 'ko',
+  'Chinese': 'zh',
+  'Arabic': 'ar',
+};
+
 /**
- * Get full language name from ISO code
+ * Get full language name from ISO code or full name
  */
 function getLanguageName(code: string | null | undefined): string | undefined {
   if (!code) return undefined;
   const lowerCode = code.toLowerCase();
-  return LANGUAGE_NAMES[lowerCode] || code.toUpperCase();
+  // First try ISO code mapping
+  if (LANGUAGE_NAMES[lowerCode]) {
+    return LANGUAGE_NAMES[lowerCode];
+  }
+  // If it's already a full name, return it capitalized properly
+  const capitalized = code.charAt(0).toUpperCase() + code.slice(1).toLowerCase();
+  if (LANGUAGE_NAME_TO_CODE[capitalized]) {
+    return capitalized;
+  }
+  // Fallback to uppercase
+  return code.toUpperCase();
 }
 
 /**
- * Check if language is a major Indian language
+ * Get ISO code from language (handles both ISO codes and full names)
+ */
+function getLanguageCode(language: string | null | undefined): string | undefined {
+  if (!language) return undefined;
+  const lowerLang = language.toLowerCase();
+  // If it's already an ISO code
+  if (MAJOR_INDIAN_LANGUAGES.has(lowerLang) || LANGUAGE_NAMES[lowerLang]) {
+    return lowerLang;
+  }
+  // Try full name mapping
+  const capitalized = language.charAt(0).toUpperCase() + language.slice(1).toLowerCase();
+  return LANGUAGE_NAME_TO_CODE[capitalized] || lowerLang;
+}
+
+/**
+ * Check if language is a major Indian language (handles both ISO codes and full names)
  */
 function isIndianLanguage(code: string | null | undefined): boolean {
   if (!code) return false;
-  return MAJOR_INDIAN_LANGUAGES.has(code.toLowerCase());
+  const isoCode = getLanguageCode(code);
+  return isoCode ? MAJOR_INDIAN_LANGUAGES.has(isoCode) : false;
 }
 
 function sanitizeTitle(value: string): string {
@@ -1123,7 +1173,24 @@ router.get('/movies', async (req: Request, res: Response) => {
         }
       }
       
-      const movieTitle = buildDisplayTitle(primaryRelease);
+      // For unmatched movies (no tmdb_id or radarr_movie_id), use extracted clean name
+      let movieTitle: string;
+      if (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id) {
+        // Extract clean name from movieKey (format: "title_cleanname year")
+        const keyMatch = movieKey.match(/^title_(.+)$/);
+        if (keyMatch) {
+          const cleanName = keyMatch[1];
+          // Capitalize first letter of each word
+          movieTitle = cleanName
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        } else {
+          movieTitle = buildDisplayTitle(primaryRelease);
+        }
+      } else {
+        movieTitle = buildDisplayTitle(primaryRelease);
+      }
 
       // Check if movie is in Radarr by checking synced Radarr data (even if releases don't have radarr_movie_id set)
       // IMPORTANT: Do this BEFORE categorizing releases to ensure proper categorization
