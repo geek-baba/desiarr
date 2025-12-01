@@ -344,7 +344,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
 
-        // Parse show name and season from title
+        // Parse show name and season from title (needed for both manual and auto paths)
         let { showName, season } = parseTvTitle(item.title);
         console.log(`    Parsed: Show="${showName}", Season=${season !== null ? season : 'unknown'}`);
 
@@ -368,9 +368,10 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
         }
 
-        // Step 1: First try to match with Sonarr by show name (without year)
-        console.log(`    Searching Sonarr for: "${showName}"`);
-        let sonarrShow = findSonarrShowByName(showName);
+        // Check if this item has manually overridden IDs - if so, use them directly
+        const hasManualTvdbId = item.tvdb_id_manual && item.tvdb_id;
+        const hasManualTmdbId = item.tmdb_id_manual && item.tmdb_id;
+        
         let enrichment: {
           tvdbId: number | null;
           tvdbSlug: string | null;
@@ -379,54 +380,133 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           tvdbPosterUrl: string | null;
           tmdbPosterUrl: string | null;
         };
+        let sonarrShow: any = null; // Will be set if found by name search
         
-        if (sonarrShow) {
-          console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
+        if (hasManualTvdbId || hasManualTmdbId) {
+          console.log(`    ⚠ Using manually overridden IDs (TVDB: ${item.tvdb_id || 'N/A'}, TMDB: ${item.tmdb_id || 'N/A'})`);
           
-          // Use IDs from Sonarr (slug will be null, we'll need to fetch it if needed)
+          // Start with manually overridden IDs
           enrichment = {
-            tvdbId: sonarrShow.tvdb_id || null,
-            tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
-            tmdbId: sonarrShow.tmdb_id || null,
-            imdbId: sonarrShow.imdb_id || null,
-            tvdbPosterUrl: null, // Will extract from images if available
-            tmdbPosterUrl: null, // Will extract from images if available
+            tvdbId: hasManualTvdbId ? item.tvdb_id : null,
+            tvdbSlug: null,
+            tmdbId: hasManualTmdbId ? item.tmdb_id : null,
+            imdbId: item.imdb_id || null,
+            tvdbPosterUrl: null,
+            tmdbPosterUrl: null,
           };
           
-          // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+          // Fetch extended info from TVDB if we have a TVDB ID
           if (enrichment.tvdbId && tvdbApiKey) {
             try {
               const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
               if (tvdbExtended) {
                 enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+                
+                // Extract poster URL
+                const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
+                if (artwork && Array.isArray(artwork)) {
+                  const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster');
+                  if (poster) {
+                    enrichment.tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+                  }
+                }
+                
+                // Extract TMDB/IMDB IDs from TVDB if not already set
+                const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids;
+                if (remoteIds && Array.isArray(remoteIds)) {
+                  if (!enrichment.tmdbId) {
+                    const tmdbRemote = remoteIds.find((r: any) => 
+                      r.sourceName === 'TheMovieDB' || r.source_name === 'TheMovieDB' || r.source === 'themoviedb'
+                    );
+                    if (tmdbRemote && tmdbRemote.id) {
+                      enrichment.tmdbId = parseInt(String(tmdbRemote.id), 10);
+                    }
+                  }
+                  if (!enrichment.imdbId) {
+                    const imdbRemote = remoteIds.find((r: any) => 
+                      r.sourceName === 'IMDB' || r.source_name === 'IMDB' || r.source === 'imdb'
+                    );
+                    if (imdbRemote && imdbRemote.id) {
+                      enrichment.imdbId = String(imdbRemote.id);
+                    }
+                  }
+                }
               }
             } catch (error) {
-              // Silently fail, slug is optional
+              console.log(`    ⚠ Failed to fetch TVDB extended info for ID ${enrichment.tvdbId}:`, error);
             }
           }
           
-          // Extract poster URLs from Sonarr images
-          if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
-            const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
-            if (poster) {
-              enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
-              enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+          // Fetch TMDB poster if we have a TMDB ID
+          if (enrichment.tmdbId && tmdbApiKey) {
+            try {
+              const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
+              if (tmdbShow && tmdbShow.poster_path) {
+                enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+              }
+              if (tmdbShow && tmdbShow.external_ids?.imdb_id && !enrichment.imdbId) {
+                enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+              }
+            } catch (error) {
+              console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
             }
           }
           
-          console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+          console.log(`    ✓ Using manual override IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
         } else {
-          console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
+          // No manual overrides - proceed with normal matching flow
+          // Step 1: First try to match with Sonarr by show name (without year)
+          console.log(`    Searching Sonarr for: "${showName}"`);
+          sonarrShow = findSonarrShowByName(showName);
           
-          // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
-          enrichment = await enrichTvShow(
-            showName,
-            season,
-            tvdbApiKey,
-            tmdbApiKey,
-            omdbApiKey,
-            braveApiKey
-          );
+          if (sonarrShow) {
+            console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
+            
+            // Use IDs from Sonarr (slug will be null, we'll need to fetch it if needed)
+            enrichment = {
+              tvdbId: sonarrShow.tvdb_id || null,
+              tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
+              tmdbId: sonarrShow.tmdb_id || null,
+              imdbId: sonarrShow.imdb_id || null,
+              tvdbPosterUrl: null, // Will extract from images if available
+              tmdbPosterUrl: null, // Will extract from images if available
+            };
+            
+            // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+            if (enrichment.tvdbId && tvdbApiKey) {
+              try {
+                const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
+                if (tvdbExtended) {
+                  enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+                }
+              } catch (error) {
+                // Silently fail, slug is optional
+              }
+            }
+            
+            // Extract poster URLs from Sonarr images
+            if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
+              const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
+              if (poster) {
+                enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
+                enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+              }
+            }
+            
+            console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+          } else {
+            console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
+            
+            // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
+            enrichment = await enrichTvShow(
+              showName,
+              season,
+              tvdbApiKey,
+              tmdbApiKey,
+              omdbApiKey,
+              braveApiKey
+            );
+          }
         }
 
         // Check if show/season exists in Sonarr (using the IDs we have or the show we found by name)
