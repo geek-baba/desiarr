@@ -1126,12 +1126,35 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
     
+    // For TV shows, prefer show_name over clean_title (which is often null for TV)
+    // For movies, use clean_title or normalized_title
+    let displayTitle: string | null = null;
+    if (item.feed_type === 'tv') {
+      // TV shows: use show_name from tv_releases if available (this is the parsed/sanitized show name)
+      // Otherwise fall back to clean_title, or parse from title
+      displayTitle = item.show_name || item.clean_title || null;
+      if (!displayTitle && item.title) {
+        // Fallback: parse show name from title (basic cleanup similar to parseTvTitle)
+        let parsed = item.title
+          .replace(/\./g, ' ') // Replace dots with spaces
+          .replace(/\s+/g, ' ') // Normalize spaces
+          .trim();
+        // Remove season/episode patterns for cleaner display (S01, S1E1, Season 1, etc.)
+        parsed = parsed.replace(/\s*[Ss](\d+)(?:[Ee]\d+)?\s*/g, ' ');
+        parsed = parsed.replace(/\s*[Ss]eason\s*(\d+)\s*/gi, ' ');
+        displayTitle = parsed.trim();
+      }
+    } else {
+      // Movies: use clean_title (which is sanitized during RSS sync) or normalized_title
+      displayTitle = item.clean_title || item.normalized_title || item.title || null;
+    }
+    
     res.json({ 
       success: true, 
       item: {
         id: item.id,
         title: item.title,
-        clean_title: item.clean_title,
+        clean_title: displayTitle, // Use the computed display title for the dialog
         normalized_title: item.normalized_title,
         year: item.year,
         tmdb_id: item.tmdb_id,
