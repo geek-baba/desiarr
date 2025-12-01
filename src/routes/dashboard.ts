@@ -810,6 +810,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     
     // ========== RENDER COMBINED VIEW ==========
     res.render('dashboard', {
+      currentPage: 'dashboard',
       viewType: 'combined',
       // Movies data
       newMoviesByPeriod,
@@ -1406,6 +1407,7 @@ router.get('/movies', async (req: Request, res: Response) => {
     const appSettings = settingsModel.getAppSettings();
     
     res.render('dashboard', {
+      currentPage: 'movies',
       viewType: 'movies',
       newMoviesByPeriod,
       existingMoviesByPeriod,
@@ -1662,6 +1664,7 @@ router.get('/tv', async (req: Request, res: Response) => {
     const appSettings = settingsModel.getAppSettings();
     
     res.render('dashboard', {
+      currentPage: 'tv',
       viewType: 'tv',
       newTvShowsByPeriod,
       existingTvShowsByPeriod,
