@@ -1435,9 +1435,11 @@ router.get('/movies', async (req: Request, res: Response) => {
               movieGroup.imdbId = syncedMovie.imdb_id;
             }
             
-            // Get original language from synced data
-            if (syncedMovie.original_language && !movieGroup.originalLanguage) {
-              movieGroup.originalLanguage = syncedMovie.original_language;
+            // Update language from Radarr if not already set from TMDB
+            if (syncedMovie.original_language && !movieGroup.originalLanguageCode) {
+              movieGroup.originalLanguageCode = syncedMovie.original_language;
+              movieGroup.originalLanguage = getLanguageName(syncedMovie.original_language);
+              movieGroup.isIndianLanguage = isIndianLanguage(syncedMovie.original_language);
             }
             
             // Ensure TMDB ID is set
@@ -1456,6 +1458,16 @@ router.get('/movies', async (req: Request, res: Response) => {
         const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
         if (releaseWithImdb?.imdb_id) {
           movieGroup.imdbId = releaseWithImdb.imdb_id;
+        }
+      }
+      
+      // Check for original language from release data (tmdb_original_language) if not already set
+      if (!movieGroup.originalLanguageCode) {
+        const releaseWithLanguage = groupReleases.find((r: any) => r.tmdb_original_language);
+        if (releaseWithLanguage?.tmdb_original_language) {
+          movieGroup.originalLanguageCode = releaseWithLanguage.tmdb_original_language;
+          movieGroup.originalLanguage = getLanguageName(releaseWithLanguage.tmdb_original_language);
+          movieGroup.isIndianLanguage = isIndianLanguage(releaseWithLanguage.tmdb_original_language);
         }
       }
       
