@@ -1484,10 +1484,11 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       }
 
       // Step 3b: Try normalized title (movies only)
-      if (!tmdbId && tmdbApiKey && parsed && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
+      if (!tmdbId && tmdbApiKey && parsed && (parsed as any).normalized_title && (parsed as any).normalized_title !== cleanTitle) {
+        const normalizedTitle = (parsed as any).normalized_title;
         try {
-          console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}`);
-          const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined);
+          console.log(`    Searching TMDB (normalized) for: "${normalizedTitle}" ${year ? `(${year})` : ''}`);
+          const tmdbMovie = await tmdbClient.searchMovie(normalizedTitle, year || undefined);
           if (tmdbMovie) {
             let isValidMatch = true;
             if (year && tmdbMovie.release_date) {
@@ -1499,7 +1500,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
             }
             if (isValidMatch) {
               tmdbId = tmdbMovie.id;
-              console.log(`    ✓ Found TMDB ID ${tmdbId} for normalized title "${parsed.normalized_title}"`);
+              console.log(`    ✓ Found TMDB ID ${tmdbId} for normalized title "${normalizedTitle}"`);
               if (!imdbId && tmdbMovie.imdb_id) {
                 imdbId = tmdbMovie.imdb_id;
                 console.log(`    ✓ Found IMDB ID ${imdbId} from TMDB movie (normalized title)`);
@@ -1507,7 +1508,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
             }
           }
         } catch (error) {
-          console.log(`    ✗ Failed to find TMDB ID for normalized title "${parsed.normalized_title}":`, error);
+          console.log(`    ✗ Failed to find TMDB ID for normalized title "${normalizedTitle}":`, error);
         }
       }
 
