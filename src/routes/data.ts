@@ -922,6 +922,69 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       WHERE id = ?
     `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
 
+    // Propagate IDs to all other RSS items for the same TV show
+    // Strategy: Update all RSS items that have the same TVDB ID (after we set it)
+    // This handles the common case where one show has multiple episodes/seasons
+    const allRssItemsWithSameTvdb = db.prepare(`
+      SELECT id FROM rss_feed_items 
+      WHERE tvdb_id = ? AND id != ? AND feed_id IN (SELECT id FROM rss_feeds WHERE feed_type = 'tv')
+    `).all(parseInt(tvdbId, 10), itemId) as any[];
+    
+    let propagatedCount = 0;
+    for (const otherItem of allRssItemsWithSameTvdb) {
+      // Only update if the item doesn't already have manual overrides
+      const otherItemFull = db.prepare('SELECT tvdb_id_manual FROM rss_feed_items WHERE id = ?').get(otherItem.id) as any;
+      if (!otherItemFull?.tvdb_id_manual) {
+        db.prepare(`
+          UPDATE rss_feed_items 
+          SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, otherItem.id);
+        propagatedCount++;
+      }
+    }
+    
+    // Also propagate to items that will match to the same TVDB ID (by show name)
+    // This helps when items don't have TVDB ID yet but will match to the same show
+    const { parseTvTitle } = await import('../services/tvMatchingEngine');
+    const parsedTitle = parseTvTitle(item.title);
+    const showNameForMatching = parsedTitle.showName.toLowerCase().trim();
+    
+    if (showNameForMatching && showNameForMatching.length > 2) {
+      // Find all RSS items from TV feeds that parse to the same show name
+      const allTvRssItems = db.prepare(`
+        SELECT rss.*, f.feed_type
+        FROM rss_feed_items rss
+        LEFT JOIN rss_feeds f ON rss.feed_id = f.id
+        WHERE f.feed_type = 'tv' AND rss.id != ? AND (rss.tvdb_id IS NULL OR rss.tvdb_id != ?)
+      `).all(itemId, parseInt(tvdbId, 10)) as any[];
+      
+      for (const otherItem of allTvRssItems) {
+        const otherParsed = parseTvTitle(otherItem.title);
+        const otherShowName = otherParsed.showName.toLowerCase().trim();
+        
+        // If show names match (exact or fuzzy), propagate IDs
+        if (otherShowName === showNameForMatching || 
+            (showNameForMatching.length > 3 && otherShowName.includes(showNameForMatching)) ||
+            (otherShowName.length > 3 && showNameForMatching.includes(otherShowName))) {
+          // Only update if the item doesn't already have manual overrides
+          const hasManualTvdb = otherItem.tvdb_id_manual;
+          if (!hasManualTvdb) {
+            db.prepare(`
+              UPDATE rss_feed_items 
+              SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+              WHERE id = ?
+            `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, otherItem.id);
+            propagatedCount++;
+          }
+        }
+      }
+    }
+    
+    if (propagatedCount > 0) {
+      console.log(`  ✓ Propagated IDs to ${propagatedCount} additional RSS item(s) for the same show`);
+    }
+
     // Update tv_releases - update the specific release by guid, and also update all releases with the same TVDB ID
     const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
     if (tvRelease) {
@@ -1129,10 +1192,21 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
     // For TV shows, prefer show_name over clean_title (which is often null for TV)
     // For movies, use clean_title or normalized_title
     let displayTitle: string | null = null;
+    let displayYear: number | null = item.year;
+    
     if (item.feed_type === 'tv') {
       // TV shows: use show_name from tv_releases if available (this is the parsed/sanitized show name)
       // Otherwise fall back to clean_title, or parse from title
       displayTitle = item.show_name || item.clean_title || null;
+      
+      // If year is not set, try to extract it from title using parseTvTitle
+      if (displayYear === null && item.title) {
+        const { parseTvTitle } = await import('../services/tvMatchingEngine');
+        const parsedTv = parseTvTitle(item.title);
+        if (parsedTv.year) displayYear = parsedTv.year;
+        if (!displayTitle) displayTitle = parsedTv.showName;
+      }
+      
       if (!displayTitle && item.title) {
         // Fallback: parse show name from title (basic cleanup similar to parseTvTitle)
         let parsed = item.title
@@ -1142,6 +1216,9 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
         // Remove season/episode patterns for cleaner display (S01, S1E1, Season 1, etc.)
         parsed = parsed.replace(/\s*[Ss](\d+)(?:[Ee]\d+)?\s*/g, ' ');
         parsed = parsed.replace(/\s*[Ss]eason\s*(\d+)\s*/gi, ' ');
+        // Remove year patterns
+        parsed = parsed.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '');
+        parsed = parsed.replace(/\b(19|20)\d{2}\b/g, '');
         displayTitle = parsed.trim();
       }
     } else {
@@ -1156,7 +1233,7 @@ router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
         title: item.title,
         clean_title: displayTitle, // Use the computed display title for the dialog
         normalized_title: item.normalized_title,
-        year: item.year,
+        year: displayYear, // Use extracted year for TV shows
         tmdb_id: item.tmdb_id,
         imdb_id: item.imdb_id,
         tvdb_id: item.tvdb_id,
@@ -1214,21 +1291,39 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     const feedType = feed?.feed_type || 'movie';
 
     // Use user-provided values or fall back to existing/parsed values
-    // Re-parse the item to get clean title (if user didn't provide one)
-    const parsed = parseRSSItem({
-      title: item.title,
-      link: item.link,
-      guid: item.guid,
-      description: item.raw_data || '',
-    } as any, item.feed_id, item.feed_name);
-
-    let tmdbId = userTmdbId !== null ? userTmdbId : (item.tmdb_id || (parsed as any).tmdb_id || null);
-    let imdbId = userImdbId !== null ? userImdbId : (item.imdb_id || (parsed as any).imdb_id || null);
-    let cleanTitle = userTitle !== null ? userTitle : ((parsed as any).clean_title || item.clean_title || null);
-    let year = userYear !== null ? userYear : (parsed.year || item.year || null);
+    let tmdbId = userTmdbId !== null ? userTmdbId : (item.tmdb_id || null);
+    let imdbId = userImdbId !== null ? userImdbId : (item.imdb_id || null);
     let tvdbId = userTvdbId !== null ? userTvdbId : (item.tvdb_id || null);
     let showName = userShowName !== null ? userShowName : null;
     let season = userSeason !== null ? userSeason : null;
+    let year = userYear !== null ? userYear : null;
+    let cleanTitle = userTitle !== null ? userTitle : null;
+    
+    if (feedType === 'tv') {
+      // For TV shows, use parseTvTitle to extract show name, season, and year
+      const { parseTvTitle } = await import('../services/tvMatchingEngine');
+      const parsedTv = parseTvTitle(item.title);
+      
+      if (!showName) showName = parsedTv.showName;
+      if (season === null) season = parsedTv.season;
+      if (year === null) year = parsedTv.year;
+      
+      // Use showName as cleanTitle for TV shows
+      if (!cleanTitle) cleanTitle = showName;
+    } else {
+      // For movies, use parseRSSItem
+      const parsed = parseRSSItem({
+        title: item.title,
+        link: item.link,
+        guid: item.guid,
+        description: item.raw_data || '',
+      } as any, item.feed_id, item.feed_name);
+      
+      if (!tmdbId) tmdbId = (parsed as any).tmdb_id || item.tmdb_id || null;
+      if (!imdbId) imdbId = (parsed as any).imdb_id || item.imdb_id || null;
+      if (!cleanTitle) cleanTitle = (parsed as any).clean_title || item.clean_title || null;
+      if (year === null) year = parsed.year || item.year || null;
+    }
 
     console.log(`  Match attributes: Title="${cleanTitle}", Year=${year || 'none'}, TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}`);
     if (feedType === 'tv') {
@@ -1452,6 +1547,60 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         WHERE id = ?
       `).run(tvdbId, itemId);
       
+      // Propagate TVDB/TMDB/IMDB IDs to all other RSS items for the same TV show
+      const allRssItemsWithSameTvdb = db.prepare(`
+        SELECT id FROM rss_feed_items 
+        WHERE tvdb_id = ? AND id != ? AND feed_id IN (SELECT id FROM rss_feeds WHERE feed_type = 'tv')
+      `).all(tvdbId, itemId) as any[];
+      
+      let propagatedCount = 0;
+      for (const otherItem of allRssItemsWithSameTvdb) {
+        const otherItemFull = db.prepare('SELECT tvdb_id_manual FROM rss_feed_items WHERE id = ?').get(otherItem.id) as any;
+        if (!otherItemFull?.tvdb_id_manual) {
+          db.prepare(`
+            UPDATE rss_feed_items 
+            SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).run(tvdbId, tmdbId || null, imdbId || null, otherItem.id);
+          propagatedCount++;
+        }
+      }
+      
+      // Also propagate by show name (for items that don't have TVDB ID yet)
+      if (showName && showName.length > 2) {
+        const { parseTvTitle } = await import('../services/tvMatchingEngine');
+        const showNameForMatching = showName.toLowerCase().trim();
+        const allTvRssItems = db.prepare(`
+          SELECT rss.*, f.feed_type
+          FROM rss_feed_items rss
+          LEFT JOIN rss_feeds f ON rss.feed_id = f.id
+          WHERE f.feed_type = 'tv' AND rss.id != ? AND (rss.tvdb_id IS NULL OR rss.tvdb_id != ?)
+        `).all(itemId, tvdbId) as any[];
+        
+        for (const otherItem of allTvRssItems) {
+          const otherParsed = parseTvTitle(otherItem.title);
+          const otherShowName = otherParsed.showName.toLowerCase().trim();
+          
+          if (otherShowName === showNameForMatching || 
+              (showNameForMatching.length > 3 && otherShowName.includes(showNameForMatching)) ||
+              (otherShowName.length > 3 && showNameForMatching.includes(otherShowName))) {
+            const hasManualTvdb = otherItem.tvdb_id_manual;
+            if (!hasManualTvdb) {
+              db.prepare(`
+                UPDATE rss_feed_items 
+                SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `).run(tvdbId, tmdbId || null, imdbId || null, otherItem.id);
+              propagatedCount++;
+            }
+          }
+        }
+      }
+      
+      if (propagatedCount > 0) {
+        console.log(`  ✓ Propagated IDs to ${propagatedCount} additional RSS item(s) for the same show`);
+      }
+      
       // Also update tv_releases if it exists
       const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
       if (tvRelease) {
@@ -1523,23 +1672,26 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     // After enrichment, trigger matching engine for this specific item
     try {
       if (feedType === 'tv') {
-        console.log(`  Triggering TV matching engine for item ${itemId}...`);
+        console.log(`  [MATCH] Triggering TV matching engine for item ${itemId}...`);
         // For TV, we need to run the TV matching engine
         // It will process all items, but our enriched item will be included
-        await runTvMatchingEngine();
-        console.log(`  ✓ TV matching engine completed for item ${itemId}`);
+        const tvStats = await runTvMatchingEngine();
+        console.log(`  [MATCH] ✓ TV matching engine completed: ${tvStats.processed} processed, ${tvStats.newShows} new shows, ${tvStats.errors} errors`);
       } else {
-        console.log(`  Triggering movie matching engine for item ${itemId}...`);
+        console.log(`  [MATCH] Triggering movie matching engine for item ${itemId}...`);
         // For movies, run the movie matching engine
         // It will process all items, but our enriched item will be included
-        await runMatchingEngine();
-        console.log(`  ✓ Movie matching engine completed for item ${itemId}`);
+        const movieStats = await runMatchingEngine();
+        console.log(`  [MATCH] ✓ Movie matching engine completed: ${movieStats.processed} processed, ${movieStats.newReleases} new releases, ${movieStats.errors} errors`);
       }
     } catch (matchError: any) {
-      console.error(`  ⚠ Matching engine error (enrichment still succeeded):`, matchError);
+      console.error(`  [MATCH] ⚠ Matching engine error (enrichment still succeeded):`, matchError);
+      console.error(`  [MATCH] Error details:`, matchError?.message || matchError?.toString() || 'Unknown error');
       // Don't fail the request if matching fails - enrichment succeeded
     }
 
+    console.log(`  [MATCH] Final result: TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}, Title="${cleanTitle || 'none'}", Year=${year || 'none'}`);
+    
     const response: any = {
       success: true, 
       message: 'Match and enrichment completed',
@@ -1550,13 +1702,18 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     };
     if (feedType === 'tv' && tvdbId !== null) {
       response.tvdbId = tvdbId;
+      response.showName = showName;
+      response.season = season;
     }
+    
+    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId}`);
     res.json(response);
   } catch (error: any) {
-    console.error('Match RSS item error:', error);
+    console.error(`  [MATCH] ✗ Match RSS item error for item ${itemId}:`, error);
+    console.error(`  [MATCH] Error stack:`, error?.stack || 'No stack trace');
     res.status(500).json({ 
       success: false,
-      error: 'Failed to match RSS item: ' + (error?.message || 'Unknown error') 
+      error: 'Failed to match RSS item: ' + (error?.message || error?.toString() || 'Unknown error')
     });
   }
 });

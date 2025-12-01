@@ -1049,12 +1049,23 @@
       button.textContent = 'Matching...';
       
       try {
+        console.log('[MATCH] Sending match request for item', currentMatchItemId, 'with params:', matchParams);
         const res = await fetch(`/data/rss/match/${currentMatchItemId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(matchParams),
         });
+        
+        console.log('[MATCH] Response status:', res.status, res.statusText);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('[MATCH] Response error:', errorText);
+          throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+        }
+        
         const data = await res.json();
+        console.log('[MATCH] Response data:', data);
         
         if (data.success) {
           const results = [];
@@ -1064,12 +1075,14 @@
           showToast(`Match completed! ${results.join(', ') || 'No IDs found'}`, 'success');
           setTimeout(() => window.location.reload(), 1000);
         } else {
+          console.error('[MATCH] Match failed:', data.error || 'Unknown error');
           showToast('Error: ' + (data.error || 'Unknown error'), 'error');
           button.disabled = false;
           button.textContent = originalText;
         }
       } catch (error) {
-        showToast('Error: ' + error.message, 'error');
+        console.error('[MATCH] Exception during match:', error);
+        showToast('Error: ' + (error.message || 'Unknown error'), 'error');
         button.disabled = false;
         button.textContent = originalText;
       }

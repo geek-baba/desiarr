@@ -23,18 +23,47 @@ export interface TvMatchingStats {
 }
 
 /**
- * Parse TV show title to extract show name and season number
+ * Parse TV show title to extract show name, season number, and year
  * Examples:
- *   "Show Name S01" -> { showName: "Show Name", season: 1 }
- *   "Show Name Season 1" -> { showName: "Show Name", season: 1 }
- *   "Show Name S1E1" -> { showName: "Show Name", season: 1 }
+ *   "Show Name 2001 S01" -> { showName: "Show Name", season: 1, year: 2001 }
+ *   "Show Name Season 1" -> { showName: "Show Name", season: 1, year: null }
+ *   "Show Name S1E1" -> { showName: "Show Name", season: 1, year: null }
+ *   "Amrutham 2001 S01E01" -> { showName: "Amrutham", season: 1, year: 2001 }
  */
-function parseTvTitle(title: string): { showName: string; season: number | null } {
+export function parseTvTitle(title: string): { showName: string; season: number | null; year: number | null } {
   const normalized = title.trim();
   
-  // First, normalize dots to spaces for better matching (common in release names)
-  // Replace dots with spaces, but preserve common patterns like "S03", "S01E01", etc.
-  const normalizedForParsing = normalized.replace(/\./g, ' ');
+  // First, extract year if present (before extracting season)
+  // Look for year patterns: (2001), [2001], 2001, or standalone 2001
+  let year: number | null = null;
+  let titleWithoutYear = normalized;
+  
+  // Try to find year in parentheses or brackets first
+  const yearInParens = normalized.match(/[\(\[](19|20)\d{2}[\)\]]/);
+  if (yearInParens) {
+    year = parseInt(yearInParens[0].replace(/[\(\)\[\]]/g, ''), 10);
+    titleWithoutYear = normalized.replace(/[\(\[](19|20)\d{2}[\)\]]/g, ' ').trim();
+  } else {
+    // Try to find standalone year (4 digits, typically 19xx or 20xx)
+    const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
+    if (yearMatch) {
+      year = parseInt(yearMatch[0], 10);
+      // Remove the year from title, but be careful not to remove season numbers
+      // Only remove if it's clearly a year (not part of S01, E01, etc.)
+      const yearIndex = normalized.indexOf(yearMatch[0]);
+      const beforeYear = normalized.substring(0, yearIndex);
+      const afterYear = normalized.substring(yearIndex + 4);
+      // Check if year is surrounded by spaces or at start/end (not part of other numbers)
+      if (yearIndex === 0 || /\s/.test(normalized[yearIndex - 1])) {
+        if (yearIndex + 4 === normalized.length || /\s/.test(normalized[yearIndex + 4])) {
+          titleWithoutYear = (beforeYear + ' ' + afterYear).trim();
+        }
+      }
+    }
+  }
+  
+  // Normalize dots to spaces for better matching (common in release names)
+  const normalizedForParsing = titleWithoutYear.replace(/\./g, ' ');
   
   // Try to match patterns like "Show Name S01", "Show Name Season 1", "Show Name S1E1"
   // Also handles dot-separated formats like "The.Family.Man.S03"
@@ -48,19 +77,33 @@ function parseTvTitle(title: string): { showName: string; season: number | null 
     const match = normalizedForParsing.match(pattern);
     if (match) {
       // Clean up the show name - replace dots/spaces with single spaces, trim
-      const showName = match[1].replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+      let showName = match[1].replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+      // Remove any remaining year patterns from show name (in case year wasn't extracted earlier)
+      showName = showName.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '').trim();
+      showName = showName.replace(/\b(19|20)\d{2}\b/g, '').trim();
+      showName = showName.replace(/\s+/g, ' ').trim();
+      
       return {
         showName: showName,
         season: parseInt(match[2], 10),
+        year: year,
       };
     }
   }
   
   // If no season pattern found, try to clean up the title and return as show name
-  const cleanedTitle = normalized.replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let cleanedTitle = normalized.replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Remove year patterns if year was extracted
+  if (year) {
+    cleanedTitle = cleanedTitle.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '').trim();
+    cleanedTitle = cleanedTitle.replace(/\b(19|20)\d{2}\b/g, '').trim();
+    cleanedTitle = cleanedTitle.replace(/\s+/g, ' ').trim();
+  }
+  
   return {
     showName: cleanedTitle,
     season: null,
+    year: year,
   };
 }
 
@@ -345,8 +388,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
 
         // Parse show name and season from title (needed for both manual and auto paths)
-        let { showName, season } = parseTvTitle(item.title);
-        console.log(`    Parsed: Show="${showName}", Season=${season !== null ? season : 'unknown'}`);
+        let { showName, season, year } = parseTvTitle(item.title);
+        console.log(`    Parsed: Show="${showName}", Season=${season !== null ? season : 'unknown'}, Year=${year || 'none'}`);
 
         // Get feed name to check if it's BWT TVShows
         const feed = feedsModel.getAll().find(f => f.id === item.feed_id);
