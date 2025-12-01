@@ -331,6 +331,26 @@ router.get('/dashboard', async (req: Request, res: Response) => {
             }
             
             if (radarrInfo) {
+              // Extract languages from mediaInfo if available
+              if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioLanguages) {
+                radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
+              } else if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioCodec) {
+                // Try to infer from audio codec metadata
+                radarrInfo.languages = null;
+              }
+
+              // Extract quality from Radarr API
+              if (syncedRadarrMovie.movie_file) {
+                try {
+                  const movieFile = JSON.parse(syncedRadarrMovie.movie_file);
+                  if (movieFile.quality?.quality?.name) {
+                    radarrInfo.quality = movieFile.quality.quality.name;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
+                }
+              }
+
               const releaseWithHistory = releases.find(r => r.radarr_history);
               if (releaseWithHistory && releaseWithHistory.radarr_history) {
                 try {
@@ -346,32 +366,45 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                         new Date(b.date).getTime() - new Date(a.date).getTime()
                       );
                       const lastDownload = downloadEvents[0];
+                      
+                      // CRITICAL: Preserve lastDownload.sourceTitle as the most important field
                       radarrInfo.lastDownload = {
                         sourceTitle: lastDownload.sourceTitle || null,
                         date: lastDownload.date || null,
                         releaseGroup: lastDownload.data?.releaseGroup || null,
                       };
                       
-                      if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
-                          !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
-                          !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
-                          !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
+                      // Extract source type from lastDownload.sourceTitle FIRST (highest priority)
+                      if (lastDownload.sourceTitle) {
                         try {
                           const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
+                          // Source type from lastDownload is highest priority
+                          radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
+                          
+                          // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
                             radarrInfo.resolution = parsed.resolution;
                           }
                           if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
                             radarrInfo.codec = parsed.codec;
                           }
-                          if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
-                            radarrInfo.sourceTag = parsed.sourceTag;
-                          }
                           if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
                             radarrInfo.audio = parsed.audio;
                           }
                           if (!radarrInfo.sizeMb && parsed.sizeMb) {
                             radarrInfo.sizeMb = parsed.sizeMb;
+                          }
+                          // Extract languages from filename if not in mediaInfo
+                          if (!radarrInfo.languages && parsed.audioLanguages) {
+                            radarrInfo.languages = parsed.audioLanguages;
+                          }
+                          // Extract release group from filename if not in lastDownload.data
+                          if (!radarrInfo.lastDownload.releaseGroup) {
+                            // Try to extract from filename (usually at the end after a dash)
+                            const releaseGroupMatch = lastDownload.sourceTitle.match(/-([A-Z0-9]{2,8})$/i);
+                            if (releaseGroupMatch) {
+                              radarrInfo.lastDownload.releaseGroup = releaseGroupMatch[1];
+                            }
                           }
                         } catch (e) {
                           console.error('Error parsing lastDownload.sourceTitle:', e);
@@ -381,6 +414,18 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                   }
                 } catch (e) {
                   console.error('Error parsing radarr_history:', e);
+                }
+              }
+              
+              // If sourceTag is still OTHER or missing, try to extract from fileName
+              if ((!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') && radarrInfo.fileName) {
+                try {
+                  const parsed = parseReleaseFromTitle(radarrInfo.fileName);
+                  if (parsed.sourceTag && parsed.sourceTag !== 'OTHER') {
+                    radarrInfo.sourceTag = parsed.sourceTag;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
                 }
               }
             }
@@ -1061,6 +1106,26 @@ router.get('/movies', async (req: Request, res: Response) => {
             // Get last download from history stored in releases
             // Only if radarrInfo was successfully created
             if (radarrInfo) {
+              // Extract languages from mediaInfo if available
+              if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioLanguages) {
+                radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
+              } else if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioCodec) {
+                // Try to infer from audio codec metadata
+                radarrInfo.languages = null;
+              }
+
+              // Extract quality from Radarr API
+              if (syncedRadarrMovie.movie_file) {
+                try {
+                  const movieFile = JSON.parse(syncedRadarrMovie.movie_file);
+                  if (movieFile.quality?.quality?.name) {
+                    radarrInfo.quality = movieFile.quality.quality.name;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
+                }
+              }
+
               const releaseWithHistory = releases.find(r => r.radarr_history);
               if (releaseWithHistory && releaseWithHistory.radarr_history) {
                 try {
@@ -1078,34 +1143,45 @@ router.get('/movies', async (req: Request, res: Response) => {
                         new Date(b.date).getTime() - new Date(a.date).getTime()
                       );
                       const lastDownload = downloadEvents[0];
+                      
+                      // CRITICAL: Preserve lastDownload.sourceTitle as the most important field
                       radarrInfo.lastDownload = {
                         sourceTitle: lastDownload.sourceTitle || null,
                         date: lastDownload.date || null,
                         releaseGroup: lastDownload.data?.releaseGroup || null,
                       };
                       
-                      // Parse lastDownload.sourceTitle to extract metadata if missing
-                      if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
-                          !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
-                          !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
-                          !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
+                      // Extract source type from lastDownload.sourceTitle FIRST (highest priority)
+                      if (lastDownload.sourceTitle) {
                         try {
                           const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
-                          // Only use parsed values if current values are missing/unknown
+                          // Source type from lastDownload is highest priority
+                          radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
+                          
+                          // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
                             radarrInfo.resolution = parsed.resolution;
                           }
                           if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
                             radarrInfo.codec = parsed.codec;
                           }
-                          if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
-                            radarrInfo.sourceTag = parsed.sourceTag;
-                          }
                           if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
                             radarrInfo.audio = parsed.audio;
                           }
                           if (!radarrInfo.sizeMb && parsed.sizeMb) {
                             radarrInfo.sizeMb = parsed.sizeMb;
+                          }
+                          // Extract languages from filename if not in mediaInfo
+                          if (!radarrInfo.languages && parsed.audioLanguages) {
+                            radarrInfo.languages = parsed.audioLanguages;
+                          }
+                          // Extract release group from filename if not in lastDownload.data
+                          if (!radarrInfo.lastDownload.releaseGroup) {
+                            // Try to extract from filename (usually at the end after a dash)
+                            const releaseGroupMatch = lastDownload.sourceTitle.match(/-([A-Z0-9]{2,8})$/i);
+                            if (releaseGroupMatch) {
+                              radarrInfo.lastDownload.releaseGroup = releaseGroupMatch[1];
+                            }
                           }
                         } catch (e) {
                           console.error('Error parsing lastDownload.sourceTitle:', e);
@@ -1115,6 +1191,18 @@ router.get('/movies', async (req: Request, res: Response) => {
                   }
                 } catch (e) {
                   console.error('Error parsing radarr_history:', e);
+                }
+              }
+              
+              // If sourceTag is still OTHER or missing, try to extract from fileName
+              if ((!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') && radarrInfo.fileName) {
+                try {
+                  const parsed = parseReleaseFromTitle(radarrInfo.fileName);
+                  if (parsed.sourceTag && parsed.sourceTag !== 'OTHER') {
+                    radarrInfo.sourceTag = parsed.sourceTag;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
                 }
               }
             }

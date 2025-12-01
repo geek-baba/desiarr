@@ -13,6 +13,13 @@ const codecPatterns = [
 ];
 
 const sourcePatterns = [
+  // Physical media sources (check first as they're more specific)
+  { pattern: /Blu[.\s-]?Ray|BDRip|BD\b/gi, value: 'Bluray' },
+  { pattern: /DVD|DVDRip/gi, value: 'DVD' },
+  // Web sources
+  { pattern: /WEB[.\s-]?DL|WEB[.\s-]?DLRip/gi, value: 'WEB-DL' },
+  { pattern: /WEBRip|WEB[.\s-]?Rip/gi, value: 'WEBRip' },
+  // Streaming services
   { pattern: /AMZN|Amazon|Prime/gi, value: 'AMZN' },
   { pattern: /NF|Netflix/gi, value: 'NF' },
   { pattern: /JC|JioCinema/gi, value: 'JC' },
