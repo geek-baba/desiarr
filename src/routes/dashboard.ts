@@ -270,6 +270,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       posterUrl?: string;
       imdbId?: string;
       originalLanguage?: string;
+      originalLanguageCode?: string;
+      isIndianLanguage?: boolean;
       radarrInfo?: any;
       rssItemId?: number | null;
       add: any[];
