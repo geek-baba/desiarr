@@ -859,16 +859,26 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'TVDB ID not found' });
     }
 
-    // Try to get TMDB and IMDB IDs from TVDB extended info, and also fetch the slug
+    // Try to get TMDB and IMDB IDs from TVDB extended info, and also fetch the slug and poster
     let tmdbId = item.tmdb_id;
     let imdbId = item.imdb_id;
     let tvdbSlug: string | null = null;
+    let tvdbPosterUrl: string | null = null;
     
     try {
       const tvdbExtended = await tvdbClient.getSeriesExtended(parseInt(tvdbId, 10));
       if (tvdbExtended) {
         // Extract slug from extended info
         tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+        
+        // Extract poster URL (TVDB v4 structure may vary)
+        const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
+        if (artwork && Array.isArray(artwork)) {
+          const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster'); // Type 2 is poster
+          if (poster) {
+            tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+          }
+        }
         
         // TVDB v4 structure - check for remoteIds
         const remoteIds = (tvdbExtended as any).remoteIds || [];
@@ -885,6 +895,24 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     } catch (error) {
       console.log('Could not fetch extended TVDB info, continuing with TVDB ID only');
     }
+    
+    // Fetch TMDB poster if we have a TMDB ID
+    let tmdbPosterUrl: string | null = null;
+    if (tmdbId) {
+      try {
+        const allSettings = settingsModel.getAll();
+        const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+        if (tmdbApiKey) {
+          tmdbClient.setApiKey(tmdbApiKey);
+          const tmdbShow = await tmdbClient.getTvShow(tmdbId);
+          if (tmdbShow && tmdbShow.poster_path) {
+            tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch TMDB poster, continuing without it');
+      }
+    }
 
     // Update the RSS item with the new TVDB ID and any found IDs, mark as manually set
     db.prepare(`
@@ -898,36 +926,76 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     if (tvRelease) {
       db.prepare(`
         UPDATE tv_releases 
-        SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, last_checked_at = datetime('now')
+        SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, tvdb_poster_url = ?, tmdb_poster_url = ?, last_checked_at = datetime('now')
         WHERE guid = ?
-      `).run(parseInt(tvdbId, 10), tvdbSlug, tmdbId || null, imdbId || null, item.guid);
+      `).run(parseInt(tvdbId, 10), tvdbSlug, tmdbId || null, imdbId || null, tvdbPosterUrl, tmdbPosterUrl, item.guid);
       
-      if (tvdbSlug) {
-        const updateCount = db.prepare(`
-          UPDATE tv_releases 
-          SET tvdb_slug = ?
-          WHERE tvdb_id = ? AND (tvdb_slug IS NULL OR tvdb_slug = '')
-        `).run(tvdbSlug, parseInt(tvdbId, 10)).changes || 0;
+      // Update all other tv_releases with the same TVDB ID to have the slug and poster URLs
+      if (tvdbSlug || tvdbPosterUrl || tmdbPosterUrl) {
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
         
-        if (updateCount > 0) {
-          console.log(`Updated ${updateCount} additional tv_release(s) with slug: ${tvdbSlug}`);
+        if (tvdbSlug) {
+          updateFields.push('tvdb_slug = ?');
+          updateValues.push(tvdbSlug);
+        }
+        if (tvdbPosterUrl) {
+          updateFields.push('tvdb_poster_url = ?');
+          updateValues.push(tvdbPosterUrl);
+        }
+        if (tmdbPosterUrl) {
+          updateFields.push('tmdb_poster_url = ?');
+          updateValues.push(tmdbPosterUrl);
+        }
+        
+        if (updateFields.length > 0) {
+          updateValues.push(parseInt(tvdbId, 10));
+          const updateCount = db.prepare(`
+            UPDATE tv_releases 
+            SET ${updateFields.join(', ')}
+            WHERE tvdb_id = ? AND guid != ?
+          `).run(...updateValues, item.guid).changes || 0;
+          
+          if (updateCount > 0) {
+            console.log(`Updated ${updateCount} additional tv_release(s) with slug/posters`);
+          }
         }
       }
       
-      console.log(`Updated tv_release with TVDB ID ${tvdbId} and slug: ${tvdbSlug || 'none'}`);
+      console.log(`Updated tv_release with TVDB ID ${tvdbId}, slug: ${tvdbSlug || 'none'}, posters: ${tvdbPosterUrl ? 'TVDB' : ''} ${tmdbPosterUrl ? 'TMDB' : ''}`);
     } else {
-      if (tvdbSlug) {
-        const updateCount = db.prepare(`
-          UPDATE tv_releases 
-          SET tvdb_slug = ?
-          WHERE tvdb_id = ? AND (tvdb_slug IS NULL OR tvdb_slug = '')
-        `).run(tvdbSlug, parseInt(tvdbId, 10)).changes || 0;
+      // Update all existing tv_releases with the same TVDB ID to have the slug and poster URLs
+      if (tvdbSlug || tvdbPosterUrl || tmdbPosterUrl) {
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
         
-        if (updateCount > 0) {
-          console.log(`Updated ${updateCount} tv_release(s) with slug: ${tvdbSlug}`);
+        if (tvdbSlug) {
+          updateFields.push('tvdb_slug = ?');
+          updateValues.push(tvdbSlug);
+        }
+        if (tvdbPosterUrl) {
+          updateFields.push('tvdb_poster_url = ?');
+          updateValues.push(tvdbPosterUrl);
+        }
+        if (tmdbPosterUrl) {
+          updateFields.push('tmdb_poster_url = ?');
+          updateValues.push(tmdbPosterUrl);
+        }
+        
+        if (updateFields.length > 0) {
+          updateValues.push(parseInt(tvdbId, 10));
+          const updateCount = db.prepare(`
+            UPDATE tv_releases 
+            SET ${updateFields.join(', ')}
+            WHERE tvdb_id = ?
+          `).run(...updateValues).changes || 0;
+          
+          if (updateCount > 0) {
+            console.log(`Updated ${updateCount} tv_release(s) with slug/posters`);
+          }
         }
       }
-      console.log(`No tv_release found for guid ${item.guid}, slug will be set when release is processed`);
+      console.log(`No tv_release found for guid ${item.guid}, slug/posters will be set when release is processed`);
     }
 
     const seriesName = (tvdbSeries as any).name || (tvdbSeries as any).title || 'Unknown Series';
