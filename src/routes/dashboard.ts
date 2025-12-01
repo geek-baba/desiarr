@@ -654,6 +654,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       sonarrSeriesId?: number;
       sonarrSeriesTitle?: string;
       posterUrl?: string;
+      rssItemId?: number | null;
       newShows: any[];
       existingShows: any[];
       unmatched: any[];
