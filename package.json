@@ -1,6 +1,6 @@
 {
   "name": "desiarr",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Internal web dashboard for managing Indian-language movie releases with Radarr",
   "main": "dist/server.js",
   "scripts": {

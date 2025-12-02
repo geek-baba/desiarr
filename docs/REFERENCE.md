@@ -7,7 +7,7 @@
 - Structured logs, sync progress polling, and Settings UI live in SQLite (`app_settings`, `structured_logs`, etc.).
 
 ### Branch & Version Strategy
-- `main`: Staging branch with both movie + TV pipelines; tagged `v2.0.0` (Docker: `ghcr.io/geek-baba/desiarr:2.0.0` and `:latest`).
+- `main`: Staging branch with both movie + TV pipelines; tagged `v2.1.0` (Docker: `ghcr.io/geek-baba/desiarr:2.1.0` and `:latest`).
 - `tv-integration`: Historical development branch for TV features (now merged); keep future enhancements on short-lived feature/fix branches.
 - Feature hotfixes should branch from the appropriate base (`main` for production issues, feature branches for ongoing work), then PR into `main`.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `refactor:`, etc.) to keep CI automation predictable.
