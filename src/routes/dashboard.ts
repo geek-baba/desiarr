@@ -1173,10 +1173,16 @@ router.get('/movies', async (req: Request, res: Response) => {
         }
       }
       
-      // For unmatched movies (no tmdb_id or radarr_movie_id), use extracted clean name
+      // Build title - prefer proper titles, but fall back to extracted clean name if title looks like a filename
       let movieTitle: string;
-      if (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id) {
-        // Extract clean name from movieKey (format: "title_cleanname year")
+      const builtTitle = buildDisplayTitle(primaryRelease);
+      
+      // Check if the built title looks like a filename (contains quality/resolution/codec patterns)
+      const looksLikeFilename = /(1080p|720p|480p|2160p|4k|uhd|x264|x265|h\.?264|h\.?265|hevc|web[- ]?dl|webrip|bluray|dvd|ddp|dd\+|ac3|atmos|dts|\.mkv|\.mp4)/i.test(builtTitle);
+      
+      // If title looks like a filename OR we don't have tmdb_id/radarr_movie_id, use extracted clean name
+      if (looksLikeFilename || (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id)) {
+        // Extract clean name from movieKey (format: "title_cleanname year" or "tmdb_123" or "radarr_456")
         const keyMatch = movieKey.match(/^title_(.+)$/);
         if (keyMatch) {
           const cleanName = keyMatch[1];
@@ -1186,10 +1192,12 @@ router.get('/movies', async (req: Request, res: Response) => {
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
         } else {
-          movieTitle = buildDisplayTitle(primaryRelease);
+          // If we can't extract from key, use the built title (even if it looks like filename)
+          movieTitle = builtTitle;
         }
       } else {
-        movieTitle = buildDisplayTitle(primaryRelease);
+        // Use the proper title from TMDB/Radarr
+        movieTitle = builtTitle;
       }
 
       // Check if movie is in Radarr by checking synced Radarr data (even if releases don't have radarr_movie_id set)
