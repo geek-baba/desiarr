@@ -22,6 +22,13 @@ export interface QualitySettings {
   sizeBonusEnabled: boolean;
   minSizeIncreasePercentForUpgrade: number;
   upgradeThreshold: number;
+  /**
+   * Percentage size increase at which a release should be considered an upgrade
+   * purely based on size, regardless of quality score.
+   *
+   * Example: 25 means "if new file is >=25% larger than existing, tag as upgrade".
+   */
+  sizeOnlyUpgradePercent?: number;
 }
 
 export interface AppSettings {

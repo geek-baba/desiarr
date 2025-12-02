@@ -387,6 +387,9 @@ const defaultSettings = {
   sizeBonusEnabled: true,
   minSizeIncreasePercentForUpgrade: 10,
   upgradeThreshold: 20,
+  // If new file is at least this much larger than existing, treat as upgrade
+  // even if the quality score delta is below upgradeThreshold.
+  sizeOnlyUpgradePercent: 25,
 };
 
 const defaultAppSettings = {
