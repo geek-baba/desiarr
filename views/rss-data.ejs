@@ -561,8 +561,12 @@
 
     // Toast Notification System
     function showToast(message, type = 'info', duration = 5000) {
+      console.log('[showToast] Called with:', message, type);
       const container = document.getElementById('toastContainer');
-      if (!container) return;
+      if (!container) {
+        console.error('[showToast] toastContainer not found!');
+        return;
+      }
       
       const toast = document.createElement('div');
       toast.className = `toast-enter px-4 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md ${
@@ -716,6 +720,7 @@
     let currentOverrideItemId = null;
 
     function overrideTmdbId(itemId) {
+      console.log('[overrideTmdbId] Called with itemId:', itemId);
       currentOverrideItemId = itemId;
       document.getElementById('overrideTmdbItemId').value = itemId;
       document.getElementById('tmdbIdInput').value = '';
@@ -987,6 +992,7 @@
     let selectedMatch = null;
 
     async function matchItem(itemId) {
+      console.log('[matchItem] Called with itemId:', itemId);
       currentMatchItemId = itemId;
       
       // Fetch current item data
