@@ -559,6 +559,89 @@
   <script>
     let progressInterval = null;
 
+    // Toast Notification System
+    function showToast(message, type = 'info', duration = 5000) {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      toast.className = `toast-enter px-4 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md ${
+        type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+        type === 'warning' ? 'bg-yellow-500 text-white' :
+        'bg-blue-500 text-white'
+      }`;
+      
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    // Confirmation Dialog System
+    function showConfirm(message, onConfirm, onCancel = null) {
+      const container = document.body;
+      
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.id = 'confirmOverlay';
+      
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Confirm</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">${message}</p>
+          <div class="flex justify-end space-x-2">
+            <button 
+              id="confirmCancel" 
+              class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              id="confirmOk" 
+              class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      `;
+      
+      container.appendChild(overlay);
+      
+      const removeOverlay = () => {
+        overlay.remove();
+      };
+      
+      overlay.querySelector('#confirmOk').addEventListener('click', () => {
+        removeOverlay();
+        if (onConfirm) onConfirm();
+      });
+      
+      overlay.querySelector('#confirmCancel').addEventListener('click', () => {
+        removeOverlay();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          removeOverlay();
+          if (onCancel) onCancel();
+        }
+      });
+    }
+
     // Search/Filter functionality - uses global search
     function filterTable() {
       const searchInput = document.getElementById('globalSearch');
