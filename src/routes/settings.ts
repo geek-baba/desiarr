@@ -36,19 +36,51 @@ router.get('/', async (req: Request, res: Response) => {
     let latestVersionStatus: 'unknown' | 'up_to_date' | 'outdated' = 'unknown';
 
     try {
-      const response = await axios.get('https://api.github.com/repos/geek-baba/desiarr/releases/latest', {
+      // Try releases/latest first
+      const releasesResponse = await axios.get('https://api.github.com/repos/geek-baba/desiarr/releases/latest', {
         headers: {
           'User-Agent': 'desiarr-app',
           Accept: 'application/vnd.github+json',
         },
-        timeout: 3000,
+        timeout: 10000,
+        validateStatus: (status) => status < 500,
       });
 
-      const tag = (response.data && (response.data.tag_name || response.data.name)) as string | undefined;
-      latestVersion = tag || null;
-      latestVersionUrl = (response.data && response.data.html_url) || null;
-    } catch (error) {
-      console.warn('Failed to fetch latest version from GitHub:', (error as Error).message);
+      if (releasesResponse.status === 200 && releasesResponse.data) {
+        const tag = (releasesResponse.data.tag_name || releasesResponse.data.name) as string | undefined;
+        latestVersion = tag || null;
+        latestVersionUrl = releasesResponse.data.html_url || null;
+      } else if (releasesResponse.status === 404) {
+        // No releases found, try tags instead
+        console.log('No releases found, checking tags...');
+        try {
+          const tagsResponse = await axios.get('https://api.github.com/repos/geek-baba/desiarr/tags', {
+            headers: {
+              'User-Agent': 'desiarr-app',
+              Accept: 'application/vnd.github+json',
+            },
+            timeout: 10000,
+            params: { per_page: 1 },
+          });
+
+          if (tagsResponse.status === 200 && tagsResponse.data && tagsResponse.data.length > 0) {
+            latestVersion = tagsResponse.data[0].name || null;
+            latestVersionUrl = `https://github.com/geek-baba/desiarr/releases/tag/${tagsResponse.data[0].name}`;
+          }
+        } catch (tagsError: any) {
+          console.warn('Failed to fetch tags from GitHub:', tagsError?.message);
+        }
+      } else {
+        console.warn(`GitHub API returned status ${releasesResponse.status}`);
+      }
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Unknown error';
+      const errorCode = error?.code || 'UNKNOWN';
+      console.warn('Failed to fetch latest version from GitHub:', {
+        message: errorMessage,
+        code: errorCode,
+        timeout: error?.code === 'ECONNABORTED' ? 'Request timed out' : undefined,
+      });
     }
 
     const normalizeVersion = (v: string | null): string | null => {
