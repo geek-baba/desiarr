@@ -241,5 +241,6 @@ class TMDBClient {
   }
 }
 
+export { TMDBClient };
 export default new TMDBClient();
 
