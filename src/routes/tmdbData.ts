@@ -151,6 +151,7 @@ router.get('/movie/:tmdbId', async (req: Request, res: Response) => {
  * Start initial TMDB sync
  */
 router.post('/sync/initial', async (req: Request, res: Response) => {
+  const resume = req.body.resume !== false; // Default to true (resume enabled)
   try {
     // Check if sync is already running
     const progress = syncProgress.get();
@@ -162,7 +163,7 @@ router.post('/sync/initial', async (req: Request, res: Response) => {
     }
 
     // Start sync in background (don't await)
-    initialTmdbSync().catch(error => {
+    initialTmdbSync(resume).catch(error => {
       console.error('Background TMDB sync error:', error);
     });
 
