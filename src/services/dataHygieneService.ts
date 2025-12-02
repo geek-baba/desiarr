@@ -4,6 +4,56 @@ import { settingsModel } from '../models/settings';
 import { getLanguageCode, getLanguageName, isIndianLanguage, MAJOR_INDIAN_LANGUAGES } from '../utils/languageMapping';
 import path from 'path';
 
+/**
+ * Get TMDB data for a movie, using cache first, then API if needed
+ */
+async function getTmdbData(tmdbId: number, tmdbClient: TMDBClient): Promise<{ title: string | null; original_language: string | null; release_date: string | null } | null> {
+  // First, try to get from cached movie_releases
+  const cached = db
+    .prepare(`
+      SELECT tmdb_title, tmdb_original_language
+      FROM movie_releases
+      WHERE tmdb_id = ?
+      LIMIT 1
+    `)
+    .get(tmdbId) as { tmdb_title: string | null; tmdb_original_language: string | null } | undefined;
+
+  if (cached && cached.tmdb_title) {
+    // Get release_date from API if we need it (for year)
+    try {
+      const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+      return {
+        title: cached.tmdb_title,
+        original_language: cached.tmdb_original_language,
+        release_date: tmdbMovie?.release_date || null,
+      };
+    } catch (error) {
+      // If API fails, return cached data without year
+      return {
+        title: cached.tmdb_title,
+        original_language: cached.tmdb_original_language,
+        release_date: null,
+      };
+    }
+  }
+
+  // Not in cache, fetch from API
+  try {
+    const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+    if (tmdbMovie) {
+      return {
+        title: tmdbMovie.title || null,
+        original_language: tmdbMovie.original_language || null,
+        release_date: tmdbMovie.release_date || null,
+      };
+    }
+  } catch (error) {
+    console.warn(`Failed to fetch TMDB data for movie ${tmdbId}:`, error);
+  }
+
+  return null;
+}
+
 export interface DataHygieneMovie {
   radarr_id: number;
   tmdb_id: number | null;
@@ -91,18 +141,9 @@ export async function getNonIndianMovies(): Promise<DataHygieneMovie[]> {
   for (const movie of allMovies) {
     if (!movie.tmdb_id) continue;
 
-    let tmdbLanguage: string | null = null;
-    let tmdbTitle: string | null = null;
-
-    try {
-      const tmdbMovie = await tmdbClient.getMovie(movie.tmdb_id);
-      if (tmdbMovie) {
-        tmdbLanguage = tmdbMovie.original_language || null;
-        tmdbTitle = tmdbMovie.title || null;
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch TMDB data for movie ${movie.tmdb_id}:`, error);
-    }
+    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
+    const tmdbLanguage = tmdbData?.original_language || null;
+    const tmdbTitle = tmdbData?.title || null;
 
     const languageCode = getLanguageCode(tmdbLanguage || movie.original_language);
     const isIndian = languageCode ? MAJOR_INDIAN_LANGUAGES.has(languageCode) : false;
@@ -209,19 +250,10 @@ export async function getFolderNameMismatches(): Promise<DataHygieneMovie[]> {
     // Extract folder name from path
     const folderName = path.basename(movie.path);
 
-    // Get TMDB data
-    let tmdbTitle: string | null = null;
-    let tmdbYear: number | null = null;
-
-    try {
-      const tmdbMovie = await tmdbClient.getMovie(movie.tmdb_id);
-      if (tmdbMovie) {
-        tmdbTitle = tmdbMovie.title || null;
-        tmdbYear = tmdbMovie.release_date ? new Date(tmdbMovie.release_date).getFullYear() : null;
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch TMDB data for movie ${movie.tmdb_id}:`, error);
-    }
+    // Get TMDB data (cached or API)
+    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
+    const tmdbTitle = tmdbData?.title || null;
+    const tmdbYear = tmdbData?.release_date ? new Date(tmdbData.release_date).getFullYear() : null;
 
     if (!tmdbTitle) continue;
 
@@ -300,19 +332,10 @@ export async function getFileNameMismatches(): Promise<DataHygieneMovie[]> {
 
     if (!fileName) continue;
 
-    // Get TMDB data
-    let tmdbTitle: string | null = null;
-    let tmdbYear: number | null = null;
-
-    try {
-      const tmdbMovie = await tmdbClient.getMovie(movie.tmdb_id);
-      if (tmdbMovie) {
-        tmdbTitle = tmdbMovie.title || null;
-        tmdbYear = tmdbMovie.release_date ? new Date(tmdbMovie.release_date).getFullYear() : null;
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch TMDB data for movie ${movie.tmdb_id}:`, error);
-    }
+    // Get TMDB data (cached or API)
+    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
+    const tmdbTitle = tmdbData?.title || null;
+    const tmdbYear = tmdbData?.release_date ? new Date(tmdbData.release_date).getFullYear() : null;
 
     if (!tmdbTitle) continue;
 
@@ -378,16 +401,12 @@ export async function getLanguageMismatches(): Promise<DataHygieneMovie[]> {
   for (const movie of rows) {
     if (!movie.tmdb_id) continue;
 
-    // Get TMDB language
-    let tmdbLanguage: string | null = null;
-    try {
-      const tmdbMovie = await tmdbClient.getMovie(movie.tmdb_id);
-      if (tmdbMovie) {
-        tmdbLanguage = tmdbMovie.original_language || null;
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch TMDB data for movie ${movie.tmdb_id}:`, error);
-      continue;
+    // Get TMDB language (cached or API)
+    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
+    const tmdbLanguage = tmdbData?.original_language || null;
+    
+    if (!tmdbLanguage) {
+      continue; // Skip if we can't get TMDB language
     }
 
     if (!tmdbLanguage) continue;

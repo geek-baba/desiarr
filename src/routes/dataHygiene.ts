@@ -59,7 +59,9 @@ router.get('/', async (req: Request, res: Response) => {
         movie.title.toLowerCase().includes(searchLower) ||
         (movie.year && movie.year.toString().includes(searchLower)) ||
         (movie.imdb_id && movie.imdb_id.toLowerCase().includes(searchLower)) ||
-        (movie.tmdb_id && movie.tmdb_id.toString().includes(searchLower))
+        (movie.tmdb_id && movie.tmdb_id.toString().includes(searchLower)) ||
+        (movie.file_name && movie.file_name.toLowerCase().includes(searchLower)) ||
+        (movie.folder_name && movie.folder_name.toLowerCase().includes(searchLower))
       );
     }
 
