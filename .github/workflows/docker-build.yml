@@ -6,10 +6,12 @@ on:
       - main
       - tv-integration
       - fix/**
+      - feat/**
   pull_request:
     branches:
       - main
       - tv-integration
+      - feat/**
   workflow_dispatch:
 
 env:

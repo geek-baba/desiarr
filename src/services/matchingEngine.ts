@@ -473,14 +473,21 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
           }
 
           const scoreDelta = newScore - existingScore;
-          const sizeDeltaPercent = existingSizeMb && item.rss_size_mb
-            ? ((item.rss_size_mb - existingSizeMb) / existingSizeMb) * 100
-            : 0;
+          const sizeDeltaPercent =
+            existingSizeMb && item.rss_size_mb
+              ? ((item.rss_size_mb - existingSizeMb) / existingSizeMb) * 100
+              : 0;
 
-          if (
+          // Two ways to qualify as an upgrade:
+          // 1) Original rule: score delta above threshold AND size increase above minSizeIncreasePercentForUpgrade
+          // 2) New rule: if file is significantly larger (>= sizeOnlyUpgradePercent), treat as upgrade
+          const sizeOnlyUpgradePercent = settings.sizeOnlyUpgradePercent ?? 25;
+          const qualifiesByScoreAndSize =
             scoreDelta >= settings.upgradeThreshold &&
-            sizeDeltaPercent >= settings.minSizeIncreasePercentForUpgrade
-          ) {
+            sizeDeltaPercent >= settings.minSizeIncreasePercentForUpgrade;
+          const qualifiesBySizeOnly = sizeDeltaPercent >= sizeOnlyUpgradePercent;
+
+          if (qualifiesByScoreAndSize || qualifiesBySizeOnly) {
             status = 'UPGRADE_CANDIDATE';
             stats.upgradeCandidates++;
           } else {

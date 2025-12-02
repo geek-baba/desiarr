@@ -14,3 +14,9 @@ dist/
 *.log
 deploy.sh
 
+# Test output files
+tests/**/*.js
+tests/**/*.d.ts
+tests/**/*.js.map
+tests/**/*.d.ts.map
+
