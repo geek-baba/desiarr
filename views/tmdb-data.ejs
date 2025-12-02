@@ -12,7 +12,7 @@
   <%- include('partials/app-sidebar', { currentPage: 'tmdb-data' }) %>
   
   <div class="lg:pl-64">
-    <%- include('partials/app-header', { currentSearch: '', lastRefresh: typeof lastSyncDate !== 'undefined' ? lastSyncDate : null }) %>
+    <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', lastRefresh: typeof lastSyncDate !== 'undefined' ? lastSyncDate : null }) %>
     
     <main class="p-4 lg:p-6">
     <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">TMDB Data</h2>
@@ -66,25 +66,216 @@
       </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">About TMDB Sync</h3>
-      <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-        <p>
-          TMDB sync keeps movie metadata up-to-date by fetching data from The Movie Database API.
-        </p>
-        <p>
-          <strong>Initial Sync:</strong> Fetches data for all movies in Radarr (one-time setup).
-        </p>
-        <p>
-          <strong>Incremental Sync:</strong> Only fetches movies that have changed since the last sync (daily recommended).
-        </p>
-        <p>
-          <strong>Rate Limiting:</strong> Syncs at 3 requests/second to stay within TMDB API limits.
-        </p>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">
-          Note: Auto-sync runs daily at 2 AM. Manual syncs are incremental only.
-        </p>
-      </div>
+    <!-- Search Bar -->
+    <div class="mb-6">
+      <form method="GET" action="/tmdb-data" class="flex gap-2">
+        <input
+          type="text"
+          name="search"
+          value="<%= typeof search !== 'undefined' ? search : '' %>"
+          placeholder="Search by title, language, country, year, IMDB/TMDB ID..."
+          class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="submit"
+          class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+        >
+          Search
+        </button>
+        <% if (typeof search !== 'undefined' && search) { %>
+          <a
+            href="/tmdb-data"
+            class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+          >
+            Clear
+          </a>
+        <% } %>
+      </form>
+    </div>
+
+    <!-- Movies Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <% if (typeof movies !== 'undefined' && movies.length > 0) { %>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Poster</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Language</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <% movies.forEach(movie => { %>
+                <tr 
+                  class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                  onclick="window.location.href='/tmdb-data/movie/<%= movie.tmdb_id %>'"
+                >
+                  <td class="px-4 py-3">
+                    <% if (movie.poster_path) { %>
+                      <img 
+                        src="https://image.tmdb.org/t/p/w92<%= movie.poster_path %>" 
+                        alt="<%= movie.title %> poster"
+                        class="w-16 h-24 object-cover rounded"
+                        onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'92\' height=\'138\'%3E%3Crect fill=\'%23ddd\' width=\'92\' height=\'138\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%23999\' font-size=\'12\'%3ENo Image%3C/text%3E%3C/svg%3E'"
+                      />
+                    <% } else { %>
+                      <div class="w-16 h-24 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center text-xs text-gray-400">
+                        No Poster
+                      </div>
+                    <% } %>
+                  </td>
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <%= movie.title || '-' %>
+                    <% if (movie.original_title && movie.original_title !== movie.title) { %>
+                      <div class="text-xs text-gray-500 dark:text-gray-400 italic">
+                        <%= movie.original_title %>
+                      </div>
+                    <% } %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                    <%= movie.release_date ? new Date(movie.release_date).getFullYear() : '-' %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                    <%= movie.original_language_display || movie.original_language || '-' %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                    <%= movie.primary_country || '-' %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600">
+                    <% if (movie.imdb_id) { %>
+                      <a 
+                        href="https://www.imdb.com/title/<%= movie.imdb_id %>" 
+                        target="_blank" 
+                        class="text-blue-600 hover:underline"
+                        onclick="event.stopPropagation()"
+                      >
+                        <%= movie.imdb_id %>
+                      </a>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600">
+                    <% if (movie.tmdb_id) { %>
+                      <a 
+                        href="https://www.themoviedb.org/movie/<%= movie.tmdb_id %>" 
+                        target="_blank" 
+                        class="text-blue-600 hover:underline"
+                        onclick="event.stopPropagation()"
+                      >
+                        <%= movie.tmdb_id %>
+                      </a>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <% if (typeof totalPages !== 'undefined' && totalPages > 1) { %>
+          <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-600 sm:px-6">
+            <div class="flex-1 flex justify-between sm:hidden">
+              <% if (typeof currentPageNum !== 'undefined' && currentPageNum > 1) { %>
+                <a 
+                  href="?page=<%= currentPageNum - 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                  class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Previous
+                </a>
+              <% } else { %>
+                <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-300 dark:text-gray-600 bg-white dark:bg-gray-800 cursor-not-allowed">
+                  Previous
+                </span>
+              <% } %>
+              <% if (typeof currentPageNum !== 'undefined' && currentPageNum < totalPages) { %>
+                <a 
+                  href="?page=<%= currentPageNum + 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                  class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Next
+                </a>
+              <% } else { %>
+                <span class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-300 dark:text-gray-600 bg-white dark:bg-gray-800 cursor-not-allowed">
+                  Next
+                </span>
+              <% } %>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm text-gray-700 dark:text-gray-300">
+                  Showing <span class="font-medium"><%= typeof currentPageNum !== 'undefined' ? ((currentPageNum - 1) * 50) + 1 : 1 %></span> to 
+                  <span class="font-medium"><%= typeof currentPageNum !== 'undefined' && typeof total !== 'undefined' ? Math.min(currentPageNum * 50, total) : 50 %></span> of 
+                  <span class="font-medium"><%= typeof total !== 'undefined' ? total : 0 %></span> results
+                </p>
+              </div>
+              <div>
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <% if (typeof currentPageNum !== 'undefined' && currentPageNum > 1) { %>
+                    <a 
+                      href="?page=<%= currentPageNum - 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                      class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      Previous
+                    </a>
+                  <% } else { %>
+                    <span class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-300 dark:text-gray-600 cursor-not-allowed">
+                      Previous
+                    </span>
+                  <% } %>
+                  
+                  <% for (let i = Math.max(1, (typeof currentPageNum !== 'undefined' ? currentPageNum : 1) - 2); i <= Math.min(totalPages, (typeof currentPageNum !== 'undefined' ? currentPageNum : 1) + 2); i++) { %>
+                    <% if (i === (typeof currentPageNum !== 'undefined' ? currentPageNum : 1)) { %>
+                      <span class="relative inline-flex items-center px-4 py-2 border border-blue-500 bg-blue-50 dark:bg-blue-900 text-sm font-medium text-blue-600 dark:text-blue-300">
+                        <%= i %>
+                      </span>
+                    <% } else { %>
+                      <a 
+                        href="?page=<%= i %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                        class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <%= i %>
+                      </a>
+                    <% } %>
+                  <% } %>
+                  
+                  <% if (typeof currentPageNum !== 'undefined' && currentPageNum < totalPages) { %>
+                    <a 
+                      href="?page=<%= currentPageNum + 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                      class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      Next
+                    </a>
+                  <% } else { %>
+                    <span class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-300 dark:text-gray-600 cursor-not-allowed">
+                      Next
+                    </span>
+                  <% } %>
+                </nav>
+              </div>
+            </div>
+          </div>
+        <% } %>
+      <% } else { %>
+        <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+          <p class="text-lg mb-2">No TMDB data found.</p>
+          <p class="text-sm">
+            <% if (typeof search !== 'undefined' && search) { %>
+              Try a different search term or <a href="/tmdb-data" class="text-blue-600 hover:underline">clear the search</a>.
+            <% } else { %>
+              Click "Sync Now" to fetch data from TMDB.
+            <% } %>
+          </p>
+        </div>
+      <% } %>
     </div>
     </main>
   </div>
@@ -108,8 +299,14 @@
 
             if (progress.isRunning) {
               progressContainer.classList.remove('hidden');
-              syncButton.disabled = true;
-              syncButtonText.textContent = 'Syncing...';
+              if (syncButton) {
+                syncButton.disabled = true;
+                syncButtonText.textContent = 'Syncing...';
+              }
+              const initialSyncButton = document.getElementById('initialSyncButton');
+              if (initialSyncButton) {
+                initialSyncButton.disabled = true;
+              }
 
               progressStep.textContent = progress.currentStep || 'Processing...';
               
@@ -124,8 +321,14 @@
               }
             } else {
               progressContainer.classList.add('hidden');
-              syncButton.disabled = false;
-              syncButtonText.textContent = 'Sync Now';
+              if (syncButton) {
+                syncButton.disabled = false;
+                syncButtonText.textContent = 'Sync Now';
+              }
+              const initialSyncButton = document.getElementById('initialSyncButton');
+              if (initialSyncButton) {
+                initialSyncButton.disabled = false;
+              }
               if (progressInterval) {
                 clearInterval(progressInterval);
                 progressInterval = null;
@@ -140,8 +343,41 @@
         });
     }
 
+    async function startInitialSync() {
+      const button = document.getElementById('initialSyncButton');
+      if (button && button.disabled) {
+        return;
+      }
+
+      if (!confirm('Initial sync will fetch data for all movies in Radarr. This may take a while. Continue?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/tmdb-data/sync/initial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Start polling for progress
+          if (!progressInterval) {
+            progressInterval = setInterval(updateProgress, 1000);
+            updateProgress();
+          }
+        } else {
+          alert('Error: ' + (data.error || 'Failed to start sync'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
     async function startIncrementalSync() {
-      if (document.getElementById('syncButton').disabled) {
+      const button = document.getElementById('syncButton');
+      if (button && button.disabled) {
         return;
       }
 
@@ -178,4 +414,3 @@
   <script src="/js/ui.js"></script>
 </body>
 </html>
-

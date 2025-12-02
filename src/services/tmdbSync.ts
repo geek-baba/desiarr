@@ -90,13 +90,16 @@ export async function initialTmdbSync(): Promise<TmdbSyncStats> {
             ? tmdbMovie.production_countries[0].name
             : null;
 
-          // Store in cache
+          // Store in cache with all fields
           db.prepare(`
             INSERT OR REPLACE INTO tmdb_movie_cache (
               tmdb_id, title, original_title, original_language, release_date,
               production_countries, primary_country, poster_path, backdrop_path,
-              overview, imdb_id, synced_at, last_updated_at, is_deleted
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+              overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+              belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+              vote_count, status, adult, video, homepage,
+              synced_at, last_updated_at, is_deleted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
           `).run(
             tmdbMovie.id,
             tmdbMovie.title || null,
@@ -108,7 +111,22 @@ export async function initialTmdbSync(): Promise<TmdbSyncStats> {
             tmdbMovie.poster_path || null,
             tmdbMovie.backdrop_path || null,
             tmdbMovie.overview || null,
-            tmdbMovie.imdb_id || null
+            tmdbMovie.tagline || null,
+            tmdbMovie.imdb_id || null,
+            tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+            tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+            tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+            tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+            tmdbMovie.budget || null,
+            tmdbMovie.revenue || null,
+            tmdbMovie.runtime || null,
+            tmdbMovie.popularity || null,
+            tmdbMovie.vote_average || null,
+            tmdbMovie.vote_count || null,
+            tmdbMovie.status || null,
+            tmdbMovie.adult ? 1 : 0,
+            tmdbMovie.video ? 1 : 0,
+            tmdbMovie.homepage || null
           );
 
           stats.moviesSynced++;
@@ -246,7 +264,11 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
               UPDATE tmdb_movie_cache SET
                 title = ?, original_title = ?, original_language = ?, release_date = ?,
                 production_countries = ?, primary_country = ?, poster_path = ?,
-                backdrop_path = ?, overview = ?, imdb_id = ?,
+                backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+                genres = ?, production_companies = ?, spoken_languages = ?,
+                belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+                popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+                adult = ?, video = ?, homepage = ?,
                 last_updated_at = datetime('now'), is_deleted = 0
               WHERE tmdb_id = ?
             `).run(
@@ -259,7 +281,22 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
               tmdbMovie.poster_path || null,
               tmdbMovie.backdrop_path || null,
               tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
               tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null,
               tmdbId
             );
             stats.moviesUpdated++;
@@ -269,8 +306,11 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
               INSERT INTO tmdb_movie_cache (
                 tmdb_id, title, original_title, original_language, release_date,
                 production_countries, primary_country, poster_path, backdrop_path,
-                overview, imdb_id, synced_at, last_updated_at, is_deleted
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+                overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+                belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+                vote_count, status, adult, video, homepage,
+                synced_at, last_updated_at, is_deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
             `).run(
               tmdbMovie.id,
               tmdbMovie.title || null,
@@ -282,7 +322,22 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
               tmdbMovie.poster_path || null,
               tmdbMovie.backdrop_path || null,
               tmdbMovie.overview || null,
-              tmdbMovie.imdb_id || null
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null
             );
             stats.moviesSynced++;
           }

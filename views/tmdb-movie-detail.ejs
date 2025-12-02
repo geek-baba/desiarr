@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" class="<%= typeof theme !== 'undefined' && theme === 'dark' ? 'dark' : '' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= movie.title %> — TMDB Data — desiarr</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <%- include('partials/app-sidebar', { currentPage: 'tmdb-data' }) %>
+  
+  <div class="lg:pl-64">
+    <%- include('partials/app-header', { currentSearch: '', lastRefresh: null }) %>
+    
+    <main class="p-4 lg:p-6">
+      <!-- Back Button -->
+      <div class="mb-4">
+        <a 
+          href="/tmdb-data<%= typeof search !== 'undefined' && search ? '?search=' + encodeURIComponent(search) : '' %>" 
+          class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-2"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+          </svg>
+          Back to TMDB Data
+        </a>
+      </div>
+
+      <!-- Movie Header -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6">
+        <div class="flex flex-col md:flex-row">
+          <!-- Poster -->
+          <div class="md:w-1/3 p-6">
+            <% if (movie.poster_path) { %>
+              <img 
+                src="https://image.tmdb.org/t/p/w500<%= movie.poster_path %>" 
+                alt="<%= movie.title %> poster"
+                class="w-full rounded-lg shadow-lg"
+                onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'500\' height=\'750\'%3E%3Crect fill=\'%23ddd\' width=\'500\' height=\'750\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%23999\' font-size=\'24\'%3ENo Image%3C/text%3E%3C/svg%3E'"
+              />
+            <% } else { %>
+              <div class="w-full aspect-[2/3] bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-400">
+                No Poster Available
+              </div>
+            <% } %>
+          </div>
+
+          <!-- Movie Info -->
+          <div class="md:w-2/3 p-6">
+            <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              <%= movie.title || 'Unknown Title' %>
+            </h1>
+            <% if (movie.original_title && movie.original_title !== movie.title) { %>
+              <p class="text-xl text-gray-600 dark:text-gray-400 italic mb-4">
+                <%= movie.original_title %>
+              </p>
+            <% } %>
+
+            <% if (movie.tagline) { %>
+              <p class="text-lg text-gray-700 dark:text-gray-300 italic mb-4">
+                "<%= movie.tagline %>"
+              </p>
+            <% } %>
+
+            <div class="flex flex-wrap gap-2 mb-4">
+              <% if (movie.release_date) { %>
+                <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm">
+                  <%= new Date(movie.release_date).getFullYear() %>
+                </span>
+              <% } %>
+              <% if (movie.runtime) { %>
+                <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm">
+                  <%= Math.floor(movie.runtime / 60) %>h <%= movie.runtime % 60 %>m
+                </span>
+              <% } %>
+              <% if (movie.vote_average) { %>
+                <span class="px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full text-sm">
+                  ⭐ <%= movie.vote_average.toFixed(1) %> (<%= movie.vote_count || 0 %> votes)
+                </span>
+              <% } %>
+              <% if (movie.status) { %>
+                <span class="px-3 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full text-sm">
+                  <%= movie.status %>
+                </span>
+              <% } %>
+            </div>
+
+            <% if (movie.genres_parsed && movie.genres_parsed.length > 0) { %>
+              <div class="mb-4">
+                <div class="flex flex-wrap gap-2">
+                  <% movie.genres_parsed.forEach(genre => { %>
+                    <span class="px-3 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 rounded-full text-sm">
+                      <%= genre.name %>
+                    </span>
+                  <% }); %>
+                </div>
+              </div>
+            <% } %>
+
+            <% if (movie.overview) { %>
+              <div class="mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Overview</h3>
+                <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
+                  <%= movie.overview %>
+                </p>
+              </div>
+            <% } %>
+
+            <!-- External Links -->
+            <div class="flex gap-4 mt-4">
+              <% if (movie.tmdb_id) { %>
+                <a 
+                  href="https://www.themoviedb.org/movie/<%= movie.tmdb_id %>" 
+                  target="_blank"
+                  class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  View on TMDB
+                </a>
+              <% } %>
+              <% if (movie.imdb_id) { %>
+                <a 
+                  href="https://www.imdb.com/title/<%= movie.imdb_id %>" 
+                  target="_blank"
+                  class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
+                >
+                  View on IMDB
+                </a>
+              <% } %>
+              <% if (movie.homepage) { %>
+                <a 
+                  href="<%= movie.homepage %>" 
+                  target="_blank"
+                  class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  Official Website
+                </a>
+              <% } %>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movie Details Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- Left Column -->
+        <div class="space-y-6">
+          <!-- Production Info -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Production Information</h2>
+            <dl class="space-y-3">
+              <% if (movie.original_language_display || movie.original_language) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Original Language</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.original_language_display || movie.original_language %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.production_countries_parsed && movie.production_countries_parsed.length > 0) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Production Countries</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.production_countries_parsed.map(c => c.name).join(', ') %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.production_companies_parsed && movie.production_companies_parsed.length > 0) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Production Companies</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.production_companies_parsed.map(c => c.name).join(', ') %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.spoken_languages_parsed && movie.spoken_languages_parsed.length > 0) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Spoken Languages</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.spoken_languages_parsed.map(l => l.english_name || l.name).join(', ') %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.release_date) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Release Date</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= new Date(movie.release_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %>
+                  </dd>
+                </div>
+              <% } %>
+            </dl>
+          </div>
+
+          <!-- Financial Info -->
+          <% if (movie.budget || movie.revenue) { %>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Financial Information</h2>
+              <dl class="space-y-3">
+                <% if (movie.budget) { %>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Budget</dt>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                      $<%= movie.budget.toLocaleString() %>
+                    </dd>
+                  </div>
+                <% } %>
+                <% if (movie.revenue) { %>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Revenue</dt>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                      $<%= movie.revenue.toLocaleString() %>
+                    </dd>
+                  </div>
+                <% } %>
+                <% if (movie.budget && movie.revenue) { %>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Profit</dt>
+                    <dd class="mt-1 text-sm <%= (movie.revenue - movie.budget) >= 0 ? 'text-green-600' : 'text-red-600' %>">
+                      $<%= (movie.revenue - movie.budget).toLocaleString() %>
+                    </dd>
+                  </div>
+                <% } %>
+              </dl>
+            </div>
+          <% } %>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-6">
+          <!-- Statistics -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Statistics</h2>
+            <dl class="space-y-3">
+              <% if (movie.popularity) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Popularity</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.popularity.toFixed(2) %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.vote_average) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Average Rating</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.vote_average.toFixed(1) %> / 10
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.vote_count) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Vote Count</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.vote_count.toLocaleString() %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.runtime) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Runtime</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= Math.floor(movie.runtime / 60) %> hours <%= movie.runtime % 60 %> minutes
+                  </dd>
+                </div>
+              <% } %>
+            </dl>
+          </div>
+
+          <!-- Collection Info -->
+          <% if (movie.belongs_to_collection_parsed) { %>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+              <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Collection</h2>
+              <p class="text-gray-900 dark:text-white">
+                <%= movie.belongs_to_collection_parsed.name %>
+              </p>
+            </div>
+          <% } %>
+
+          <!-- Cache Info -->
+          <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Cache Information</h2>
+            <dl class="space-y-3">
+              <div>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">TMDB ID</dt>
+                <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                  <%= movie.tmdb_id %>
+                </dd>
+              </div>
+              <% if (movie.imdb_id) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">IMDB ID</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= movie.imdb_id %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.synced_at) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Synced At</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= new Date(movie.synced_at).toLocaleString() %>
+                  </dd>
+                </div>
+              <% } %>
+              <% if (movie.last_updated_at) { %>
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                    <%= new Date(movie.last_updated_at).toLocaleString() %>
+                  </dd>
+                </div>
+              <% } %>
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backdrop Image -->
+      <% if (movie.backdrop_path) { %>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6">
+          <img 
+            src="https://image.tmdb.org/t/p/w1280<%= movie.backdrop_path %>" 
+            alt="<%= movie.title %> backdrop"
+            class="w-full h-auto"
+            onerror="this.style.display='none'"
+          />
+        </div>
+      <% } %>
+    </main>
+  </div>
+
+  <script src="/js/ui.js"></script>
+</body>
+</html>
+

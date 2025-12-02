@@ -203,7 +203,22 @@ db.exec(`
     poster_path TEXT,
     backdrop_path TEXT,
     overview TEXT,
+    tagline TEXT,
     imdb_id TEXT,
+    genres TEXT,
+    production_companies TEXT,
+    spoken_languages TEXT,
+    belongs_to_collection TEXT,
+    budget INTEGER,
+    revenue INTEGER,
+    runtime INTEGER,
+    popularity REAL,
+    vote_average REAL,
+    vote_count INTEGER,
+    status TEXT,
+    adult INTEGER DEFAULT 0,
+    video INTEGER DEFAULT 0,
+    homepage TEXT,
     synced_at TEXT NOT NULL,
     last_updated_at TEXT,
     is_deleted INTEGER DEFAULT 0
@@ -245,6 +260,35 @@ try {
     console.log('Added column: rss_feed_items.imdb_id_manual');
   }
   
+  // Migrate tmdb_movie_cache table - add new columns if they don't exist
+  const tmdbColumns = db.prepare("PRAGMA table_info(tmdb_movie_cache)").all() as any[];
+  const tmdbColumnNames = tmdbColumns.map((c: any) => c.name);
+  
+  const newTmdbColumns = [
+    { name: 'tagline', type: 'TEXT' },
+    { name: 'genres', type: 'TEXT' },
+    { name: 'production_companies', type: 'TEXT' },
+    { name: 'spoken_languages', type: 'TEXT' },
+    { name: 'belongs_to_collection', type: 'TEXT' },
+    { name: 'budget', type: 'INTEGER' },
+    { name: 'revenue', type: 'INTEGER' },
+    { name: 'runtime', type: 'INTEGER' },
+    { name: 'popularity', type: 'REAL' },
+    { name: 'vote_average', type: 'REAL' },
+    { name: 'vote_count', type: 'INTEGER' },
+    { name: 'status', type: 'TEXT' },
+    { name: 'adult', type: 'INTEGER DEFAULT 0' },
+    { name: 'video', type: 'INTEGER DEFAULT 0' },
+    { name: 'homepage', type: 'TEXT' },
+  ];
+  
+  for (const col of newTmdbColumns) {
+    if (!tmdbColumnNames.includes(col.name)) {
+      db.exec(`ALTER TABLE tmdb_movie_cache ADD COLUMN ${col.name} ${col.type}`);
+      console.log(`Added column: tmdb_movie_cache.${col.name}`);
+    }
+  }
+
   if (!rssColumnNames.includes('tvdb_id')) {
     db.exec('ALTER TABLE rss_feed_items ADD COLUMN tvdb_id INTEGER');
     console.log('Added column: rss_feed_items.tvdb_id');

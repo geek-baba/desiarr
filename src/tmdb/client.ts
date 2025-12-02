@@ -5,6 +5,31 @@ export interface TMDBProductionCountry {
   name: string;
 }
 
+export interface TMDBGenre {
+  id: number;
+  name: string;
+}
+
+export interface TMDBProductionCompany {
+  id: number;
+  name: string;
+  logo_path?: string;
+  origin_country?: string;
+}
+
+export interface TMDBSpokenLanguage {
+  iso_639_1: string;
+  name: string;
+  english_name?: string;
+}
+
+export interface TMDBCollection {
+  id: number;
+  name: string;
+  poster_path?: string;
+  backdrop_path?: string;
+}
+
 export interface TMDBMovie {
   id: number;
   title: string;
@@ -15,7 +40,31 @@ export interface TMDBMovie {
   original_language?: string;
   imdb_id?: string;
   overview?: string;
+  tagline?: string;
   production_countries?: TMDBProductionCountry[];
+  genres?: TMDBGenre[];
+  production_companies?: TMDBProductionCompany[];
+  spoken_languages?: TMDBSpokenLanguage[];
+  belongs_to_collection?: TMDBCollection;
+  budget?: number;
+  revenue?: number;
+  runtime?: number;
+  popularity?: number;
+  vote_average?: number;
+  vote_count?: number;
+  status?: string;
+  adult?: boolean;
+  video?: boolean;
+  homepage?: string;
+  // Extended data (via append_to_response)
+  credits?: any;
+  keywords?: { keywords: Array<{ id: number; name: string }> };
+  videos?: any;
+  images?: any;
+  external_ids?: any;
+  recommendations?: any;
+  similar?: any;
+  reviews?: any;
 }
 
 interface TMDBChangesResponse {
@@ -139,19 +188,24 @@ class TMDBClient {
     }
   }
 
-  async getMovie(tmdbId: number): Promise<TMDBMovie | null> {
+  async getMovie(tmdbId: number, includeExtended: boolean = false): Promise<TMDBMovie | null> {
     if (!this.apiKey) {
       console.log('TMDB API key not configured, skipping fetch');
       return null;
     }
 
     try {
-      const response = await this.client.get<TMDBMovie>(`/movie/${tmdbId}`, {
-        params: {
-          api_key: this.apiKey,
-          language: 'en-US',
-        },
-      });
+      const params: any = {
+        api_key: this.apiKey,
+        language: 'en-US',
+      };
+
+      // Use append_to_response for extended data (credits, keywords, videos, images, etc.)
+      if (includeExtended) {
+        params.append_to_response = 'credits,keywords,videos,images,external_ids,recommendations,similar,reviews';
+      }
+
+      const response = await this.client.get<TMDBMovie>(`/movie/${tmdbId}`, { params });
       
       return response.data;
     } catch (error: any) {
