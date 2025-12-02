@@ -4,7 +4,7 @@
  */
 
 // Major Indian languages (ISO 639-1 codes)
-export const MAJOR_INDIAN_LANGUAGES = new Set(['hi', 'bn', 'mr', 'te', 'ta', 'gu', 'kn', 'ml', 'pa']);
+export const MAJOR_INDIAN_LANGUAGES = new Set(['hi', 'bn', 'mr', 'te', 'ta', 'ur', 'gu', 'kn', 'ml', 'pa']);
 
 // ISO 639-1 to full language name mapping
 export const LANGUAGE_NAMES: Record<string, string> = {
@@ -13,6 +13,7 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   'mr': 'Marathi',
   'te': 'Telugu',
   'ta': 'Tamil',
+  'ur': 'Urdu',
   'gu': 'Gujarati',
   'kn': 'Kannada',
   'ml': 'Malayalam',
@@ -37,6 +38,7 @@ export const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
   'Marathi': 'mr',
   'Telugu': 'te',
   'Tamil': 'ta',
+  'Urdu': 'ur',
   'Gujarati': 'gu',
   'Kannada': 'kn',
   'Malayalam': 'ml',

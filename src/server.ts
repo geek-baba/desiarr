@@ -6,6 +6,7 @@ import dashboardRouter from './routes/dashboard';
 import actionsRouter from './routes/actions';
 import settingsRouter from './routes/settings';
 import dataRouter from './routes/data';
+import dataHygieneRouter from './routes/dataHygiene';
 import logsRouter from './routes/logs';
 import { settingsModel } from './models/settings';
 import { syncRadarrMovies } from './services/radarrSync';
@@ -48,6 +49,7 @@ app.use('/', dashboardRouter);
 app.use('/actions', actionsRouter);
 app.use('/settings', settingsRouter);
 app.use('/data', dataRouter);
+app.use('/data-hygiene', dataHygieneRouter);
 app.use('/api/logs', logsRouter);
 
 // Redirect /logs to /data/logs for convenience

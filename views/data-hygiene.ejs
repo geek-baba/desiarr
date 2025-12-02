@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" class="<%= typeof theme !== 'undefined' && theme === 'dark' ? 'dark' : '' %>">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Hygiene — desiarr</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/desiarr-logo.svg">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <%- include('partials/app-sidebar', { currentPage: 'data-hygiene' }) %>
+  
+  <div class="lg:pl-64">
+    <%- include('partials/app-header', { currentSearch: typeof search !== 'undefined' ? search : '', lastRefresh: null }) %>
+    
+    <main class="p-4 lg:p-6">
+    <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Data Hygiene</h2>
+
+    <!-- Tab Navigation -->
+    <div class="mb-6">
+      <nav class="flex flex-wrap gap-2" role="tablist">
+        <a
+          href="/data-hygiene?view=missing-imdb"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'missing-imdb' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          Missing IMDB ID
+        </a>
+        <a
+          href="/data-hygiene?view=non-indian"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'non-indian' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          Non-Indian Movies
+        </a>
+        <a
+          href="/data-hygiene?view=file-names"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'file-names' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          File Names
+        </a>
+        <a
+          href="/data-hygiene?view=folder-mismatch"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'folder-mismatch' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          Folder Name Mismatch
+        </a>
+        <a
+          href="/data-hygiene?view=filename-mismatch"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'filename-mismatch' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          File Name Mismatch
+        </a>
+        <a
+          href="/data-hygiene?view=language-mismatch"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'language-mismatch' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          Language Mismatch
+        </a>
+      </nav>
+    </div>
+
+    <!-- Stats -->
+    <div class="mb-4 flex items-center justify-between">
+      <div class="text-sm text-gray-600 dark:text-gray-400">
+        Total: <span class="font-semibold"><%= total %></span> movies
+        <% if (search) { %>
+          | Filtered: <span class="font-semibold"><%= filteredCount %></span>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+      <% if (movies.length === 0) { %>
+        <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+          <p class="text-lg mb-2">No issues found!</p>
+          <p class="text-sm">All movies in this category are clean.</p>
+        </div>
+      <% } else { %>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
+                <% if (view === 'non-indian') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Language</th>
+                <% } %>
+                <% if (view === 'file-names') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">File Name</th>
+                <% } %>
+                <% if (view === 'folder-mismatch') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Folder Name</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Expected</th>
+                <% } %>
+                <% if (view === 'filename-mismatch') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">File Name</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Expected</th>
+                <% } %>
+                <% if (view === 'language-mismatch') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Radarr Language</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB Language</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                <% } %>
+              </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <% movies.forEach(movie => { %>
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><%= movie.title %></td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= movie.year || '-' %></td>
+                  <td class="px-4 py-3 text-sm text-gray-600">
+                    <% if (movie.tmdb_id) { %>
+                      <a href="https://www.themoviedb.org/movie/<%= movie.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                        <%= movie.tmdb_id %>
+                      </a>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600">
+                    <% if (movie.imdb_id) { %>
+                      <a href="https://www.imdb.com/title/<%= movie.imdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                        <%= movie.imdb_id %>
+                      </a>
+                    <% } else { %>
+                      <span class="text-red-600">Missing</span>
+                    <% } %>
+                  </td>
+                  <% if (view === 'non-indian') { %>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <%= movie.tmdb_original_language || movie.original_language || '-' %>
+                    </td>
+                  <% } %>
+                  <% if (view === 'file-names') { %>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono text-xs">
+                      <%= movie.file_name || '-' %>
+                    </td>
+                  <% } %>
+                  <% if (view === 'folder-mismatch') { %>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono text-xs">
+                      <%= movie.folder_name || '-' %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono text-xs">
+                      <span class="text-green-600"><%= movie.expected_folder_name || '-' %></span>
+                    </td>
+                  <% } %>
+                  <% if (view === 'filename-mismatch') { %>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono text-xs">
+                      <%= movie.file_name || '-' %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 font-mono text-xs">
+                      <span class="text-green-600"><%= movie.expected_file_name || '-' %></span>
+                    </td>
+                  <% } %>
+                  <% if (view === 'language-mismatch') { %>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <%= movie.original_language || '-' %>
+                      <% if (movie.radarr_language_code) { %>
+                        <span class="text-xs text-gray-500">(<%= movie.radarr_language_code %>)</span>
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <%= movie.tmdb_original_language || '-' %>
+                      <% if (movie.tmdb_language_code) { %>
+                        <span class="text-xs text-gray-500">(<%= movie.tmdb_language_code %>)</span>
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <% if (movie.tmdb_id) { %>
+                        <button
+                          onclick="refreshTmdbData(<%= movie.tmdb_id %>)"
+                          class="text-blue-600 hover:text-blue-800 text-xs"
+                          title="Refresh TMDB data"
+                        >
+                          Refresh
+                        </button>
+                      <% } %>
+                    </td>
+                  <% } %>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+    </main>
+  </div>
+
+  <script>
+    async function refreshTmdbData(tmdbId) {
+      if (!confirm('Refresh TMDB data for this movie?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/data-hygiene/refresh-tmdb/${tmdbId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('TMDB data refreshed successfully! Please refresh the page to see updated data.');
+          window.location.reload();
+        } else {
+          alert('Error: ' + (data.error || 'Failed to refresh TMDB data'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+  </script>
+  <script src="/js/ui.js"></script>
+</body>
+</html>
+
