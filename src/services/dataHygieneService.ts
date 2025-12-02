@@ -1,14 +1,12 @@
 import db from '../db';
-import { TMDBClient } from '../tmdb/client';
-import { settingsModel } from '../models/settings';
-import { getLanguageCode, getLanguageName, isIndianLanguage, MAJOR_INDIAN_LANGUAGES } from '../utils/languageMapping';
+import { getLanguageCode, MAJOR_INDIAN_LANGUAGES } from '../utils/languageMapping';
 import path from 'path';
 
 /**
- * Get TMDB data for a movie, using cache first, then API if needed
+ * Get TMDB data from cache (movie_releases) for a tmdb_id
+ * Returns null if not in cache - no API calls
  */
-async function getTmdbData(tmdbId: number, tmdbClient: TMDBClient): Promise<{ title: string | null; original_language: string | null; release_date: string | null } | null> {
-  // First, try to get from cached movie_releases
+function getTmdbDataFromCache(tmdbId: number): { title: string | null; original_language: string | null } | null {
   const cached = db
     .prepare(`
       SELECT tmdb_title, tmdb_original_language
@@ -19,36 +17,10 @@ async function getTmdbData(tmdbId: number, tmdbClient: TMDBClient): Promise<{ ti
     .get(tmdbId) as { tmdb_title: string | null; tmdb_original_language: string | null } | undefined;
 
   if (cached && cached.tmdb_title) {
-    // Get release_date from API if we need it (for year)
-    try {
-      const tmdbMovie = await tmdbClient.getMovie(tmdbId);
-      return {
-        title: cached.tmdb_title,
-        original_language: cached.tmdb_original_language,
-        release_date: tmdbMovie?.release_date || null,
-      };
-    } catch (error) {
-      // If API fails, return cached data without year
-      return {
-        title: cached.tmdb_title,
-        original_language: cached.tmdb_original_language,
-        release_date: null,
-      };
-    }
-  }
-
-  // Not in cache, fetch from API
-  try {
-    const tmdbMovie = await tmdbClient.getMovie(tmdbId);
-    if (tmdbMovie) {
-      return {
-        title: tmdbMovie.title || null,
-        original_language: tmdbMovie.original_language || null,
-        release_date: tmdbMovie.release_date || null,
-      };
-    }
-  } catch (error) {
-    console.warn(`Failed to fetch TMDB data for movie ${tmdbId}:`, error);
+    return {
+      title: cached.tmdb_title,
+      original_language: cached.tmdb_original_language,
+    };
   }
 
   return null;
@@ -109,41 +81,38 @@ export function getMissingImdbMovies(): DataHygieneMovie[] {
 
 /**
  * Get non-Indian movies (where TMDB original language is not in approved list)
+ * Uses cached TMDB data from movie_releases - no API calls
  */
-export async function getNonIndianMovies(): Promise<DataHygieneMovie[]> {
-  const allMovies = db
+export function getNonIndianMovies(): DataHygieneMovie[] {
+  // Use LEFT JOIN to get TMDB data from movie_releases cache
+  const rows = db
     .prepare(`
-      SELECT 
-        radarr_id,
-        tmdb_id,
-        imdb_id,
-        title,
-        year,
-        path,
-        movie_file,
-        original_language
-      FROM radarr_movies
-      WHERE tmdb_id IS NOT NULL
-      ORDER BY title
+      SELECT DISTINCT
+        r.radarr_id,
+        r.tmdb_id,
+        r.imdb_id,
+        r.title,
+        r.year,
+        r.path,
+        r.movie_file,
+        r.original_language,
+        mr.tmdb_title,
+        mr.tmdb_original_language
+      FROM radarr_movies r
+      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      WHERE r.tmdb_id IS NOT NULL
+      ORDER BY r.title
     `)
     .all() as any[];
 
   const nonIndianMovies: DataHygieneMovie[] = [];
-  const tmdbClient = new TMDBClient();
-  
-  // Get TMDB API key
-  const allSettings = settingsModel.getAll();
-  const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
-  if (tmdbApiKey) {
-    tmdbClient.setApiKey(tmdbApiKey);
-  }
 
-  for (const movie of allMovies) {
+  for (const movie of rows) {
     if (!movie.tmdb_id) continue;
 
-    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
-    const tmdbLanguage = tmdbData?.original_language || null;
-    const tmdbTitle = tmdbData?.title || null;
+    // Use cached TMDB data, fallback to Radarr language
+    const tmdbLanguage = movie.tmdb_original_language || null;
+    const tmdbTitle = movie.tmdb_title || null;
 
     const languageCode = getLanguageCode(tmdbLanguage || movie.original_language);
     const isIndian = languageCode ? MAJOR_INDIAN_LANGUAGES.has(languageCode) : false;
@@ -215,34 +184,30 @@ export function getFileNames(): DataHygieneMovie[] {
 
 /**
  * Get movies where folder name doesn't match TMDB title and year
+ * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
-export async function getFolderNameMismatches(): Promise<DataHygieneMovie[]> {
+export function getFolderNameMismatches(): DataHygieneMovie[] {
+  // Use LEFT JOIN to get TMDB data from movie_releases cache
   const rows = db
     .prepare(`
-      SELECT 
-        radarr_id,
-        tmdb_id,
-        imdb_id,
-        title,
-        year,
-        path,
-        movie_file,
-        original_language
-      FROM radarr_movies
-      WHERE path IS NOT NULL AND tmdb_id IS NOT NULL
-      ORDER BY title
+      SELECT DISTINCT
+        r.radarr_id,
+        r.tmdb_id,
+        r.imdb_id,
+        r.title,
+        r.year,
+        r.path,
+        r.movie_file,
+        r.original_language,
+        mr.tmdb_title
+      FROM radarr_movies r
+      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      WHERE r.path IS NOT NULL AND r.tmdb_id IS NOT NULL
+      ORDER BY r.title
     `)
     .all() as any[];
 
   const mismatches: DataHygieneMovie[] = [];
-  const tmdbClient = new TMDBClient();
-  
-  // Get TMDB API key
-  const allSettings = settingsModel.getAll();
-  const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
-  if (tmdbApiKey) {
-    tmdbClient.setApiKey(tmdbApiKey);
-  }
 
   for (const movie of rows) {
     if (!movie.path || !movie.tmdb_id) continue;
@@ -250,10 +215,10 @@ export async function getFolderNameMismatches(): Promise<DataHygieneMovie[]> {
     // Extract folder name from path
     const folderName = path.basename(movie.path);
 
-    // Get TMDB data (cached or API)
-    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
-    const tmdbTitle = tmdbData?.title || null;
-    const tmdbYear = tmdbData?.release_date ? new Date(tmdbData.release_date).getFullYear() : null;
+    // Use cached TMDB title, fallback to Radarr title
+    const tmdbTitle = movie.tmdb_title || movie.title;
+    // Use Radarr year as fallback (TMDB year would require API call)
+    const tmdbYear = movie.year;
 
     if (!tmdbTitle) continue;
 
@@ -287,34 +252,30 @@ export async function getFolderNameMismatches(): Promise<DataHygieneMovie[]> {
 
 /**
  * Get movies where file name doesn't match TMDB title and year
+ * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
-export async function getFileNameMismatches(): Promise<DataHygieneMovie[]> {
+export function getFileNameMismatches(): DataHygieneMovie[] {
+  // Use LEFT JOIN to get TMDB data from movie_releases cache
   const rows = db
     .prepare(`
-      SELECT 
-        radarr_id,
-        tmdb_id,
-        imdb_id,
-        title,
-        year,
-        path,
-        movie_file,
-        original_language
-      FROM radarr_movies
-      WHERE has_file = 1 AND movie_file IS NOT NULL AND tmdb_id IS NOT NULL
-      ORDER BY title
+      SELECT DISTINCT
+        r.radarr_id,
+        r.tmdb_id,
+        r.imdb_id,
+        r.title,
+        r.year,
+        r.path,
+        r.movie_file,
+        r.original_language,
+        mr.tmdb_title
+      FROM radarr_movies r
+      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      WHERE r.has_file = 1 AND r.movie_file IS NOT NULL AND r.tmdb_id IS NOT NULL
+      ORDER BY r.title
     `)
     .all() as any[];
 
   const mismatches: DataHygieneMovie[] = [];
-  const tmdbClient = new TMDBClient();
-  
-  // Get TMDB API key
-  const allSettings = settingsModel.getAll();
-  const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
-  if (tmdbApiKey) {
-    tmdbClient.setApiKey(tmdbApiKey);
-  }
 
   for (const movie of rows) {
     if (!movie.movie_file || !movie.tmdb_id) continue;
@@ -332,10 +293,10 @@ export async function getFileNameMismatches(): Promise<DataHygieneMovie[]> {
 
     if (!fileName) continue;
 
-    // Get TMDB data (cached or API)
-    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
-    const tmdbTitle = tmdbData?.title || null;
-    const tmdbYear = tmdbData?.release_date ? new Date(tmdbData.release_date).getFullYear() : null;
+    // Use cached TMDB title, fallback to Radarr title
+    const tmdbTitle = movie.tmdb_title || movie.title;
+    // Use Radarr year as fallback (TMDB year would require API call)
+    const tmdbYear = movie.year;
 
     if (!tmdbTitle) continue;
 
@@ -369,47 +330,40 @@ export async function getFileNameMismatches(): Promise<DataHygieneMovie[]> {
 
 /**
  * Get movies where Radarr language doesn't match TMDB language
+ * Uses cached TMDB data from movie_releases - no API calls
  */
-export async function getLanguageMismatches(): Promise<DataHygieneMovie[]> {
+export function getLanguageMismatches(): DataHygieneMovie[] {
+  // Use LEFT JOIN to get TMDB data from movie_releases cache
   const rows = db
     .prepare(`
-      SELECT 
-        radarr_id,
-        tmdb_id,
-        imdb_id,
-        title,
-        year,
-        path,
-        movie_file,
-        original_language
-      FROM radarr_movies
-      WHERE tmdb_id IS NOT NULL
-      ORDER BY title
+      SELECT DISTINCT
+        r.radarr_id,
+        r.tmdb_id,
+        r.imdb_id,
+        r.title,
+        r.year,
+        r.path,
+        r.movie_file,
+        r.original_language,
+        mr.tmdb_original_language
+      FROM radarr_movies r
+      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      WHERE r.tmdb_id IS NOT NULL
+      ORDER BY r.title
     `)
     .all() as any[];
 
   const mismatches: DataHygieneMovie[] = [];
-  const tmdbClient = new TMDBClient();
-  
-  // Get TMDB API key
-  const allSettings = settingsModel.getAll();
-  const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
-  if (tmdbApiKey) {
-    tmdbClient.setApiKey(tmdbApiKey);
-  }
 
   for (const movie of rows) {
     if (!movie.tmdb_id) continue;
 
-    // Get TMDB language (cached or API)
-    const tmdbData = await getTmdbData(movie.tmdb_id, tmdbClient);
-    const tmdbLanguage = tmdbData?.original_language || null;
+    // Use cached TMDB language
+    const tmdbLanguage = movie.tmdb_original_language || null;
     
     if (!tmdbLanguage) {
-      continue; // Skip if we can't get TMDB language
+      continue; // Skip if we don't have TMDB language in cache
     }
-
-    if (!tmdbLanguage) continue;
 
     // Get language codes for comparison
     const radarrLangCode = getLanguageCode(movie.original_language);

@@ -32,19 +32,19 @@ router.get('/', async (req: Request, res: Response) => {
         movies = getMissingImdbMovies();
         break;
       case 'non-indian':
-        movies = await getNonIndianMovies();
+        movies = getNonIndianMovies();
         break;
       case 'file-names':
         movies = getFileNames();
         break;
       case 'folder-mismatch':
-        movies = await getFolderNameMismatches();
+        movies = getFolderNameMismatches();
         break;
       case 'filename-mismatch':
-        movies = await getFileNameMismatches();
+        movies = getFileNameMismatches();
         break;
       case 'language-mismatch':
-        movies = await getLanguageMismatches();
+        movies = getLanguageMismatches();
         break;
       default:
         movies = getMissingImdbMovies();
