@@ -779,7 +779,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      showConfirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', () => {
+      showConfirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -881,7 +881,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      showConfirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.', () => {
+      showConfirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -956,7 +956,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      showConfirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', () => {
+      showConfirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
