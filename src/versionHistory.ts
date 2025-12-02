@@ -7,6 +7,17 @@ export interface VersionEntry {
 // Keep this list concise and focused on major user-visible changes only.
 export const VERSION_HISTORY: VersionEntry[] = [
   {
+    version: '2.2.0',
+    date: '2025-12-02',
+    highlights: [
+      'Added About page in Settings with version info and GitHub release check',
+      'Fixed template rendering bug (appVersion now available via res.locals)',
+      'Added comprehensive smoke tests for all pages using supertest',
+      'Improved GitHub version check with fallback to tags when releases not found',
+      'Dynamic version display in sidebar footer from package.json'
+    ],
+  },
+  {
     version: '2.1.0',
     date: '2025-12-02',
     highlights: [
