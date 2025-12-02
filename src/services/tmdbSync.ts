@@ -143,10 +143,10 @@ export async function initialTmdbSync(): Promise<TmdbSyncStats> {
       }
     }
 
-    // Update last sync date
+    // Update last sync date (use datetime for timezone-aware calculations)
     db.prepare(`
       INSERT OR REPLACE INTO app_settings (key, value)
-      VALUES ('tmdb_last_sync_date', date('now'))
+      VALUES ('tmdb_last_sync_date', datetime('now'))
     `).run();
 
     stats.lastSyncAt = new Date();
@@ -223,10 +223,10 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
 
     if (relevantChangedIds.length === 0) {
       syncProgress.complete();
-      // Still update sync date
+      // Still update sync date (use datetime for timezone-aware calculations)
       db.prepare(`
         INSERT OR REPLACE INTO app_settings (key, value)
-        VALUES ('tmdb_last_sync_date', date('now'))
+        VALUES ('tmdb_last_sync_date', datetime('now'))
       `).run();
       stats.lastSyncAt = new Date();
       return stats;
@@ -370,10 +370,10 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
       }
     }
 
-    // Update last sync date
+    // Update last sync date (use datetime for timezone-aware calculations)
     db.prepare(`
       INSERT OR REPLACE INTO app_settings (key, value)
-      VALUES ('tmdb_last_sync_date', date('now'))
+      VALUES ('tmdb_last_sync_date', datetime('now'))
     `).run();
 
     stats.lastSyncAt = new Date();

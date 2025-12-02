@@ -196,7 +196,16 @@ function startScheduledSyncs() {
       shouldSync = true;
     } else if (lastSyncDate) {
       // Check if >24 hours since last sync
-      const lastSync = new Date(lastSyncDate);
+      // Handle both date (YYYY-MM-DD) and datetime (YYYY-MM-DD HH:MM:SS) formats
+      // If it's just a date, append time to make it local midnight for accurate calculation
+      let lastSync: Date;
+      if (lastSyncDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Date only format - treat as local midnight
+        lastSync = new Date(lastSyncDate + 'T00:00:00');
+      } else {
+        // Datetime format - parse as-is (SQLite datetime is in local time)
+        lastSync = new Date(lastSyncDate);
+      }
       const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
       if (hoursSinceSync >= 24) {
         shouldSync = true;
