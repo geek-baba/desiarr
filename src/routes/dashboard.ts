@@ -13,6 +13,7 @@ import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import { buildShowKey, ignoredShowsModel } from '../models/ignoredShows';
+import { TMDBClient } from '../tmdb/client';
 import db from '../db';
 
 const router = Router();
@@ -370,20 +371,28 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       // Check if the built title looks like a filename (contains quality/resolution/codec patterns)
       const looksLikeFilename = /(1080p|720p|480p|2160p|4k|uhd|x264|x265|h\.?264|h\.?265|hevc|web[- ]?dl|webrip|bluray|dvd|ddp|dd\+|ac3|atmos|dts|\.mkv|\.mp4)/i.test(builtTitle);
       
-      // If title looks like a filename OR we don't have tmdb_id/radarr_movie_id, use extracted clean name
-      if (looksLikeFilename || (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id)) {
-        // Extract clean name from movieKey (format: "title_cleanname year" or "tmdb_123" or "radarr_456")
-        const keyMatch = movieKey.match(/^title_(.+)$/);
-        if (keyMatch) {
-          const cleanName = keyMatch[1];
+      // If title looks like a filename, extract clean name from release title
+      if (looksLikeFilename) {
+        // For matched movies (with tmdb_id), extract clean name from release title
+        if (primaryRelease.tmdb_id || primaryRelease.radarr_movie_id) {
+          const cleanName = extractMovieNameAndYear(primaryRelease.normalized_title, primaryRelease.year);
           // Capitalize first letter of each word
           movieTitle = cleanName
             .split(' ')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
         } else {
-          // If we can't extract from key, use the built title (even if it looks like filename)
-          movieTitle = builtTitle;
+          // For unmatched movies, extract from movieKey
+          const keyMatch = movieKey.match(/^title_(.+)$/);
+          if (keyMatch) {
+            const cleanName = keyMatch[1];
+            movieTitle = cleanName
+              .split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+          } else {
+            movieTitle = builtTitle;
+          }
         }
       } else {
         // Use the proper title from TMDB/Radarr
@@ -1169,10 +1178,29 @@ router.get('/movies', async (req: Request, res: Response) => {
       // Ensure we have the proper title from synced Radarr data if we have IDs
       // This ensures we use the actual movie title instead of the release filename
       if (primaryRelease.tmdb_id && !primaryRelease.tmdb_title) {
-        // Get title from synced Radarr data
+        // Get title from synced Radarr data first
         const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
         if (syncedMovie && syncedMovie.title) {
           primaryRelease.tmdb_title = syncedMovie.title;
+        } else {
+          // If not in Radarr, try to fetch from TMDB API
+          const allSettings = settingsModel.getAll();
+          const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+          if (tmdbApiKey) {
+            try {
+              const tmdbClient = new TMDBClient();
+              tmdbClient.setApiKey(tmdbApiKey);
+              const tmdbMovie = await tmdbClient.getMovie(primaryRelease.tmdb_id);
+              if (tmdbMovie && tmdbMovie.title) {
+                primaryRelease.tmdb_title = tmdbMovie.title;
+                // Also update the database for future use
+                db.prepare('UPDATE movie_releases SET tmdb_title = ? WHERE tmdb_id = ?')
+                  .run(tmdbMovie.title, primaryRelease.tmdb_id);
+              }
+            } catch (error) {
+              console.error(`Error fetching TMDB movie ${primaryRelease.tmdb_id}:`, error);
+            }
+          }
         }
       }
       
@@ -1205,20 +1233,28 @@ router.get('/movies', async (req: Request, res: Response) => {
       // Check if the built title looks like a filename (contains quality/resolution/codec patterns)
       const looksLikeFilename = /(1080p|720p|480p|2160p|4k|uhd|x264|x265|h\.?264|h\.?265|hevc|web[- ]?dl|webrip|bluray|dvd|ddp|dd\+|ac3|atmos|dts|\.mkv|\.mp4)/i.test(builtTitle);
       
-      // If title looks like a filename OR we don't have tmdb_id/radarr_movie_id, use extracted clean name
-      if (looksLikeFilename || (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id)) {
-        // Extract clean name from movieKey (format: "title_cleanname year" or "tmdb_123" or "radarr_456")
-        const keyMatch = movieKey.match(/^title_(.+)$/);
-        if (keyMatch) {
-          const cleanName = keyMatch[1];
+      // If title looks like a filename, extract clean name from release title
+      if (looksLikeFilename) {
+        // For matched movies (with tmdb_id), extract clean name from release title
+        if (primaryRelease.tmdb_id || primaryRelease.radarr_movie_id) {
+          const cleanName = extractMovieNameAndYear(primaryRelease.normalized_title, primaryRelease.year);
           // Capitalize first letter of each word
           movieTitle = cleanName
             .split(' ')
             .map(word => word.charAt(0).toUpperCase() + word.slice(1))
             .join(' ');
         } else {
-          // If we can't extract from key, use the built title (even if it looks like filename)
-          movieTitle = builtTitle;
+          // For unmatched movies, extract from movieKey
+          const keyMatch = movieKey.match(/^title_(.+)$/);
+          if (keyMatch) {
+            const cleanName = keyMatch[1];
+            movieTitle = cleanName
+              .split(' ')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+          } else {
+            movieTitle = builtTitle;
+          }
         }
       } else {
         // Use the proper title from TMDB/Radarr
