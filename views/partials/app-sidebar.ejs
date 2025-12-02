@@ -92,7 +92,7 @@
   </nav>
 
   <div class="absolute bottom-0 w-full px-4 py-3 text-xs text-gray-500 dark:text-gray-400 border-t border-[var(--border)]">
-    v2.0.0
+    v<%= typeof app.locals !== 'undefined' && app.locals.appVersion ? app.locals.appVersion : (typeof appVersion !== 'undefined' ? appVersion : '2.1.0') %>
   </div>
 </aside>
 

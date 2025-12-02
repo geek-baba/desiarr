@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { config } from './config';
 import dashboardRouter from './routes/dashboard';
 import actionsRouter from './routes/actions';
@@ -15,6 +16,20 @@ import { runTvMatchingEngine } from './services/tvMatchingEngine';
 import './services/logStorage'; // Initialize log storage
 
 const app = express();
+
+// Expose app version to all views from package.json
+let appVersion = '0.0.0';
+try {
+  const packageJsonPath = path.join(__dirname, '../package.json');
+  const packageJsonRaw = fs.readFileSync(packageJsonPath, 'utf-8');
+  const packageJson = JSON.parse(packageJsonRaw);
+  if (typeof packageJson.version === 'string') {
+    appVersion = packageJson.version;
+  }
+} catch (error) {
+  console.error('Failed to read app version from package.json:', error);
+}
+app.locals.appVersion = appVersion;
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '../views'));

@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
 import { feedsModel } from '../models/feeds';
 import { settingsModel } from '../models/settings';
 import { AppSettings, QualitySettings } from '../types/QualitySettings';
 import { backfillRadarrLinks } from '../tasks/backfillRadarr';
+import { VERSION_HISTORY } from '../versionHistory';
 
 const router = Router();
 
@@ -26,6 +28,58 @@ router.get('/', async (req: Request, res: Response) => {
     const sonarrApiKey = allSettings.find(s => s.key === 'sonarr_api_key')?.value || '';
     const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value || '';
     const tvdbUserPin = allSettings.find(s => s.key === 'tvdb_user_pin')?.value || '';
+
+    // About / version info
+    const appVersion = (req.app.locals.appVersion as string | undefined) || '';
+    let latestVersion: string | null = null;
+    let latestVersionUrl: string | null = null;
+    let latestVersionStatus: 'unknown' | 'up_to_date' | 'outdated' = 'unknown';
+
+    try {
+      const response = await axios.get('https://api.github.com/repos/geek-baba/desiarr/releases/latest', {
+        headers: {
+          'User-Agent': 'desiarr-app',
+          Accept: 'application/vnd.github+json',
+        },
+        timeout: 3000,
+      });
+
+      const tag = (response.data && (response.data.tag_name || response.data.name)) as string | undefined;
+      latestVersion = tag || null;
+      latestVersionUrl = (response.data && response.data.html_url) || null;
+    } catch (error) {
+      console.warn('Failed to fetch latest version from GitHub:', (error as Error).message);
+    }
+
+    const normalizeVersion = (v: string | null): string | null => {
+      if (!v) return null;
+      return v.startsWith('v') ? v.slice(1) : v;
+    };
+
+    const compareVersions = (aRaw: string | null, bRaw: string | null): number | null => {
+      const a = normalizeVersion(aRaw);
+      const b = normalizeVersion(bRaw);
+      if (!a || !b) return null;
+      const aParts = a.split('.').map((p) => parseInt(p, 10) || 0);
+      const bParts = b.split('.').map((p) => parseInt(p, 10) || 0);
+      const len = Math.max(aParts.length, bParts.length);
+      for (let i = 0; i < len; i++) {
+        const av = aParts[i] ?? 0;
+        const bv = bParts[i] ?? 0;
+        if (av > bv) return 1;
+        if (av < bv) return -1;
+      }
+      return 0;
+    };
+
+    const cmp = compareVersions(appVersion || null, latestVersion);
+    if (cmp !== null && latestVersion) {
+      if (cmp >= 0) {
+        latestVersionStatus = 'up_to_date';
+      } else {
+        latestVersionStatus = 'outdated';
+      }
+    }
     
     console.log('Radarr URL found:', radarrApiUrl ? 'Yes' : 'No');
     console.log('Radarr Key found:', radarrApiKey ? 'Yes' : 'No');
@@ -46,6 +100,11 @@ router.get('/', async (req: Request, res: Response) => {
       sonarrApiKey,
       tvdbApiKey,
       tvdbUserPin,
+      appVersion,
+      latestVersion,
+      latestVersionUrl,
+      latestVersionStatus,
+      versionHistory: VERSION_HISTORY,
     });
   } catch (error) {
     console.error('Settings page error:', error);
