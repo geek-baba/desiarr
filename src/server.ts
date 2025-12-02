@@ -38,6 +38,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Make appVersion available to all templates via res.locals
+app.use((req, res, next) => {
+  res.locals.appVersion = app.locals.appVersion;
+  next();
+});
+
 app.use('/', dashboardRouter);
 app.use('/actions', actionsRouter);
 app.use('/settings', settingsRouter);
