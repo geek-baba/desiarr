@@ -6,6 +6,7 @@ import dashboardRouter from './routes/dashboard';
 import actionsRouter from './routes/actions';
 import settingsRouter from './routes/settings';
 import dataRouter from './routes/data';
+import tmdbDataRouter from './routes/tmdbData';
 import dataHygieneRouter from './routes/dataHygiene';
 import logsRouter from './routes/logs';
 import { settingsModel } from './models/settings';
@@ -14,6 +15,8 @@ import { syncSonarrShows } from './services/sonarrSync';
 import { syncRssFeeds } from './services/rssSync';
 import { runMatchingEngine } from './services/matchingEngine';
 import { runTvMatchingEngine } from './services/tvMatchingEngine';
+import { incrementalTmdbSync } from './services/tmdbSync';
+import db from './db';
 import './services/logStorage'; // Initialize log storage
 
 const app = express();
@@ -49,6 +52,7 @@ app.use('/', dashboardRouter);
 app.use('/actions', actionsRouter);
 app.use('/settings', settingsRouter);
 app.use('/data', dataRouter);
+app.use('/tmdb-data', tmdbDataRouter);
 app.use('/data-hygiene', dataHygieneRouter);
 app.use('/api/logs', logsRouter);
 
@@ -62,6 +66,7 @@ let radarrSyncInterval: NodeJS.Timeout | null = null;
 let sonarrSyncInterval: NodeJS.Timeout | null = null;
 let rssSyncInterval: NodeJS.Timeout | null = null;
 let matchingInterval: NodeJS.Timeout | null = null;
+let tmdbSyncInterval: NodeJS.Timeout | null = null;
 
 async function runFullSyncCycle() {
   try {
@@ -111,6 +116,7 @@ function startScheduledSyncs() {
   if (sonarrSyncInterval) clearInterval(sonarrSyncInterval);
   if (rssSyncInterval) clearInterval(rssSyncInterval);
   if (matchingInterval) clearInterval(matchingInterval);
+  if (tmdbSyncInterval) clearInterval(tmdbSyncInterval);
 
   // Radarr sync interval
   const radarrIntervalMs = (appSettings.radarrSyncIntervalHours || 6) * 60 * 60 * 1000;
@@ -172,6 +178,49 @@ function startScheduledSyncs() {
     }
   }, matchingIntervalMs);
   console.log('Matching engines scheduled every 30 minutes');
+
+  // TMDB sync: Check every hour, sync at 2 AM or if >24 hours since last sync
+  const tmdbCheckIntervalMs = 60 * 60 * 1000; // Every hour
+  tmdbSyncInterval = setInterval(async () => {
+    const now = new Date();
+    const hour = now.getHours();
+    
+    // Check if it's 2 AM (or check if >24 hours since last sync)
+    const lastSyncSetting = db.prepare('SELECT value FROM app_settings WHERE key = ?').get('tmdb_last_sync_date') as { value: string } | undefined;
+    const lastSyncDate = lastSyncSetting?.value || null;
+    
+    let shouldSync = false;
+    
+    if (hour === 2) {
+      // It's 2 AM - sync
+      shouldSync = true;
+    } else if (lastSyncDate) {
+      // Check if >24 hours since last sync
+      const lastSync = new Date(lastSyncDate);
+      const hoursSinceSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceSync >= 24) {
+        shouldSync = true;
+      }
+    } else {
+      // Never synced - do initial sync (but only once per day to avoid spam)
+      const lastAttempt = db.prepare('SELECT value FROM app_settings WHERE key = ?').get('tmdb_last_attempt_date') as { value: string } | undefined;
+      if (!lastAttempt || lastAttempt.value !== now.toISOString().split('T')[0]) {
+        shouldSync = true;
+        // Record attempt date
+        db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('tmdb_last_attempt_date', now.toISOString().split('T')[0]);
+      }
+    }
+    
+    if (shouldSync) {
+      console.log('Running scheduled TMDB incremental sync...');
+      try {
+        await incrementalTmdbSync();
+      } catch (error) {
+        console.error('Scheduled TMDB sync error:', error);
+      }
+    }
+  }, tmdbCheckIntervalMs);
+  console.log('TMDB sync scheduled to check every hour (syncs at 2 AM or if >24h since last sync)');
 }
 
 // Initial sync on startup

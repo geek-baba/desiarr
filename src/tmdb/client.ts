@@ -1,6 +1,11 @@
 import axios, { AxiosInstance } from 'axios';
 
-interface TMDBMovie {
+export interface TMDBProductionCountry {
+  iso_3166_1: string;
+  name: string;
+}
+
+export interface TMDBMovie {
   id: number;
   title: string;
   original_title?: string;
@@ -10,6 +15,17 @@ interface TMDBMovie {
   original_language?: string;
   imdb_id?: string;
   overview?: string;
+  production_countries?: TMDBProductionCountry[];
+}
+
+interface TMDBChangesResponse {
+  results: Array<{
+    id: number;
+    adult?: boolean;
+  }>;
+  page: number;
+  total_pages: number;
+  total_results: number;
 }
 
 interface TMDBSearchResponse {
@@ -237,6 +253,55 @@ class TMDBClient {
       // Log other errors
       console.error('TMDB get TV show error:', error?.response?.status || error?.message || error);
       return null;
+    }
+  }
+
+  /**
+   * Get list of movies that changed between two dates
+   * Used for incremental sync
+   */
+  async getMovieChanges(startDate: string, endDate: string): Promise<number[]> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping changes fetch');
+      return [];
+    }
+
+    const changedIds: number[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    try {
+      do {
+        const response = await this.client.get<TMDBChangesResponse>('/movie/changes', {
+          params: {
+            api_key: this.apiKey,
+            start_date: startDate, // YYYY-MM-DD format
+            end_date: endDate, // YYYY-MM-DD format
+            page: page,
+          },
+        });
+
+        if (response.data.results) {
+          // Filter out adult content and collect IDs
+          const movieIds = response.data.results
+            .filter(result => !result.adult)
+            .map(result => result.id);
+          changedIds.push(...movieIds);
+        }
+
+        totalPages = response.data.total_pages || 1;
+        page++;
+
+        // Rate limit: wait 350ms between pages (3 req/sec)
+        if (page <= totalPages) {
+          await new Promise(resolve => setTimeout(resolve, 350));
+        }
+      } while (page <= totalPages);
+
+      return changedIds;
+    } catch (error: any) {
+      console.error('TMDB get movie changes error:', error?.response?.status || error?.message || error);
+      return changedIds; // Return what we got so far
     }
   }
 }

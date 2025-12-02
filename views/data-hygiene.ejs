@@ -93,6 +93,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
                 <% if (view === 'non-indian') { %>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Language</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country</th>
                 <% } %>
                 <% if (view === 'file-names') { %>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">File Name</th>
@@ -138,6 +139,9 @@
                   <% if (view === 'non-indian') { %>
                     <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                       <%= movie.tmdb_original_language || movie.original_language || '-' %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <%= movie.origin_country || '-' %>
                     </td>
                   <% } %>
                   <% if (view === 'file-names') { %>

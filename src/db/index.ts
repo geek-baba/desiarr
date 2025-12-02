@@ -191,6 +191,26 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_logs_source ON structured_logs(source);
   CREATE INDEX IF NOT EXISTS idx_logs_job_id ON structured_logs(job_id);
   CREATE INDEX IF NOT EXISTS idx_logs_message ON structured_logs(message);
+
+  CREATE TABLE IF NOT EXISTS tmdb_movie_cache (
+    tmdb_id INTEGER PRIMARY KEY,
+    title TEXT,
+    original_title TEXT,
+    original_language TEXT,
+    release_date TEXT,
+    production_countries TEXT,
+    primary_country TEXT,
+    poster_path TEXT,
+    backdrop_path TEXT,
+    overview TEXT,
+    imdb_id TEXT,
+    synced_at TEXT NOT NULL,
+    last_updated_at TEXT,
+    is_deleted INTEGER DEFAULT 0
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tmdb_cache_tmdb_id ON tmdb_movie_cache(tmdb_id);
+  CREATE INDEX IF NOT EXISTS idx_tmdb_cache_synced_at ON tmdb_movie_cache(synced_at);
 `);
 
 // Add poster_url column if it doesn't exist (migration)

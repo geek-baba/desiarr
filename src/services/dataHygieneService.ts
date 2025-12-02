@@ -37,6 +37,7 @@ export interface DataHygieneMovie {
   original_language: string | null;
   tmdb_original_language?: string | null;
   tmdb_title?: string | null;
+  origin_country?: string | null;
   folder_name?: string;
   file_name?: string;
   expected_folder_name?: string;
@@ -81,10 +82,10 @@ export function getMissingImdbMovies(): DataHygieneMovie[] {
 
 /**
  * Get non-Indian movies (where TMDB original language is not in approved list)
- * Uses cached TMDB data from movie_releases - no API calls
+ * Uses cached TMDB data from tmdb_movie_cache - no API calls
  */
 export function getNonIndianMovies(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from movie_releases cache
+  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -96,10 +97,11 @@ export function getNonIndianMovies(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        mr.tmdb_title,
-        mr.tmdb_original_language
+        t.title as tmdb_title,
+        t.original_language as tmdb_original_language,
+        t.primary_country as origin_country
       FROM radarr_movies r
-      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
       WHERE r.tmdb_id IS NOT NULL
       ORDER BY r.title
     `)
@@ -114,8 +116,12 @@ export function getNonIndianMovies(): DataHygieneMovie[] {
     const tmdbLanguage = movie.tmdb_original_language || null;
     const tmdbTitle = movie.tmdb_title || null;
 
-    const languageCode = getLanguageCode(tmdbLanguage || movie.original_language);
-    const isIndian = languageCode ? MAJOR_INDIAN_LANGUAGES.has(languageCode) : false;
+    // Check BOTH languages - only mark as non-Indian if NEITHER is Indian
+    const tmdbLangCode = getLanguageCode(tmdbLanguage);
+    const radarrLangCode = getLanguageCode(movie.original_language);
+    const tmdbIsIndian = tmdbLangCode ? MAJOR_INDIAN_LANGUAGES.has(tmdbLangCode) : false;
+    const radarrIsIndian = radarrLangCode ? MAJOR_INDIAN_LANGUAGES.has(radarrLangCode) : false;
+    const isIndian = tmdbIsIndian || radarrIsIndian; // If EITHER is Indian, it's Indian
 
     if (!isIndian) {
       nonIndianMovies.push({
@@ -129,6 +135,7 @@ export function getNonIndianMovies(): DataHygieneMovie[] {
         original_language: movie.original_language,
         tmdb_original_language: tmdbLanguage,
         tmdb_title: tmdbTitle,
+        origin_country: movie.origin_country || null,
       });
     }
   }
@@ -187,7 +194,7 @@ export function getFileNames(): DataHygieneMovie[] {
  * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
 export function getFolderNameMismatches(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from movie_releases cache
+  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -199,9 +206,9 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        mr.tmdb_title
+        t.title as tmdb_title
       FROM radarr_movies r
-      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
       WHERE r.path IS NOT NULL AND r.tmdb_id IS NOT NULL
       ORDER BY r.title
     `)
@@ -255,7 +262,7 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
  * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
 export function getFileNameMismatches(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from movie_releases cache
+  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -267,9 +274,9 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        mr.tmdb_title
+        t.title as tmdb_title
       FROM radarr_movies r
-      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
       WHERE r.has_file = 1 AND r.movie_file IS NOT NULL AND r.tmdb_id IS NOT NULL
       ORDER BY r.title
     `)
@@ -330,10 +337,10 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
 
 /**
  * Get movies where Radarr language doesn't match TMDB language
- * Uses cached TMDB data from movie_releases - no API calls
+ * Uses cached TMDB data from tmdb_movie_cache - no API calls
  */
 export function getLanguageMismatches(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from movie_releases cache
+  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -345,9 +352,9 @@ export function getLanguageMismatches(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        mr.tmdb_original_language
+        t.original_language as tmdb_original_language
       FROM radarr_movies r
-      LEFT JOIN movie_releases mr ON r.tmdb_id = mr.tmdb_id
+      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
       WHERE r.tmdb_id IS NOT NULL
       ORDER BY r.title
     `)
