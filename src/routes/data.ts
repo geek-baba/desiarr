@@ -481,7 +481,7 @@ router.get('/rss', (req: Request, res: Response) => {
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
         WHERE rss.feed_id = ?
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all(feedId);
     } else if (feedType) {
       items = db.prepare(`
@@ -494,9 +494,10 @@ router.get('/rss', (req: Request, res: Response) => {
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
         WHERE f.feed_type = ?
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all(feedType);
     } else {
+      // Sort by published_at DESC globally (latest first), with id as tiebreaker for consistent ordering
       items = db.prepare(`
         SELECT 
           rss.*,
@@ -506,7 +507,7 @@ router.get('/rss', (req: Request, res: Response) => {
         FROM rss_feed_items rss
         LEFT JOIN rss_feeds f ON rss.feed_id = f.id
         LEFT JOIN tv_releases tv ON rss.guid = tv.guid
-        ORDER BY datetime(rss.published_at) DESC
+        ORDER BY datetime(rss.published_at) DESC, rss.id DESC
       `).all();
     }
     
@@ -859,16 +860,26 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'TVDB ID not found' });
     }
 
-    // Try to get TMDB and IMDB IDs from TVDB extended info, and also fetch the slug
+    // Try to get TMDB and IMDB IDs from TVDB extended info, and also fetch the slug and poster
     let tmdbId = item.tmdb_id;
     let imdbId = item.imdb_id;
     let tvdbSlug: string | null = null;
+    let tvdbPosterUrl: string | null = null;
     
     try {
       const tvdbExtended = await tvdbClient.getSeriesExtended(parseInt(tvdbId, 10));
       if (tvdbExtended) {
         // Extract slug from extended info
         tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+        
+        // Extract poster URL (TVDB v4 structure may vary)
+        const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
+        if (artwork && Array.isArray(artwork)) {
+          const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster'); // Type 2 is poster
+          if (poster) {
+            tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+          }
+        }
         
         // TVDB v4 structure - check for remoteIds
         const remoteIds = (tvdbExtended as any).remoteIds || [];
@@ -885,6 +896,24 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     } catch (error) {
       console.log('Could not fetch extended TVDB info, continuing with TVDB ID only');
     }
+    
+    // Fetch TMDB poster if we have a TMDB ID
+    let tmdbPosterUrl: string | null = null;
+    if (tmdbId) {
+      try {
+        const allSettings = settingsModel.getAll();
+        const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+        if (tmdbApiKey) {
+          tmdbClient.setApiKey(tmdbApiKey);
+          const tmdbShow = await tmdbClient.getTvShow(tmdbId);
+          if (tmdbShow && tmdbShow.poster_path) {
+            tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+          }
+        }
+      } catch (error) {
+        console.log('Could not fetch TMDB poster, continuing without it');
+      }
+    }
 
     // Update the RSS item with the new TVDB ID and any found IDs, mark as manually set
     db.prepare(`
@@ -893,41 +922,144 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       WHERE id = ?
     `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
 
+    // Propagate IDs to all other RSS items for the same TV show
+    // Strategy: Update all RSS items that have the same TVDB ID (after we set it)
+    // This handles the common case where one show has multiple episodes/seasons
+    const allRssItemsWithSameTvdb = db.prepare(`
+      SELECT id FROM rss_feed_items 
+      WHERE tvdb_id = ? AND id != ? AND feed_id IN (SELECT id FROM rss_feeds WHERE feed_type = 'tv')
+    `).all(parseInt(tvdbId, 10), itemId) as any[];
+    
+    let propagatedCount = 0;
+    for (const otherItem of allRssItemsWithSameTvdb) {
+      // Only update if the item doesn't already have manual overrides
+      const otherItemFull = db.prepare('SELECT tvdb_id_manual FROM rss_feed_items WHERE id = ?').get(otherItem.id) as any;
+      if (!otherItemFull?.tvdb_id_manual) {
+        db.prepare(`
+          UPDATE rss_feed_items 
+          SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, otherItem.id);
+        propagatedCount++;
+      }
+    }
+    
+    // Also propagate to items that will match to the same TVDB ID (by show name)
+    // This helps when items don't have TVDB ID yet but will match to the same show
+    const { parseTvTitle } = await import('../services/tvMatchingEngine');
+    const parsedTitle = parseTvTitle(item.title);
+    const showNameForMatching = parsedTitle.showName.toLowerCase().trim();
+    
+    if (showNameForMatching && showNameForMatching.length > 2) {
+      // Find all RSS items from TV feeds that parse to the same show name
+      const allTvRssItems = db.prepare(`
+        SELECT rss.*, f.feed_type
+        FROM rss_feed_items rss
+        LEFT JOIN rss_feeds f ON rss.feed_id = f.id
+        WHERE f.feed_type = 'tv' AND rss.id != ? AND (rss.tvdb_id IS NULL OR rss.tvdb_id != ?)
+      `).all(itemId, parseInt(tvdbId, 10)) as any[];
+      
+      for (const otherItem of allTvRssItems) {
+        const otherParsed = parseTvTitle(otherItem.title);
+        const otherShowName = otherParsed.showName.toLowerCase().trim();
+        
+        // If show names match (exact or fuzzy), propagate IDs
+        if (otherShowName === showNameForMatching || 
+            (showNameForMatching.length > 3 && otherShowName.includes(showNameForMatching)) ||
+            (otherShowName.length > 3 && showNameForMatching.includes(otherShowName))) {
+          // Only update if the item doesn't already have manual overrides
+          const hasManualTvdb = otherItem.tvdb_id_manual;
+          if (!hasManualTvdb) {
+            db.prepare(`
+              UPDATE rss_feed_items 
+              SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+              WHERE id = ?
+            `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, otherItem.id);
+            propagatedCount++;
+          }
+        }
+      }
+    }
+    
+    if (propagatedCount > 0) {
+      console.log(`  ✓ Propagated IDs to ${propagatedCount} additional RSS item(s) for the same show`);
+    }
+
     // Update tv_releases - update the specific release by guid, and also update all releases with the same TVDB ID
     const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
     if (tvRelease) {
       db.prepare(`
         UPDATE tv_releases 
-        SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, last_checked_at = datetime('now')
+        SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, tvdb_poster_url = ?, tmdb_poster_url = ?, last_checked_at = datetime('now')
         WHERE guid = ?
-      `).run(parseInt(tvdbId, 10), tvdbSlug, tmdbId || null, imdbId || null, item.guid);
+      `).run(parseInt(tvdbId, 10), tvdbSlug, tmdbId || null, imdbId || null, tvdbPosterUrl, tmdbPosterUrl, item.guid);
       
-      if (tvdbSlug) {
-        const updateCount = db.prepare(`
-          UPDATE tv_releases 
-          SET tvdb_slug = ?
-          WHERE tvdb_id = ? AND (tvdb_slug IS NULL OR tvdb_slug = '')
-        `).run(tvdbSlug, parseInt(tvdbId, 10)).changes || 0;
+      // Update all other tv_releases with the same TVDB ID to have the slug and poster URLs
+      if (tvdbSlug || tvdbPosterUrl || tmdbPosterUrl) {
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
         
-        if (updateCount > 0) {
-          console.log(`Updated ${updateCount} additional tv_release(s) with slug: ${tvdbSlug}`);
+        if (tvdbSlug) {
+          updateFields.push('tvdb_slug = ?');
+          updateValues.push(tvdbSlug);
+        }
+        if (tvdbPosterUrl) {
+          updateFields.push('tvdb_poster_url = ?');
+          updateValues.push(tvdbPosterUrl);
+        }
+        if (tmdbPosterUrl) {
+          updateFields.push('tmdb_poster_url = ?');
+          updateValues.push(tmdbPosterUrl);
+        }
+        
+        if (updateFields.length > 0) {
+          updateValues.push(parseInt(tvdbId, 10));
+          const updateCount = db.prepare(`
+            UPDATE tv_releases 
+            SET ${updateFields.join(', ')}
+            WHERE tvdb_id = ? AND guid != ?
+          `).run(...updateValues, item.guid).changes || 0;
+          
+          if (updateCount > 0) {
+            console.log(`Updated ${updateCount} additional tv_release(s) with slug/posters`);
+          }
         }
       }
       
-      console.log(`Updated tv_release with TVDB ID ${tvdbId} and slug: ${tvdbSlug || 'none'}`);
+      console.log(`Updated tv_release with TVDB ID ${tvdbId}, slug: ${tvdbSlug || 'none'}, posters: ${tvdbPosterUrl ? 'TVDB' : ''} ${tmdbPosterUrl ? 'TMDB' : ''}`);
     } else {
-      if (tvdbSlug) {
-        const updateCount = db.prepare(`
-          UPDATE tv_releases 
-          SET tvdb_slug = ?
-          WHERE tvdb_id = ? AND (tvdb_slug IS NULL OR tvdb_slug = '')
-        `).run(tvdbSlug, parseInt(tvdbId, 10)).changes || 0;
+      // Update all existing tv_releases with the same TVDB ID to have the slug and poster URLs
+      if (tvdbSlug || tvdbPosterUrl || tmdbPosterUrl) {
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
         
-        if (updateCount > 0) {
-          console.log(`Updated ${updateCount} tv_release(s) with slug: ${tvdbSlug}`);
+        if (tvdbSlug) {
+          updateFields.push('tvdb_slug = ?');
+          updateValues.push(tvdbSlug);
+        }
+        if (tvdbPosterUrl) {
+          updateFields.push('tvdb_poster_url = ?');
+          updateValues.push(tvdbPosterUrl);
+        }
+        if (tmdbPosterUrl) {
+          updateFields.push('tmdb_poster_url = ?');
+          updateValues.push(tmdbPosterUrl);
+        }
+        
+        if (updateFields.length > 0) {
+          updateValues.push(parseInt(tvdbId, 10));
+          const updateCount = db.prepare(`
+            UPDATE tv_releases 
+            SET ${updateFields.join(', ')}
+            WHERE tvdb_id = ?
+          `).run(...updateValues).changes || 0;
+          
+          if (updateCount > 0) {
+            console.log(`Updated ${updateCount} tv_release(s) with slug/posters`);
+          }
         }
       }
-      console.log(`No tv_release found for guid ${item.guid}, slug will be set when release is processed`);
+      console.log(`No tv_release found for guid ${item.guid}, slug/posters will be set when release is processed`);
     }
 
     const seriesName = (tvdbSeries as any).name || (tvdbSeries as any).title || 'Unknown Series';
@@ -1033,10 +1165,274 @@ router.post('/rss/override-imdb/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Match single RSS item
-router.post('/rss/match/:id', async (req: Request, res: Response) => {
+// Get match info for single RSS item (for match dialog)
+router.get('/rss/match-info/:id', async (req: Request, res: Response) => {
   try {
     const itemId = parseInt(req.params.id, 10);
+    
+    // Get the RSS item from database with feed type
+    const item = db.prepare(`
+      SELECT 
+        rss.*,
+        f.feed_type,
+        COALESCE(rss.tvdb_id, tv.tvdb_id) as tvdb_id,
+        tv.tvdb_slug,
+        tv.show_name,
+        tv.season_number
+      FROM rss_feed_items rss
+      LEFT JOIN rss_feeds f ON rss.feed_id = f.id
+      LEFT JOIN tv_releases tv ON rss.guid = tv.guid
+      WHERE rss.id = ?
+    `).get(itemId) as any;
+    
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+    
+    // For TV shows, prefer show_name over clean_title (which is often null for TV)
+    // For movies, use clean_title or normalized_title
+    let displayTitle: string | null = null;
+    let displayYear: number | null = item.year;
+    
+    if (item.feed_type === 'tv') {
+      // TV shows: use show_name from tv_releases if available (this is the parsed/sanitized show name)
+      // Otherwise fall back to clean_title, or parse from title
+      displayTitle = item.show_name || item.clean_title || null;
+      
+      // If year is not set, try to extract it from title using parseTvTitle
+      if (displayYear === null && item.title) {
+        const { parseTvTitle } = await import('../services/tvMatchingEngine');
+        const parsedTv = parseTvTitle(item.title);
+        if (parsedTv.year) displayYear = parsedTv.year;
+        if (!displayTitle) displayTitle = parsedTv.showName;
+      }
+      
+      if (!displayTitle && item.title) {
+        // Fallback: parse show name from title (basic cleanup similar to parseTvTitle)
+        let parsed = item.title
+          .replace(/\./g, ' ') // Replace dots with spaces
+          .replace(/\s+/g, ' ') // Normalize spaces
+          .trim();
+        // Remove season/episode patterns for cleaner display (S01, S1E1, Season 1, etc.)
+        parsed = parsed.replace(/\s*[Ss](\d+)(?:[Ee]\d+)?\s*/g, ' ');
+        parsed = parsed.replace(/\s*[Ss]eason\s*(\d+)\s*/gi, ' ');
+        // Remove year patterns
+        parsed = parsed.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '');
+        parsed = parsed.replace(/\b(19|20)\d{2}\b/g, '');
+        displayTitle = parsed.trim();
+      }
+    } else {
+      // Movies: use clean_title (which is sanitized during RSS sync) or normalized_title
+      displayTitle = item.clean_title || item.normalized_title || item.title || null;
+    }
+    
+    res.json({ 
+      success: true, 
+      item: {
+        id: item.id,
+        title: item.title,
+        clean_title: displayTitle, // Use the computed display title for the dialog
+        normalized_title: item.normalized_title,
+        year: displayYear, // Use extracted year for TV shows
+        tmdb_id: item.tmdb_id,
+        imdb_id: item.imdb_id,
+        tvdb_id: item.tvdb_id,
+        feed_type: item.feed_type,
+        show_name: item.show_name,
+        season_number: item.season_number,
+      }
+    });
+  } catch (error: any) {
+    console.error('Get match info error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get match info: ' + (error?.message || 'Unknown error') 
+    });
+  }
+});
+
+// Search for matches (returns candidates without applying)
+router.post('/rss/search/:id', async (req: Request, res: Response) => {
+  const itemId = parseInt(req.params.id, 10);
+  try {
+    // Get the RSS item from database
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+
+    // Get feed type
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const feedType = feed?.feed_type || 'movie';
+
+    // Get match parameters from request body
+    const matchParams = (req.body as Record<string, any>) || {};
+    const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
+    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
+    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
+
+    // Get API keys
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
+    
+    if (tmdbApiKey) tmdbClient.setApiKey(tmdbApiKey);
+
+    let searchTitle: string | null = null;
+    let searchYear: number | null = null;
+    const candidates: any[] = [];
+
+    if (feedType === 'tv') {
+      // For TV shows
+      if (userTvdbId) {
+        // If TVDB ID is provided, fetch that specific series
+        try {
+          tvdbClient.updateConfig();
+          const series = await tvdbClient.getSeriesExtended(userTvdbId);
+          if (series) {
+            const seriesData = series as any;
+            candidates.push({
+              tvdbId: userTvdbId,
+              tvdbSlug: seriesData.slug || seriesData.nameSlug || null,
+              name: seriesData.name || seriesData.title || 'Unknown Series',
+              year: seriesData.year || seriesData.first_air_time ? new Date(seriesData.first_air_time).getFullYear() : null,
+              overview: seriesData.overview || seriesData.description || null,
+              poster: seriesData.poster || (seriesData.artwork && Array.isArray(seriesData.artwork) ? seriesData.artwork.find((a: any) => a.type === 2 || a.imageType === 'poster')?.image : null) || null,
+              tmdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'TheMovieDB.com')?.id || null,
+              imdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'IMDB')?.id || null,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching TVDB series:', error);
+        }
+      } else if (userShowName) {
+        // Search TVDB
+        searchTitle = userShowName;
+        if (tvdbApiKey) {
+          try {
+            tvdbClient.updateConfig();
+            const tvdbResults = await tvdbClient.searchSeries(userShowName);
+            for (const series of tvdbResults.slice(0, 10)) {
+              const seriesId = series.tvdb_id || series.id;
+              if (seriesId) {
+                try {
+                  const seriesExtended = await tvdbClient.getSeriesExtended(seriesId);
+                  if (seriesExtended) {
+                    const seriesData = seriesExtended as any;
+                    candidates.push({
+                      tvdbId: seriesId,
+                      tvdbSlug: seriesData.slug || seriesData.nameSlug || null,
+                      name: seriesData.name || seriesData.title || 'Unknown Series',
+                      year: seriesData.year || seriesData.first_air_time ? new Date(seriesData.first_air_time).getFullYear() : null,
+                      overview: seriesData.overview || seriesData.description || null,
+                      poster: seriesData.poster || (seriesData.artwork && Array.isArray(seriesData.artwork) ? seriesData.artwork.find((a: any) => a.type === 2 || a.imageType === 'poster')?.image : null) || null,
+                      tmdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'TheMovieDB.com')?.id || null,
+                      imdbId: seriesData.remoteIds?.find((r: any) => r.sourceName === 'IMDB')?.id || null,
+                    });
+                  }
+                } catch (error) {
+                  // Skip this series if extended fetch fails
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error searching TVDB:', error);
+          }
+        }
+
+        // Also search TMDB for TV shows
+        if (tmdbApiKey && candidates.length < 10) {
+          try {
+            const tmdbResults = await tmdbClient.searchTv(userShowName);
+            if (tmdbResults && Array.isArray(tmdbResults)) {
+              for (const show of tmdbResults.slice(0, 10 - candidates.length)) {
+                // Check if we already have this in candidates (by TMDB ID)
+                if (!candidates.find(c => c.tmdbId === show.id)) {
+                  candidates.push({
+                    tmdbId: show.id,
+                    name: show.name || 'Unknown Series',
+                    year: show.first_air_date ? new Date(show.first_air_date).getFullYear() : null,
+                    overview: show.overview || null,
+                    poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error searching TMDB TV:', error);
+          }
+        }
+      }
+    } else {
+      // For movies
+      if (userTmdbId) {
+        // If TMDB ID is provided, fetch that specific movie
+        try {
+          const movie = await tmdbClient.getMovie(userTmdbId);
+          if (movie) {
+            candidates.push({
+              tmdbId: movie.id,
+              title: movie.title || 'Unknown Movie',
+              year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+              overview: null, // TMDB getMovie doesn't return overview, would need to fetch details
+              poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+              imdbId: movie.imdb_id || null,
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching TMDB movie:', error);
+        }
+      } else if (userTitle) {
+        // Search TMDB for movies
+        searchTitle = userTitle;
+        searchYear = userYear;
+        if (tmdbApiKey) {
+          try {
+            const movies = await tmdbClient.searchMovies(userTitle, userYear || undefined, 10);
+            for (const movie of movies) {
+              // Use overview from search result (TMDB search API includes overview)
+              const overview = movie.overview || null;
+              const imdbId = movie.imdb_id || null;
+              
+              candidates.push({
+                tmdbId: movie.id,
+                title: movie.title || 'Unknown Movie',
+                year: movie.release_date ? new Date(movie.release_date).getFullYear() : null,
+                overview: overview,
+                poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+                imdbId: imdbId,
+              });
+            }
+          } catch (error) {
+            console.error('Error searching TMDB movies:', error);
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      query: searchTitle,
+      year: searchYear,
+      candidates: candidates,
+      count: candidates.length,
+    });
+  } catch (error: any) {
+    console.error('Search RSS item error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to search: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
+// Match single RSS item
+router.post('/rss/match/:id', async (req: Request, res: Response) => {
+  const itemId = parseInt(req.params.id, 10);
+  try {
     
     // Get the RSS item from database
     const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
@@ -1047,30 +1443,71 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
 
     console.log(`Manual match triggered for RSS item: "${item.title}" (ID: ${itemId})`);
 
+    // Get match parameters from request body (if provided from dialog)
+    const matchParams = (req.body as Record<string, any>) || {};
+    const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
+    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
+    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userImdbId: string | null = typeof matchParams.imdbId === 'string' && matchParams.imdbId.trim() ? matchParams.imdbId.trim() : null;
+    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
+    const userSeason: number | null = typeof matchParams.season === 'number' ? matchParams.season : null;
+
     // Get API keys
     const allSettings = settingsModel.getAll();
     const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
     const omdbApiKey = allSettings.find(s => s.key === 'omdb_api_key')?.value;
     const braveApiKey = allSettings.find(s => s.key === 'brave_api_key')?.value;
+    const tvdbApiKey = allSettings.find(s => s.key === 'tvdb_api_key')?.value;
     
     if (tmdbApiKey) tmdbClient.setApiKey(tmdbApiKey);
     if (omdbApiKey) imdbClient.setApiKey(omdbApiKey);
     if (braveApiKey) braveClient.setApiKey(braveApiKey);
 
-    // Re-parse the item to get clean title
-    const parsed = parseRSSItem({
-      title: item.title,
-      link: item.link,
-      guid: item.guid,
-      description: item.raw_data || '',
-    } as any, item.feed_id, item.feed_name);
+    // Get feed type
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const feedType = feed?.feed_type || 'movie';
 
-    let tmdbId = item.tmdb_id || (parsed as any).tmdb_id || null;
-    let imdbId = item.imdb_id || (parsed as any).imdb_id || null;
-    const cleanTitle = (parsed as any).clean_title || item.clean_title || null;
-    const year = parsed.year || item.year || null;
+    // Use user-provided values or fall back to existing/parsed values
+    let tmdbId = userTmdbId !== null ? userTmdbId : (item.tmdb_id || null);
+    let imdbId = userImdbId !== null ? userImdbId : (item.imdb_id || null);
+    let tvdbId = userTvdbId !== null ? userTvdbId : (item.tvdb_id || null);
+    let showName = userShowName !== null ? userShowName : null;
+    let season = userSeason !== null ? userSeason : null;
+    let year = userYear !== null ? userYear : null;
+    let cleanTitle = userTitle !== null ? userTitle : null;
+    let parsed: any = null; // Will be set for movies
+    
+    if (feedType === 'tv') {
+      // For TV shows, use parseTvTitle to extract show name, season, and year
+      const { parseTvTitle } = await import('../services/tvMatchingEngine');
+      const parsedTv = parseTvTitle(item.title);
+      
+      if (!showName) showName = parsedTv.showName;
+      if (season === null) season = parsedTv.season;
+      if (year === null) year = parsedTv.year;
+      
+      // Use showName as cleanTitle for TV shows
+      if (!cleanTitle) cleanTitle = showName;
+    } else {
+      // For movies, use parseRSSItem
+      parsed = parseRSSItem({
+        title: item.title,
+        link: item.link,
+        guid: item.guid,
+        description: item.raw_data || '',
+      } as any, item.feed_id, item.feed_name);
+      
+      if (!tmdbId) tmdbId = (parsed as any).tmdb_id || item.tmdb_id || null;
+      if (!imdbId) imdbId = (parsed as any).imdb_id || item.imdb_id || null;
+      if (!cleanTitle) cleanTitle = (parsed as any).clean_title || item.clean_title || null;
+      if (year === null) year = parsed.year || item.year || null;
+    }
 
-    console.log(`  Current state: TMDB=${tmdbId || 'missing'}, IMDB=${imdbId || 'missing'}, Title="${cleanTitle}", Year=${year || 'none'}`);
+    console.log(`  Match attributes: Title="${cleanTitle}", Year=${year || 'none'}, TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}`);
+    if (feedType === 'tv') {
+      console.log(`  TV attributes: Show="${showName || 'none'}", Season=${season !== null ? season : 'none'}`);
+    }
 
     // Step 0: Validate existing TMDB/IMDB ID pair if both are present
     if (tmdbId && imdbId && tmdbApiKey) {
@@ -1224,11 +1661,12 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         }
       }
 
-      // Step 3b: Try normalized title
-      if (!tmdbId && tmdbApiKey && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
+      // Step 3b: Try normalized title (movies only)
+      if (!tmdbId && tmdbApiKey && parsed && (parsed as any).normalized_title && (parsed as any).normalized_title !== cleanTitle) {
+        const normalizedTitle = (parsed as any).normalized_title;
         try {
-          console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}`);
-          const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined);
+          console.log(`    Searching TMDB (normalized) for: "${normalizedTitle}" ${year ? `(${year})` : ''}`);
+          const tmdbMovie = await tmdbClient.searchMovie(normalizedTitle, year || undefined);
           if (tmdbMovie) {
             let isValidMatch = true;
             if (year && tmdbMovie.release_date) {
@@ -1240,7 +1678,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
             }
             if (isValidMatch) {
               tmdbId = tmdbMovie.id;
-              console.log(`    ✓ Found TMDB ID ${tmdbId} for normalized title "${parsed.normalized_title}"`);
+              console.log(`    ✓ Found TMDB ID ${tmdbId} for normalized title "${normalizedTitle}"`);
               if (!imdbId && tmdbMovie.imdb_id) {
                 imdbId = tmdbMovie.imdb_id;
                 console.log(`    ✓ Found IMDB ID ${imdbId} from TMDB movie (normalized title)`);
@@ -1248,7 +1686,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
             }
           }
         } catch (error) {
-          console.log(`    ✗ Failed to find TMDB ID for normalized title "${parsed.normalized_title}":`, error);
+          console.log(`    ✗ Failed to find TMDB ID for normalized title "${normalizedTitle}":`, error);
         }
       }
 
@@ -1280,30 +1718,182 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       }
     }
 
-    // Update the database with found IDs
-    if (tmdbId !== item.tmdb_id || imdbId !== item.imdb_id) {
+    // For TV shows, handle TVDB ID and show name
+    if (feedType === 'tv' && tvdbId) {
+      // Update TVDB ID if provided
       db.prepare(`
         UPDATE rss_feed_items 
-        SET tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+        SET tvdb_id = ?, tvdb_id_manual = 1, updated_at = datetime('now')
         WHERE id = ?
-      `).run(tmdbId, imdbId, itemId);
+      `).run(tvdbId, itemId);
       
-      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}`);
+      // Propagate TVDB/TMDB/IMDB IDs to all other RSS items for the same TV show
+      const allRssItemsWithSameTvdb = db.prepare(`
+        SELECT id FROM rss_feed_items 
+        WHERE tvdb_id = ? AND id != ? AND feed_id IN (SELECT id FROM rss_feeds WHERE feed_type = 'tv')
+      `).all(tvdbId, itemId) as any[];
+      
+      let propagatedCount = 0;
+      for (const otherItem of allRssItemsWithSameTvdb) {
+        const otherItemFull = db.prepare('SELECT tvdb_id_manual FROM rss_feed_items WHERE id = ?').get(otherItem.id) as any;
+        if (!otherItemFull?.tvdb_id_manual) {
+          db.prepare(`
+            UPDATE rss_feed_items 
+            SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).run(tvdbId, tmdbId || null, imdbId || null, otherItem.id);
+          propagatedCount++;
+        }
+      }
+      
+      // Also propagate by show name (for items that don't have TVDB ID yet)
+      if (showName && showName.length > 2) {
+        const { parseTvTitle } = await import('../services/tvMatchingEngine');
+        const showNameForMatching = showName.toLowerCase().trim();
+        const allTvRssItems = db.prepare(`
+          SELECT rss.*, f.feed_type
+          FROM rss_feed_items rss
+          LEFT JOIN rss_feeds f ON rss.feed_id = f.id
+          WHERE f.feed_type = 'tv' AND rss.id != ? AND (rss.tvdb_id IS NULL OR rss.tvdb_id != ?)
+        `).all(itemId, tvdbId) as any[];
+        
+        for (const otherItem of allTvRssItems) {
+          const otherParsed = parseTvTitle(otherItem.title);
+          const otherShowName = otherParsed.showName.toLowerCase().trim();
+          
+          if (otherShowName === showNameForMatching || 
+              (showNameForMatching.length > 3 && otherShowName.includes(showNameForMatching)) ||
+              (otherShowName.length > 3 && showNameForMatching.includes(otherShowName))) {
+            const hasManualTvdb = otherItem.tvdb_id_manual;
+            if (!hasManualTvdb) {
+              db.prepare(`
+                UPDATE rss_feed_items 
+                SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, updated_at = datetime('now')
+                WHERE id = ?
+              `).run(tvdbId, tmdbId || null, imdbId || null, otherItem.id);
+              propagatedCount++;
+            }
+          }
+        }
+      }
+      
+      if (propagatedCount > 0) {
+        console.log(`  ✓ Propagated IDs to ${propagatedCount} additional RSS item(s) for the same show`);
+      }
+      
+      // Also update tv_releases if it exists
+      const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
+      if (tvRelease) {
+        // Fetch TVDB extended info to get slug and poster
+        let tvdbSlug: string | null = null;
+        let tvdbPosterUrl: string | null = null;
+        
+        if (tvdbApiKey) {
+          try {
+            tvdbClient.updateConfig();
+            const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
+            if (tvdbExtended) {
+              tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || null;
+              const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
+              if (artwork && Array.isArray(artwork)) {
+                const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster');
+                if (poster) {
+                  tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`  ⚠ Failed to fetch TVDB extended info:`, error);
+          }
+        }
+        
+        db.prepare(`
+          UPDATE tv_releases 
+          SET tvdb_id = ?, tvdb_slug = ?, last_checked_at = datetime('now')
+          WHERE guid = ?
+        `).run(tvdbId, tvdbSlug, item.guid);
+      }
+    }
+
+    // Update the database with found IDs
+    const updates: string[] = [];
+    const updateValues: any[] = [];
+    
+    if (tmdbId !== item.tmdb_id) {
+      updates.push('tmdb_id = ?');
+      updateValues.push(tmdbId);
+    }
+    if (imdbId !== item.imdb_id) {
+      updates.push('imdb_id = ?');
+      updateValues.push(imdbId);
+    }
+    if (cleanTitle && cleanTitle !== item.clean_title) {
+      updates.push('clean_title = ?');
+      updateValues.push(cleanTitle);
+    }
+    if (year !== null && year !== item.year) {
+      updates.push('year = ?');
+      updateValues.push(year);
+    }
+    
+    if (updates.length > 0) {
+      updateValues.push(itemId);
+      db.prepare(`
+        UPDATE rss_feed_items 
+        SET ${updates.join(', ')}, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(...updateValues);
+      
+      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}`);
     } else {
       console.log(`  ℹ No changes needed for RSS item ${itemId}`);
     }
 
-    res.json({ 
+    // After enrichment, trigger matching engine for this specific item
+    try {
+      if (feedType === 'tv') {
+        console.log(`  [MATCH] Triggering TV matching engine for item ${itemId}...`);
+        // For TV, we need to run the TV matching engine
+        // It will process all items, but our enriched item will be included
+        const tvStats = await runTvMatchingEngine();
+        console.log(`  [MATCH] ✓ TV matching engine completed: ${tvStats.processed} processed, ${tvStats.newShows} new shows, ${tvStats.errors} errors`);
+      } else {
+        console.log(`  [MATCH] Triggering movie matching engine for item ${itemId}...`);
+        // For movies, run the movie matching engine
+        // It will process all items, but our enriched item will be included
+        const movieStats = await runMatchingEngine();
+        console.log(`  [MATCH] ✓ Movie matching engine completed: ${movieStats.processed} processed, ${movieStats.newReleases} new releases, ${movieStats.errors} errors`);
+      }
+    } catch (matchError: any) {
+      console.error(`  [MATCH] ⚠ Matching engine error (enrichment still succeeded):`, matchError);
+      console.error(`  [MATCH] Error details:`, matchError?.message || matchError?.toString() || 'Unknown error');
+      // Don't fail the request if matching fails - enrichment succeeded
+    }
+
+    console.log(`  [MATCH] Final result: TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}, Title="${cleanTitle || 'none'}", Year=${year || 'none'}`);
+    
+    const response: any = {
       success: true, 
-      message: 'Match completed',
+      message: 'Match and enrichment completed',
       tmdbId,
       imdbId,
-    });
+      title: cleanTitle,
+      year: year,
+    };
+    if (feedType === 'tv' && tvdbId !== null) {
+      response.tvdbId = tvdbId;
+      response.showName = showName;
+      response.season = season;
+    }
+    
+    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId}`);
+    res.json(response);
   } catch (error: any) {
-    console.error('Match RSS item error:', error);
+    console.error(`  [MATCH] ✗ Match RSS item error for item ${itemId}:`, error);
+    console.error(`  [MATCH] Error stack:`, error?.stack || 'No stack trace');
     res.status(500).json({ 
       success: false,
-      error: 'Failed to match RSS item: ' + (error?.message || 'Unknown error') 
+      error: 'Failed to match RSS item: ' + (error?.message || error?.toString() || 'Unknown error')
     });
   }
 });
@@ -1516,6 +2106,78 @@ router.post('/tv/update-slug/:tvdbId', async (req: Request, res: Response) => {
     res.status(500).json({ 
       success: false,
       error: 'Failed to update TVDB slug: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
+// Re-categorize RSS item (set feed_type_override)
+router.post('/rss/re-categorize/:id', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id, 10);
+    const { targetType } = req.body as { targetType: 'movie' | 'tv' | null };
+    
+    if (targetType !== null && targetType !== 'movie' && targetType !== 'tv') {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'targetType must be "movie", "tv", or null to clear override' 
+      });
+    }
+    
+    // Get the RSS item
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    if (!item) {
+      return res.status(404).json({ success: false, error: 'RSS item not found' });
+    }
+    
+    // Get current feed type
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const currentFeedType = feed?.feed_type || 'movie';
+    const currentOverride = item.feed_type_override || null;
+    
+    // Update the override
+    db.prepare(`
+      UPDATE rss_feed_items 
+      SET feed_type_override = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(targetType, itemId);
+    
+    // Determine effective type after change
+    const effectiveType = targetType || currentFeedType;
+    const previousEffectiveType = currentOverride || currentFeedType;
+    
+    // If the effective type changed, we need to move the release between tables
+    if (effectiveType !== previousEffectiveType) {
+      if (previousEffectiveType === 'movie' && effectiveType === 'tv') {
+        // Moving from movie to TV: delete from movie_releases, will be created in tv_releases on next TV match
+        const movieRelease = db.prepare('SELECT * FROM movie_releases WHERE guid = ?').get(item.guid) as any;
+        if (movieRelease) {
+          db.prepare('DELETE FROM movie_releases WHERE guid = ?').run(item.guid);
+          console.log(`Deleted movie_release for guid ${item.guid} (moving to TV)`);
+        }
+      } else if (previousEffectiveType === 'tv' && effectiveType === 'movie') {
+        // Moving from TV to movie: delete from tv_releases, will be created in movie_releases on next movie match
+        const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
+        if (tvRelease) {
+          db.prepare('DELETE FROM tv_releases WHERE guid = ?').run(item.guid);
+          console.log(`Deleted tv_release for guid ${item.guid} (moving to movie)`);
+        }
+      }
+    }
+    
+    console.log(`Re-categorized RSS item ${itemId} from ${previousEffectiveType} to ${effectiveType}${targetType ? ' (override set)' : ' (override cleared)'}`);
+    
+    res.json({
+      success: true,
+      message: `Item re-categorized to ${effectiveType}`,
+      previousType: previousEffectiveType,
+      newType: effectiveType,
+      override: targetType,
+    });
+  } catch (error: any) {
+    console.error('Re-categorize RSS item error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to re-categorize item: ' + (error?.message || 'Unknown error')
     });
   }
 });

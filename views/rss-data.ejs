@@ -168,7 +168,6 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Type</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Size</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Published</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TVDB ID</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
@@ -191,9 +190,6 @@
                   </a>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= item.year || '-' %></td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                  <%= item.rss_size_mb ? item.rss_size_mb.toFixed(2) + ' MB' : '-' %>
-                </td>
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   <%= new Date(item.published_at).toLocaleString() %>
                 </td>
@@ -345,6 +341,187 @@
     </div>
   </div>
 
+  <!-- Match Dialog Modal (Plex-style) -->
+  <div id="matchModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <svg class="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Fix Match</h3>
+        </div>
+        <button onclick="hideMatchModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <div id="matchModalLocation" class="text-sm text-gray-600 dark:text-gray-400 mb-4 font-mono"></div>
+      
+      <!-- Tabs -->
+      <div class="border-b border-gray-200 dark:border-gray-700 mb-4">
+        <div class="flex space-x-4">
+          <button id="matchSearchTab" onclick="switchMatchTab('search')" class="px-4 py-2 border-b-2 border-orange-500 text-orange-500 font-medium text-sm">
+            Search Options
+          </button>
+          <button id="matchAutoTab" onclick="switchMatchTab('auto')" class="px-4 py-2 border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium text-sm">
+            Auto Match
+          </button>
+        </div>
+      </div>
+      
+      <!-- Search Options Tab -->
+      <div id="matchSearchOptions" class="space-y-4">
+        <div>
+          <label for="matchTitle" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Title</label>
+          <div class="flex gap-2">
+            <input 
+              type="text" 
+              id="matchTitle" 
+              class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Enter title"
+            >
+            <button onclick="searchMatchTitle()" class="px-3 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded text-sm" title="Search">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <div>
+          <label for="matchYear" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Year</label>
+          <input 
+            type="number" 
+            id="matchYear" 
+            class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            placeholder="Enter year (e.g., 2025)"
+            min="1900"
+            max="2100"
+          >
+        </div>
+        
+        <!-- TV-specific fields -->
+        <div id="matchTvFields" class="hidden space-y-4">
+          <div>
+            <label for="matchShowName" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Show Name</label>
+            <input 
+              type="text" 
+              id="matchShowName" 
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Enter show name"
+            >
+          </div>
+          
+          <div>
+            <label for="matchSeason" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Season</label>
+            <input 
+              type="number" 
+              id="matchSeason" 
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Enter season number"
+              min="0"
+            >
+          </div>
+        </div>
+        
+        <!-- ID Fields -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="matchTmdbId" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">TMDB ID</label>
+            <input 
+              type="number" 
+              id="matchTmdbId" 
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="TMDB ID"
+            >
+          </div>
+          
+          <div>
+            <label for="matchImdbId" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">IMDB ID</label>
+            <input 
+              type="text" 
+              id="matchImdbId" 
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="tt1234567"
+              pattern="^tt\d{7,}$"
+            >
+          </div>
+          
+          <div id="matchTvdbField" class="hidden">
+            <label for="matchTvdbId" class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">TVDB ID</label>
+            <input 
+              type="number" 
+              id="matchTvdbId" 
+              class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="TVDB ID"
+            >
+          </div>
+        </div>
+        
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+          <p>These attributes will be used for matching. Leave empty to use current values or search automatically.</p>
+        </div>
+      </div>
+      
+      <!-- Auto Match Tab -->
+      <div id="matchAutoOptions" class="hidden">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Use automatic matching with current attributes. The system will search using the title, year, and existing IDs.
+        </p>
+        <div class="bg-gray-50 dark:bg-gray-700 rounded p-4">
+          <h4 class="font-medium mb-2 text-gray-900 dark:text-white">Current Attributes:</h4>
+          <div id="matchCurrentAttributes" class="text-sm text-gray-600 dark:text-gray-400 space-y-1"></div>
+        </div>
+      </div>
+      
+      <!-- Search Results Section -->
+      <div id="matchResultsSection" class="hidden mt-6">
+        <div class="border-t border-gray-300 dark:border-gray-600 pt-4">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Search Results</h3>
+          <div id="matchResultsContainer" class="space-y-4 max-h-96 overflow-y-auto">
+            <!-- Results will be inserted here -->
+          </div>
+          <div id="matchNoResults" class="hidden text-center py-8 text-gray-500 dark:text-gray-400">
+            <p>No matches found. Try adjusting your search criteria.</p>
+          </div>
+          <div id="matchSearchLoading" class="hidden text-center py-8">
+            <p class="text-gray-500 dark:text-gray-400">Searching...</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="flex justify-end space-x-2 mt-6">
+        <button 
+          type="button" 
+          onclick="hideMatchModal()" 
+          class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          Cancel
+        </button>
+        <button 
+          type="button" 
+          id="matchSearchBtn"
+          onclick="searchMatches()" 
+          class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded"
+        >
+          Search
+        </button>
+        <button 
+          type="button" 
+          id="matchApplyBtn"
+          onclick="applySelectedMatch()" 
+          class="hidden bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+        >
+          Apply Match
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Override TVDB ID Modal -->
   <div id="overrideTvdbModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
@@ -381,6 +558,93 @@
 
   <script>
     let progressInterval = null;
+
+    // Toast Notification System
+    function showToast(message, type = 'info', duration = 5000) {
+      console.log('[showToast] Called with:', message, type);
+      const container = document.getElementById('toastContainer');
+      if (!container) {
+        console.error('[showToast] toastContainer not found!');
+        return;
+      }
+      
+      const toast = document.createElement('div');
+      toast.className = `toast-enter px-4 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md ${
+        type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+        type === 'warning' ? 'bg-yellow-500 text-white' :
+        'bg-blue-500 text-white'
+      }`;
+      
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    // Confirmation Dialog System
+    function showConfirm(message, onConfirm, onCancel = null) {
+      const container = document.body;
+      
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.id = 'confirmOverlay';
+      
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Confirm</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">${message}</p>
+          <div class="flex justify-end space-x-2">
+            <button 
+              id="confirmCancel" 
+              class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              id="confirmOk" 
+              class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      `;
+      
+      container.appendChild(overlay);
+      
+      const removeOverlay = () => {
+        overlay.remove();
+      };
+      
+      overlay.querySelector('#confirmOk').addEventListener('click', () => {
+        removeOverlay();
+        if (onConfirm) onConfirm();
+      });
+      
+      overlay.querySelector('#confirmCancel').addEventListener('click', () => {
+        removeOverlay();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          removeOverlay();
+          if (onCancel) onCancel();
+        }
+      });
+    }
 
     // Search/Filter functionality - uses global search
     function filterTable() {
@@ -456,6 +720,7 @@
     let currentOverrideItemId = null;
 
     function overrideTmdbId(itemId) {
+      console.log('[overrideTmdbId] Called with itemId:', itemId);
       currentOverrideItemId = itemId;
       document.getElementById('overrideTmdbItemId').value = itemId;
       document.getElementById('tmdbIdInput').value = '';
@@ -514,10 +779,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the TMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -544,6 +806,7 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
     function overrideImdbId(itemId) {
@@ -618,10 +881,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the TVDB ID for this TV item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -648,6 +908,7 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
     async function submitOverrideImdb(event) {
@@ -695,10 +956,7 @@
         showToast('No RSS item selected', 'error');
         return;
       }
-      if (!confirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.')) {
-        return;
-      }
-
+      showConfirm('Clear the IMDB ID for this item? Automatic matching will remain disabled until you set a new ID manually.', async () => {
       const button = event?.target;
       const originalText = button.textContent;
       button.disabled = true;
@@ -725,31 +983,426 @@
         button.disabled = false;
         button.textContent = originalText;
       }
+      });
     }
 
+    let currentMatchItemId = null;
+    let currentMatchItemData = null;
+    let currentSearchResults = [];
+    let selectedMatch = null;
+
     async function matchItem(itemId) {
-      const button = document.getElementById(`matchBtn${itemId}`);
+      console.log('[matchItem] Called with itemId:', itemId);
+      currentMatchItemId = itemId;
+      
+      // Fetch current item data
+      try {
+        const res = await fetch(`/data/rss/match-info/${itemId}`);
+        const data = await res.json();
+        
+        if (data.success) {
+          currentMatchItemData = data.item;
+          showMatchModal(data.item);
+        } else {
+          showToast('Error loading item data: ' + (data.error || 'Unknown error'), 'error');
+        }
+      } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+      }
+    }
+
+    function showMatchModal(item) {
+      const modal = document.getElementById('matchModal');
+      const locationEl = document.getElementById('matchModalLocation');
+      const titleEl = document.getElementById('matchTitle');
+      const yearEl = document.getElementById('matchYear');
+      const tmdbIdEl = document.getElementById('matchTmdbId');
+      const imdbIdEl = document.getElementById('matchImdbId');
+      const showNameEl = document.getElementById('matchShowName');
+      const seasonEl = document.getElementById('matchSeason');
+      const tvdbIdEl = document.getElementById('matchTvdbId');
+      const tvFields = document.getElementById('matchTvFields');
+      const tvdbField = document.getElementById('matchTvdbField');
+      
+      // Set location
+      locationEl.textContent = `Location: ${item.title || 'Unknown'}`;
+      
+      // Populate fields with current values
+      titleEl.value = item.clean_title || item.normalized_title || item.title || '';
+      yearEl.value = item.year || '';
+      tmdbIdEl.value = item.tmdb_id || '';
+      imdbIdEl.value = item.imdb_id || '';
+      
+      // Show/hide TV-specific fields
+      const isTv = item.feed_type === 'tv';
+      if (isTv) {
+        tvFields.classList.remove('hidden');
+        tvdbField.classList.remove('hidden');
+        showNameEl.value = item.show_name || '';
+        seasonEl.value = item.season_number || '';
+        tvdbIdEl.value = item.tvdb_id || '';
+      } else {
+        tvFields.classList.add('hidden');
+        tvdbField.classList.add('hidden');
+      }
+      
+      // Update current attributes display
+      updateMatchCurrentAttributes(item);
+      
+      // Show modal and switch to search tab
+      modal.classList.remove('hidden');
+      switchMatchTab('search');
+    }
+
+    function hideMatchModal() {
+      document.getElementById('matchModal').classList.add('hidden');
+      currentMatchItemId = null;
+      currentMatchItemData = null;
+      currentSearchResults = [];
+      selectedMatch = null;
+      const resultsSection = document.getElementById('matchResultsSection');
+      const applyBtn = document.getElementById('matchApplyBtn');
+      if (resultsSection) resultsSection.classList.add('hidden');
+      if (applyBtn) applyBtn.classList.add('hidden');
+    }
+
+    function switchMatchTab(tab) {
+      const searchTab = document.getElementById('matchSearchTab');
+      const autoTab = document.getElementById('matchAutoTab');
+      const searchOptions = document.getElementById('matchSearchOptions');
+      const autoOptions = document.getElementById('matchAutoOptions');
+      
+      if (tab === 'search') {
+        searchTab.classList.add('border-orange-500', 'text-orange-500');
+        searchTab.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+        autoTab.classList.remove('border-orange-500', 'text-orange-500');
+        autoTab.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+        searchOptions.classList.remove('hidden');
+        autoOptions.classList.add('hidden');
+      } else {
+        autoTab.classList.add('border-orange-500', 'text-orange-500');
+        autoTab.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+        searchTab.classList.remove('border-orange-500', 'text-orange-500');
+        searchTab.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
+        autoOptions.classList.remove('hidden');
+        searchOptions.classList.add('hidden');
+      }
+    }
+
+    function updateMatchCurrentAttributes(item) {
+      const container = document.getElementById('matchCurrentAttributes');
+      const attrs = [];
+      
+      if (item.clean_title || item.normalized_title) {
+        attrs.push(`<strong>Title:</strong> ${item.clean_title || item.normalized_title}`);
+      }
+      if (item.year) {
+        attrs.push(`<strong>Year:</strong> ${item.year}`);
+      }
+      if (item.tmdb_id) {
+        attrs.push(`<strong>TMDB ID:</strong> ${item.tmdb_id}`);
+      }
+      if (item.imdb_id) {
+        attrs.push(`<strong>IMDB ID:</strong> ${item.imdb_id}`);
+      }
+      if (item.feed_type === 'tv') {
+        if (item.show_name) {
+          attrs.push(`<strong>Show Name:</strong> ${item.show_name}`);
+        }
+        if (item.season_number !== null && item.season_number !== undefined) {
+          attrs.push(`<strong>Season:</strong> ${item.season_number}`);
+        }
+        if (item.tvdb_id) {
+          attrs.push(`<strong>TVDB ID:</strong> ${item.tvdb_id}`);
+        }
+      }
+      
+      container.innerHTML = attrs.length > 0 ? attrs.join('<br>') : '<em>No attributes set</em>';
+    }
+
+    function searchMatchTitle() {
+      // Trigger search when clicking the search icon
+      searchMatches();
+    }
+
+    async function searchMatches() {
+      if (!currentMatchItemId) {
+        showToast('No item selected', 'error');
+        return;
+      }
+      
+      const title = document.getElementById('matchTitle').value.trim();
+      const year = document.getElementById('matchYear').value ? parseInt(document.getElementById('matchYear').value, 10) : null;
+      const tmdbId = document.getElementById('matchTmdbId').value ? parseInt(document.getElementById('matchTmdbId').value, 10) : null;
+      const showName = document.getElementById('matchShowName')?.value.trim() || null;
+      const tvdbId = document.getElementById('matchTvdbId')?.value ? parseInt(document.getElementById('matchTvdbId').value, 10) : null;
+      
+      const isTv = currentMatchItemData?.feed_type === 'tv';
+      
+      // Build search parameters
+      const searchParams = {};
+      if (isTv) {
+        if (tvdbId) {
+          searchParams['tvdbId'] = tvdbId;
+        } else if (showName) {
+          searchParams['showName'] = showName;
+        }
+      } else {
+        if (tmdbId) {
+          searchParams['tmdbId'] = tmdbId;
+        } else if (title) {
+          searchParams['title'] = title;
+          if (year) searchParams['year'] = year;
+        }
+      }
+      
+      // Show loading
+      document.getElementById('matchSearchLoading').classList.remove('hidden');
+      document.getElementById('matchResultsContainer').classList.add('hidden');
+      document.getElementById('matchNoResults').classList.add('hidden');
+      const searchBtn = document.getElementById('matchSearchBtn');
+      const originalText = searchBtn.textContent;
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
+      
+      try {
+        const res = await fetch(`/data/rss/search/${currentMatchItemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(searchParams),
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          currentSearchResults = data.candidates || [];
+          selectedMatch = null;
+          
+          // Hide loading
+          document.getElementById('matchSearchLoading').classList.add('hidden');
+          
+          if (currentSearchResults.length === 0) {
+            document.getElementById('matchNoResults').classList.remove('hidden');
+            document.getElementById('matchResultsContainer').classList.add('hidden');
+          } else {
+            document.getElementById('matchNoResults').classList.add('hidden');
+            document.getElementById('matchResultsContainer').classList.remove('hidden');
+            renderSearchResults(currentSearchResults, isTv);
+          }
+          
+          document.getElementById('matchResultsSection').classList.remove('hidden');
+        } else {
+          throw new Error(data.error || 'Search failed');
+        }
+      } catch (error) {
+        console.error('[SEARCH] Error:', error);
+        showToast('Search error: ' + (error.message || 'Unknown error'), 'error');
+        document.getElementById('matchSearchLoading').classList.add('hidden');
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.textContent = originalText;
+      }
+    }
+
+    function renderSearchResults(results, isTv) {
+      const container = document.getElementById('matchResultsContainer');
+      container.innerHTML = '';
+      
+      results.forEach((candidate, index) => {
+        const card = document.createElement('div');
+        card.className = `border border-gray-300 dark:border-gray-600 rounded-lg p-4 cursor-pointer hover:border-orange-500 transition-colors ${selectedMatch === candidate ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'bg-gray-50 dark:bg-gray-800'}`;
+        card.onclick = () => selectMatch(candidate, card);
+        
+        const name = isTv ? candidate.name : candidate.title;
+        const year = candidate.year;
+        const poster = candidate.poster;
+        const overview = candidate.overview;
+        
+        card.innerHTML = `
+          <div class="flex gap-4">
+            ${poster ? `
+              <img src="${poster}" alt="${name}" class="w-24 h-36 object-cover rounded flex-shrink-0" onerror="this.style.display='none'">
+            ` : `
+              <div class="w-24 h-36 bg-gray-300 dark:bg-gray-700 rounded flex-shrink-0 flex items-center justify-center">
+                <span class="text-gray-500 dark:text-gray-400 text-xs">No Poster</span>
+              </div>
+            `}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start justify-between mb-2">
+                <h4 class="text-lg font-semibold text-gray-900 dark:text-white">${name || 'Unknown'}</h4>
+                ${year ? `<span class="text-gray-500 dark:text-gray-400 ml-2">${year}</span>` : ''}
+              </div>
+              ${overview ? `
+                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-2">${overview}</p>
+              ` : ''}
+              <div class="flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+                ${candidate.tmdbId ? `<span>TMDB: ${candidate.tmdbId}</span>` : ''}
+                ${candidate.tvdbId ? `<span>TVDB: ${candidate.tvdbId}</span>` : ''}
+                ${candidate.imdbId ? `<span>IMDB: ${candidate.imdbId}</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+        
+        container.appendChild(card);
+      });
+    }
+
+    function selectMatch(candidate, cardElement) {
+      selectedMatch = candidate;
+      
+      // Update visual selection
+      document.querySelectorAll('#matchResultsContainer > div').forEach((el) => {
+        el.classList.remove('border-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+        el.classList.add('bg-gray-50', 'dark:bg-gray-800');
+      });
+      cardElement.classList.add('border-orange-500', 'bg-orange-50', 'dark:bg-orange-900/20');
+      cardElement.classList.remove('bg-gray-50', 'dark:bg-gray-800');
+      
+      // Show apply button
+      document.getElementById('matchApplyBtn').classList.remove('hidden');
+    }
+
+    async function applySelectedMatch() {
+      if (!selectedMatch || !currentMatchItemId) {
+        showToast('Please select a match first', 'error');
+        return;
+      }
+      
+      const isTv = currentMatchItemData?.feed_type === 'tv';
+      
+      // Build match parameters from selected match
+      const matchParams = {};
+      
+      if (isTv) {
+        if (selectedMatch.tvdbId) matchParams['tvdbId'] = selectedMatch.tvdbId;
+        if (selectedMatch.tmdbId) matchParams['tmdbId'] = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams['imdbId'] = selectedMatch.imdbId;
+        if (selectedMatch.name) matchParams['showName'] = selectedMatch.name;
+      } else {
+        if (selectedMatch.tmdbId) matchParams['tmdbId'] = selectedMatch.tmdbId;
+        if (selectedMatch.imdbId) matchParams['imdbId'] = selectedMatch.imdbId;
+        if (selectedMatch.title) matchParams['title'] = selectedMatch.title;
+        if (selectedMatch.year) matchParams['year'] = selectedMatch.year;
+      }
+      
+      // Hide modal and show loading
+      hideMatchModal();
+      const button = document.getElementById(`matchBtn${currentMatchItemId}`);
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Applying...';
+      
+      try {
+        const res = await fetch(`/data/rss/match/${currentMatchItemId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(matchParams),
+        });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          const results = [];
+          if (data.tmdbId) results.push(`TMDB: ${data.tmdbId}`);
+          if (data.imdbId) results.push(`IMDB: ${data.imdbId}`);
+          if (data.tvdbId) results.push(`TVDB: ${data.tvdbId}`);
+          showToast(`Match applied! ${results.join(', ') || 'No IDs found'}`, 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          throw new Error(data.error || 'Unknown error');
+        }
+      } catch (error) {
+        console.error('[MATCH] Error:', error);
+        showToast('Error: ' + (error.message || 'Unknown error'), 'error');
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    async function submitMatch() {
+      if (!currentMatchItemId) {
+        showToast('No item selected', 'error');
+        return;
+      }
+      
+      const title = document.getElementById('matchTitle').value.trim();
+      const year = document.getElementById('matchYear').value ? parseInt(document.getElementById('matchYear').value, 10) : null;
+      const tmdbId = document.getElementById('matchTmdbId').value ? parseInt(document.getElementById('matchTmdbId').value, 10) : null;
+      const imdbId = document.getElementById('matchImdbId').value.trim() || null;
+      const showName = document.getElementById('matchShowName')?.value.trim() || null;
+      const season = document.getElementById('matchSeason')?.value ? parseInt(document.getElementById('matchSeason').value, 10) : null;
+      const tvdbId = document.getElementById('matchTvdbId')?.value ? parseInt(document.getElementById('matchTvdbId').value, 10) : null;
+      
+      const isTv = currentMatchItemData?.feed_type === 'tv';
+      
+      // Build match parameters
+      const matchParams = {
+        title: title || null,
+        year: year,
+        tmdbId: tmdbId,
+        imdbId: imdbId,
+      };
+      
+      if (isTv) {
+        matchParams.showName = showName;
+        matchParams.season = season;
+        matchParams.tvdbId = tvdbId;
+      }
+      
+      // Hide modal
+      hideMatchModal();
+      
+      // Show loading
+      const button = document.getElementById(`matchBtn${currentMatchItemId}`);
       const originalText = button.textContent;
       button.disabled = true;
       button.textContent = 'Matching...';
       
       try {
-        const res = await fetch(`/data/rss/match/${itemId}`, {
+        console.log('[MATCH] Sending match request for item', currentMatchItemId, 'with params:', matchParams);
+        const res = await fetch(`/data/rss/match/${currentMatchItemId}`, {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(matchParams),
         });
+        
+        console.log('[MATCH] Response status:', res.status, res.statusText);
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error('[MATCH] Response error:', errorText);
+          throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+        }
+        
         const data = await res.json();
+        console.log('[MATCH] Response data:', data);
         
         if (data.success) {
-          showToast(`Match completed! TMDB: ${data.tmdbId || 'not found'}, IMDB: ${data.imdbId || 'not found'}`, 'success');
-          // Reload page after 1 second to show updated IDs
+          const results = [];
+          if (data.tmdbId) results.push(`TMDB: ${data.tmdbId}`);
+          if (data.imdbId) results.push(`IMDB: ${data.imdbId}`);
+          if (data.tvdbId) results.push(`TVDB: ${data.tvdbId}`);
+          showToast(`Match completed! ${results.join(', ') || 'No IDs found'}`, 'success');
           setTimeout(() => window.location.reload(), 1000);
         } else {
+          console.error('[MATCH] Match failed:', data.error || 'Unknown error');
           showToast('Error: ' + (data.error || 'Unknown error'), 'error');
           button.disabled = false;
           button.textContent = originalText;
         }
       } catch (error) {
-        showToast('Error: ' + error.message, 'error');
+        console.error('[MATCH] Exception during match:', error);
+        showToast('Error: ' + (error.message || 'Unknown error'), 'error');
         button.disabled = false;
         button.textContent = originalText;
       }
@@ -777,6 +1430,7 @@
       toast.innerHTML = `
         <span class="text-xl font-bold">${icons[type] || icons.info}</span>
         <span class="flex-1">${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 font-bold text-xl">&times;</button>
       `;
       
       container.appendChild(toast);
@@ -786,6 +1440,44 @@
         toast.classList.add('toast-exit');
         setTimeout(() => toast.remove(), 300);
       }, duration);
+    }
+
+    function showConfirm(message, onConfirm, onCancel = null) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Confirm</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-6">${message}</p>
+          <div class="flex justify-end space-x-3">
+            <button class="cancel-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+              Cancel
+            </button>
+            <button class="confirm-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+              Confirm
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      overlay.querySelector('.confirm-btn').addEventListener('click', () => {
+        overlay.remove();
+        if (onConfirm) onConfirm();
+      });
+      
+      overlay.querySelector('.cancel-btn').addEventListener('click', () => {
+        overlay.remove();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.remove();
+          if (onCancel) onCancel();
+        }
+      });
     }
 
     function startSync() {

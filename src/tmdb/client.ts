@@ -9,6 +9,7 @@ interface TMDBMovie {
   backdrop_path?: string;
   original_language?: string;
   imdb_id?: string;
+  overview?: string;
 }
 
 interface TMDBSearchResponse {
@@ -72,6 +73,53 @@ class TMDBClient {
     } catch (error) {
       console.error('TMDB search error:', error);
       return null;
+    }
+  }
+
+  async searchMovies(query: string, year?: number, limit: number = 10): Promise<TMDBMovie[]> {
+    if (!this.apiKey) {
+      console.log('TMDB API key not configured, skipping search');
+      return [];
+    }
+
+    try {
+      const params: any = {
+        api_key: this.apiKey,
+        query: query,
+        language: 'en-US',
+      };
+      
+      if (year) {
+        params.year = year;
+      }
+
+      const response = await this.client.get<TMDBSearchResponse>('/search/movie', { params });
+      
+      if (response.data.results && response.data.results.length > 0) {
+        // If we have a year, prioritize results that match the year
+        let results = response.data.results;
+        if (year) {
+          const yearMatches = results.filter(movie => {
+            if (movie.release_date) {
+              const releaseYear = new Date(movie.release_date).getFullYear();
+              return releaseYear === year;
+            }
+            return false;
+          });
+          if (yearMatches.length > 0) {
+            // Put year matches first, then others
+            const others = results.filter(m => !yearMatches.includes(m));
+            results = [...yearMatches, ...others];
+          }
+        }
+        
+        return results.slice(0, limit);
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('TMDB search movies error:', error);
+      return [];
     }
   }
 
@@ -193,5 +241,6 @@ class TMDBClient {
   }
 }
 
+export { TMDBClient };
 export default new TMDBClient();
 

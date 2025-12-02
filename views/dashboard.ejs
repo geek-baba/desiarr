@@ -40,7 +40,7 @@
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
   
-  <%- include('partials/app-sidebar', { currentPage: 'dashboard' }) %>
+  <%- include('partials/app-sidebar', { currentPage: typeof currentPage !== 'undefined' ? currentPage : 'dashboard' }) %>
   
   <div class="lg:pl-64">
     <%- include('partials/app-header', { lastRefresh: typeof lastRefresh !== 'undefined' ? lastRefresh : null }) %>
@@ -54,6 +54,11 @@
           (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
           (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
           (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
+        );
+        const hasUpgradeMovies = currentViewType === 'movies' && typeof upgradeMoviesByPeriod !== 'undefined' && upgradeMoviesByPeriod && (
+          (upgradeMoviesByPeriod.today && upgradeMoviesByPeriod.today.length > 0) ||
+          (upgradeMoviesByPeriod.yesterday && upgradeMoviesByPeriod.yesterday.length > 0) ||
+          (upgradeMoviesByPeriod.older && upgradeMoviesByPeriod.older.length > 0)
         );
         const hasExistingMovies = currentViewType === 'movies' && existingMoviesByPeriod && (
           (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
@@ -344,8 +349,9 @@
             <% 
               const mainTabs = [
                 { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
+                { key: 'upgrade', label: 'Upgrade Movies', count: (typeof upgradeMoviesByPeriod !== 'undefined' && upgradeMoviesByPeriod ? ((upgradeMoviesByPeriod.today?.length || 0) + (upgradeMoviesByPeriod.yesterday?.length || 0) + (upgradeMoviesByPeriod.older?.length || 0)) : 0), visible: hasUpgradeMovies },
+                { key: 'unmatched', label: 'Unmatched Movies', count: unmatchedItems?.length || 0, visible: hasUnmatched },
                 { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
-                { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatched },
               ];
               let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
               if (firstVisibleTab === -1) firstVisibleTab = 0;
@@ -473,9 +479,73 @@
           </div>
         <% } %>
 
+        <!-- Upgrade Movies Section -->
+        <% if (hasUpgradeMovies) { %>
+          <div id="main-section-upgrade" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
+            <!-- Time Period Tabs for Upgrade Movies - Modern Design -->
+            <div class="mb-4">
+              <nav class="flex gap-2" aria-label="Time Periods">
+                <% const upgradePeriods = [
+                  { key: 'today', label: 'Today', count: upgradeMoviesByPeriod.today?.length || 0 },
+                  { key: 'yesterday', label: 'Yesterday', count: upgradeMoviesByPeriod.yesterday?.length || 0 },
+                  { key: 'older', label: 'Older', count: upgradeMoviesByPeriod.older?.length || 0 }
+                ]; %>
+                <% 
+                  let firstUpgradeIndex = -1;
+                  upgradePeriods.forEach((period, index) => {
+                    if (period.count > 0 && firstUpgradeIndex === -1) {
+                      firstUpgradeIndex = index;
+                    }
+                  });
+                %>
+                <% upgradePeriods.forEach((period, index) => { %>
+                  <% if (period.count > 0) { %>
+                    <button 
+                      onclick="showUpgradeMoviesPeriod('<%= period.key %>')" 
+                      id="upgrade-tab-<%= period.key %>"
+                      class="<%= index === firstUpgradeIndex 
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
+                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
+                        px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
+                    >
+                      <span><%= period.label %></span>
+                      <span class="<%= index === firstUpgradeIndex 
+                        ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
+                        px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
+                        <%= period.count %>
+                      </span>
+                    </button>
+                  <% } %>
+                <% }); %>
+              </nav>
+            </div>
+
+            <!-- Upgrade Movies Time Period Sections -->
+            <% upgradePeriods.forEach((period, index) => { %>
+              <% if (upgradeMoviesByPeriod[period.key] && upgradeMoviesByPeriod[period.key].length > 0) { %>
+                <div id="upgrade-period-<%= period.key %>" class="upgrade-movies-section <%= index === firstUpgradeIndex ? '' : 'hidden' %>">
+                  <% upgradeMoviesByPeriod[period.key].forEach(movie => { %>
+                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
+                  <% }); %>
+                </div>
+              <% } %>
+            <% }); %>
+          </div>
+        <% } %>
+
+        <!-- Unmatched Items Section -->
+        <% if (hasUnmatched) { %>
+        <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
+          <% unmatchedItems.forEach(movie => { %>
+            <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
+          <% }); %>
+        </div>
+        <% } %>
+
         <!-- Existing Movies Section -->
         <% if (hasExistingMovies) { %>
-          <div id="main-section-existing" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
+          <div id="main-section-existing" class="main-section <%= firstVisibleTab === 3 ? '' : 'hidden' %>">
             <!-- Time Period Tabs for Existing Movies - Modern Design -->
             <div class="mb-4">
               <nav class="flex gap-2" aria-label="Time Periods">
@@ -952,6 +1022,40 @@
       }
     }
 
+    // Tab switching for Upgrade Movies
+    function showUpgradeMoviesPeriod(period) {
+      // Hide all upgrade movie sections
+      document.querySelectorAll('.upgrade-movies-section').forEach(section => {
+        section.classList.add('hidden');
+      });
+      // Show selected section
+      document.getElementById(`upgrade-period-${period}`).classList.remove('hidden');
+      
+      // Update tab styles - Modern design with background colors
+      document.querySelectorAll('[id^="upgrade-tab-"]').forEach(tab => {
+        tab.classList.remove('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+        tab.classList.add('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+        
+        // Update badge styles
+        const badge = tab.querySelector('span:last-child');
+        if (badge) {
+          badge.classList.remove('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+          badge.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        }
+      });
+      
+      const activeTab = document.getElementById(`upgrade-tab-${period}`);
+      activeTab.classList.remove('bg-gray-50', 'dark:bg-gray-800/50', 'text-gray-600', 'dark:text-gray-400', 'border-transparent');
+      activeTab.classList.add('bg-blue-100', 'dark:bg-blue-900/30', 'text-blue-700', 'dark:text-blue-300', 'border-2', 'border-blue-300', 'dark:border-blue-700');
+      
+      // Update active badge
+      const activeBadge = activeTab.querySelector('span:last-child');
+      if (activeBadge) {
+        activeBadge.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-600', 'dark:text-gray-400');
+        activeBadge.classList.add('bg-blue-200', 'dark:bg-blue-800', 'text-blue-800', 'dark:text-blue-200');
+      }
+    }
+
     // Tab switching for Existing Movies
     function showExistingMoviesPeriod(period) {
       // Hide all existing movie sections
@@ -1390,6 +1494,42 @@
           showToast('Error: ' + error.message, 'error');
         }
       });
+    }
+
+    async function reCategorizeItem(rssItemId, targetType) {
+      const targetLabel = targetType === 'tv' ? 'TV Shows' : 'Movies';
+      const currentLabel = targetType === 'tv' ? 'Movies' : 'TV Shows';
+      
+      showConfirm(
+        `Move this item from ${currentLabel} to ${targetLabel}? This will re-categorize the release and it will appear in the ${targetLabel} section after the next sync & match.`,
+        async () => {
+          try {
+            const res = await fetch(`/data/rss/re-categorize/${rssItemId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ targetType }),
+            });
+            
+            if (!res.ok) {
+              const errorText = await res.text();
+              throw new Error(`HTTP ${res.status}: ${errorText || res.statusText}`);
+            }
+            
+            const data = await res.json();
+            
+            if (data.success) {
+              showToast(`Item re-categorized to ${targetLabel}. Please run "Sync & Match" to see it in the ${targetLabel} section.`, 'success');
+              // Optionally reload the page after a short delay
+              setTimeout(() => window.location.reload(), 1500);
+            } else {
+              throw new Error(data.error || 'Unknown error');
+            }
+          } catch (error) {
+            console.error('Re-categorize error:', error);
+            showToast('Error re-categorizing item: ' + (error.message || 'Unknown error'), 'error');
+          }
+        }
+      );
     }
 
     async function ignoreRelease(id) {

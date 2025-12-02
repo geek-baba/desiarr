@@ -23,18 +23,47 @@ export interface TvMatchingStats {
 }
 
 /**
- * Parse TV show title to extract show name and season number
+ * Parse TV show title to extract show name, season number, and year
  * Examples:
- *   "Show Name S01" -> { showName: "Show Name", season: 1 }
- *   "Show Name Season 1" -> { showName: "Show Name", season: 1 }
- *   "Show Name S1E1" -> { showName: "Show Name", season: 1 }
+ *   "Show Name 2001 S01" -> { showName: "Show Name", season: 1, year: 2001 }
+ *   "Show Name Season 1" -> { showName: "Show Name", season: 1, year: null }
+ *   "Show Name S1E1" -> { showName: "Show Name", season: 1, year: null }
+ *   "Amrutham 2001 S01E01" -> { showName: "Amrutham", season: 1, year: 2001 }
  */
-function parseTvTitle(title: string): { showName: string; season: number | null } {
+export function parseTvTitle(title: string): { showName: string; season: number | null; year: number | null } {
   const normalized = title.trim();
   
-  // First, normalize dots to spaces for better matching (common in release names)
-  // Replace dots with spaces, but preserve common patterns like "S03", "S01E01", etc.
-  const normalizedForParsing = normalized.replace(/\./g, ' ');
+  // First, extract year if present (before extracting season)
+  // Look for year patterns: (2001), [2001], 2001, or standalone 2001
+  let year: number | null = null;
+  let titleWithoutYear = normalized;
+  
+  // Try to find year in parentheses or brackets first
+  const yearInParens = normalized.match(/[\(\[](19|20)\d{2}[\)\]]/);
+  if (yearInParens) {
+    year = parseInt(yearInParens[0].replace(/[\(\)\[\]]/g, ''), 10);
+    titleWithoutYear = normalized.replace(/[\(\[](19|20)\d{2}[\)\]]/g, ' ').trim();
+  } else {
+    // Try to find standalone year (4 digits, typically 19xx or 20xx)
+    const yearMatch = normalized.match(/\b(19|20)\d{2}\b/);
+    if (yearMatch) {
+      year = parseInt(yearMatch[0], 10);
+      // Remove the year from title, but be careful not to remove season numbers
+      // Only remove if it's clearly a year (not part of S01, E01, etc.)
+      const yearIndex = normalized.indexOf(yearMatch[0]);
+      const beforeYear = normalized.substring(0, yearIndex);
+      const afterYear = normalized.substring(yearIndex + 4);
+      // Check if year is surrounded by spaces or at start/end (not part of other numbers)
+      if (yearIndex === 0 || /\s/.test(normalized[yearIndex - 1])) {
+        if (yearIndex + 4 === normalized.length || /\s/.test(normalized[yearIndex + 4])) {
+          titleWithoutYear = (beforeYear + ' ' + afterYear).trim();
+        }
+      }
+    }
+  }
+  
+  // Normalize dots to spaces for better matching (common in release names)
+  const normalizedForParsing = titleWithoutYear.replace(/\./g, ' ');
   
   // Try to match patterns like "Show Name S01", "Show Name Season 1", "Show Name S1E1"
   // Also handles dot-separated formats like "The.Family.Man.S03"
@@ -48,19 +77,33 @@ function parseTvTitle(title: string): { showName: string; season: number | null 
     const match = normalizedForParsing.match(pattern);
     if (match) {
       // Clean up the show name - replace dots/spaces with single spaces, trim
-      const showName = match[1].replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+      let showName = match[1].replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+      // Remove any remaining year patterns from show name (in case year wasn't extracted earlier)
+      showName = showName.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '').trim();
+      showName = showName.replace(/\b(19|20)\d{2}\b/g, '').trim();
+      showName = showName.replace(/\s+/g, ' ').trim();
+      
       return {
         showName: showName,
         season: parseInt(match[2], 10),
+        year: year,
       };
     }
   }
   
   // If no season pattern found, try to clean up the title and return as show name
-  const cleanedTitle = normalized.replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let cleanedTitle = normalized.replace(/[\.]+/g, ' ').replace(/\s+/g, ' ').trim();
+  // Remove year patterns if year was extracted
+  if (year) {
+    cleanedTitle = cleanedTitle.replace(/[\(\[](19|20)\d{2}[\)\]]/g, '').trim();
+    cleanedTitle = cleanedTitle.replace(/\b(19|20)\d{2}\b/g, '').trim();
+    cleanedTitle = cleanedTitle.replace(/\s+/g, ' ').trim();
+  }
+  
   return {
     showName: cleanedTitle,
     season: null,
+    year: year,
   };
 }
 
@@ -304,19 +347,31 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
     const tvFeeds = feedsModel.getByType('tv');
     const tvFeedIds = tvFeeds.map(f => f.id!).filter((id): id is number => id !== undefined);
     
-    if (tvFeedIds.length === 0) {
-      console.log('No TV feeds configured. Skipping TV matching engine.');
+    // Get all RSS items and filter by override or feed type
+    const allRssItems = getSyncedRssItems();
+    
+    // Filter for TV items: feed_type_override = 'tv' OR (no override AND feed is tv)
+    const tvRssItems = allRssItems.filter(item => {
+      if (item.feed_type_override === 'tv') {
+        return true; // Explicitly overridden to TV
+      }
+      if (item.feed_type_override === 'movie') {
+        return false; // Explicitly overridden to movie, skip
+      }
+      // No override: check if feed is TV type
+      return tvFeedIds.includes(item.feed_id);
+    });
+    
+    stats.totalRssItems = tvRssItems.length;
+    
+    if (tvRssItems.length === 0 && tvFeedIds.length === 0) {
+      console.log('No TV feeds configured and no TV overrides. Skipping TV matching engine.');
       syncProgress.update('No TV feeds configured', 0, 0);
       if (!nestedInFullSync) {
         syncProgress.complete();
       }
       return stats;
     }
-
-    // Get all RSS items from TV feeds
-    const allRssItems = getSyncedRssItems();
-    const tvRssItems = allRssItems.filter(item => tvFeedIds.includes(item.feed_id));
-    stats.totalRssItems = tvRssItems.length;
     const ignoredShowKeys: Set<string> = ignoredShowsModel.getAllKeys();
 
     console.log(`[TV MATCHING ENGINE] Processing ${tvRssItems.length} TV RSS items from ${tvFeedIds.length} feed(s)...`);
@@ -344,9 +399,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
 
-        // Parse show name and season from title
-        let { showName, season } = parseTvTitle(item.title);
-        console.log(`    Parsed: Show="${showName}", Season=${season !== null ? season : 'unknown'}`);
+        // Parse show name and season from title (needed for both manual and auto paths)
+        let { showName, season, year } = parseTvTitle(item.title);
+        console.log(`    Parsed: Show="${showName}", Season=${season !== null ? season : 'unknown'}, Year=${year || 'none'}`);
 
         // Get feed name to check if it's BWT TVShows
         const feed = feedsModel.getAll().find(f => f.id === item.feed_id);
@@ -368,9 +423,10 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
         }
 
-        // Step 1: First try to match with Sonarr by show name (without year)
-        console.log(`    Searching Sonarr for: "${showName}"`);
-        let sonarrShow = findSonarrShowByName(showName);
+        // Check if this item has manually overridden IDs - if so, use them directly
+        const hasManualTvdbId = item.tvdb_id_manual && item.tvdb_id;
+        const hasManualTmdbId = item.tmdb_id_manual && item.tmdb_id;
+        
         let enrichment: {
           tvdbId: number | null;
           tvdbSlug: string | null;
@@ -379,54 +435,133 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           tvdbPosterUrl: string | null;
           tmdbPosterUrl: string | null;
         };
+        let sonarrShow: any = null; // Will be set if found by name search
         
-        if (sonarrShow) {
-          console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
+        if (hasManualTvdbId || hasManualTmdbId) {
+          console.log(`    ⚠ Using manually overridden IDs (TVDB: ${item.tvdb_id || 'N/A'}, TMDB: ${item.tmdb_id || 'N/A'})`);
           
-          // Use IDs from Sonarr (slug will be null, we'll need to fetch it if needed)
+          // Start with manually overridden IDs
           enrichment = {
-            tvdbId: sonarrShow.tvdb_id || null,
-            tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
-            tmdbId: sonarrShow.tmdb_id || null,
-            imdbId: sonarrShow.imdb_id || null,
-            tvdbPosterUrl: null, // Will extract from images if available
-            tmdbPosterUrl: null, // Will extract from images if available
+            tvdbId: hasManualTvdbId ? item.tvdb_id : null,
+            tvdbSlug: null,
+            tmdbId: hasManualTmdbId ? item.tmdb_id : null,
+            imdbId: item.imdb_id || null,
+            tvdbPosterUrl: null,
+            tmdbPosterUrl: null,
           };
           
-          // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+          // Fetch extended info from TVDB if we have a TVDB ID
           if (enrichment.tvdbId && tvdbApiKey) {
             try {
               const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
               if (tvdbExtended) {
                 enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+                
+                // Extract poster URL
+                const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
+                if (artwork && Array.isArray(artwork)) {
+                  const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster');
+                  if (poster) {
+                    enrichment.tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+                  }
+                }
+                
+                // Extract TMDB/IMDB IDs from TVDB if not already set
+                const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids;
+                if (remoteIds && Array.isArray(remoteIds)) {
+                  if (!enrichment.tmdbId) {
+                    const tmdbRemote = remoteIds.find((r: any) => 
+                      r.sourceName === 'TheMovieDB' || r.source_name === 'TheMovieDB' || r.source === 'themoviedb'
+                    );
+                    if (tmdbRemote && tmdbRemote.id) {
+                      enrichment.tmdbId = parseInt(String(tmdbRemote.id), 10);
+                    }
+                  }
+                  if (!enrichment.imdbId) {
+                    const imdbRemote = remoteIds.find((r: any) => 
+                      r.sourceName === 'IMDB' || r.source_name === 'IMDB' || r.source === 'imdb'
+                    );
+                    if (imdbRemote && imdbRemote.id) {
+                      enrichment.imdbId = String(imdbRemote.id);
+                    }
+                  }
+                }
               }
             } catch (error) {
-              // Silently fail, slug is optional
+              console.log(`    ⚠ Failed to fetch TVDB extended info for ID ${enrichment.tvdbId}:`, error);
             }
           }
           
-          // Extract poster URLs from Sonarr images
-          if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
-            const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
-            if (poster) {
-              enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
-              enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+          // Fetch TMDB poster if we have a TMDB ID
+          if (enrichment.tmdbId && tmdbApiKey) {
+            try {
+              const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
+              if (tmdbShow && tmdbShow.poster_path) {
+                enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+              }
+              if (tmdbShow && tmdbShow.external_ids?.imdb_id && !enrichment.imdbId) {
+                enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+              }
+            } catch (error) {
+              console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
             }
           }
           
-          console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+          console.log(`    ✓ Using manual override IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
         } else {
-          console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
+          // No manual overrides - proceed with normal matching flow
+          // Step 1: First try to match with Sonarr by show name (without year)
+          console.log(`    Searching Sonarr for: "${showName}"`);
+          sonarrShow = findSonarrShowByName(showName);
           
-          // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
-          enrichment = await enrichTvShow(
-            showName,
-            season,
-            tvdbApiKey,
-            tmdbApiKey,
-            omdbApiKey,
-            braveApiKey
-          );
+          if (sonarrShow) {
+            console.log(`    ✓ Found in Sonarr: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
+            
+            // Use IDs from Sonarr (slug will be null, we'll need to fetch it if needed)
+            enrichment = {
+              tvdbId: sonarrShow.tvdb_id || null,
+              tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
+              tmdbId: sonarrShow.tmdb_id || null,
+              imdbId: sonarrShow.imdb_id || null,
+              tvdbPosterUrl: null, // Will extract from images if available
+              tmdbPosterUrl: null, // Will extract from images if available
+            };
+            
+            // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+            if (enrichment.tvdbId && tvdbApiKey) {
+              try {
+                const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
+                if (tvdbExtended) {
+                  enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
+                }
+              } catch (error) {
+                // Silently fail, slug is optional
+              }
+            }
+            
+            // Extract poster URLs from Sonarr images
+            if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
+              const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
+              if (poster) {
+                enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
+                enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+              }
+            }
+            
+            console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+          } else {
+            console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
+            
+            // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
+            enrichment = await enrichTvShow(
+              showName,
+              season,
+              tvdbApiKey,
+              tmdbApiKey,
+              omdbApiKey,
+              braveApiKey
+            );
+          }
         }
 
         // Check if show/season exists in Sonarr (using the IDs we have or the show we found by name)

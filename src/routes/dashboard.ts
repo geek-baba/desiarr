@@ -13,9 +13,104 @@ import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import { buildShowKey, ignoredShowsModel } from '../models/ignoredShows';
+import { TMDBClient } from '../tmdb/client';
 import db from '../db';
 
 const router = Router();
+
+// Major Indian languages (ISO 639-1 codes)
+const MAJOR_INDIAN_LANGUAGES = new Set(['hi', 'bn', 'mr', 'te', 'ta', 'gu', 'kn', 'ml', 'pa']);
+
+// ISO 639-1 to full language name mapping
+const LANGUAGE_NAMES: Record<string, string> = {
+  'hi': 'Hindi',
+  'bn': 'Bengali',
+  'mr': 'Marathi',
+  'te': 'Telugu',
+  'ta': 'Tamil',
+  'gu': 'Gujarati',
+  'kn': 'Kannada',
+  'ml': 'Malayalam',
+  'pa': 'Punjabi',
+  'en': 'English',
+  'es': 'Spanish',
+  'fr': 'French',
+  'de': 'German',
+  'it': 'Italian',
+  'pt': 'Portuguese',
+  'ru': 'Russian',
+  'ja': 'Japanese',
+  'ko': 'Korean',
+  'zh': 'Chinese',
+  'ar': 'Arabic',
+};
+
+// Full language name to ISO code mapping (for Radarr which stores full names)
+const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
+  'Hindi': 'hi',
+  'Bengali': 'bn',
+  'Marathi': 'mr',
+  'Telugu': 'te',
+  'Tamil': 'ta',
+  'Gujarati': 'gu',
+  'Kannada': 'kn',
+  'Malayalam': 'ml',
+  'Punjabi': 'pa',
+  'English': 'en',
+  'Spanish': 'es',
+  'French': 'fr',
+  'German': 'de',
+  'Italian': 'it',
+  'Portuguese': 'pt',
+  'Russian': 'ru',
+  'Japanese': 'ja',
+  'Korean': 'ko',
+  'Chinese': 'zh',
+  'Arabic': 'ar',
+};
+
+/**
+ * Get full language name from ISO code or full name
+ */
+function getLanguageName(code: string | null | undefined): string | undefined {
+  if (!code) return undefined;
+  const lowerCode = code.toLowerCase();
+  // First try ISO code mapping
+  if (LANGUAGE_NAMES[lowerCode]) {
+    return LANGUAGE_NAMES[lowerCode];
+  }
+  // If it's already a full name, return it capitalized properly
+  const capitalized = code.charAt(0).toUpperCase() + code.slice(1).toLowerCase();
+  if (LANGUAGE_NAME_TO_CODE[capitalized]) {
+    return capitalized;
+  }
+  // Fallback to uppercase
+  return code.toUpperCase();
+}
+
+/**
+ * Get ISO code from language (handles both ISO codes and full names)
+ */
+function getLanguageCode(language: string | null | undefined): string | undefined {
+  if (!language) return undefined;
+  const lowerLang = language.toLowerCase();
+  // If it's already an ISO code
+  if (MAJOR_INDIAN_LANGUAGES.has(lowerLang) || LANGUAGE_NAMES[lowerLang]) {
+    return lowerLang;
+  }
+  // Try full name mapping
+  const capitalized = language.charAt(0).toUpperCase() + language.slice(1).toLowerCase();
+  return LANGUAGE_NAME_TO_CODE[capitalized] || lowerLang;
+}
+
+/**
+ * Check if language is a major Indian language (handles both ISO codes and full names)
+ */
+function isIndianLanguage(code: string | null | undefined): boolean {
+  if (!code) return false;
+  const isoCode = getLanguageCode(code);
+  return isoCode ? MAJOR_INDIAN_LANGUAGES.has(isoCode) : false;
+}
 
 function sanitizeTitle(value: string): string {
   return value
@@ -147,10 +242,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
     // ========== PROCESS MOVIES (same logic as /movies route) ==========
     const allMovieReleases = db.prepare(`
-      SELECT r.* FROM movie_releases r
+      SELECT r.*, rss.id as rss_item_id, rss.feed_type_override
+      FROM movie_releases r
       INNER JOIN rss_feed_items rss ON r.guid = rss.guid
       INNER JOIN rss_feeds f ON rss.feed_id = f.id
-      WHERE f.feed_type = 'movie'
+      WHERE f.feed_type = 'movie' OR rss.feed_type_override = 'movie'
       ORDER BY r.published_at DESC
     `).all() as any[];
     const movieFeeds = feedsModel.getAll().filter(f => f.feed_type === 'movie');
@@ -225,7 +321,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       posterUrl?: string;
       imdbId?: string;
       originalLanguage?: string;
+      originalLanguageCode?: string;
+      isIndianLanguage?: boolean;
       radarrInfo?: any;
+      rssItemId?: number | null;
       add: any[];
       existing: any[];
       upgrade: any[];
@@ -238,14 +337,51 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                             releases.find(r => r.tmdb_id) || 
                             releases[0];
       
-      if (primaryRelease.tmdb_id && !primaryRelease.tmdb_title) {
-        const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
-        if (syncedMovie && syncedMovie.title) {
-          primaryRelease.tmdb_title = syncedMovie.title;
+      // Fetch title and language from TMDB API if needed (for matched movies)
+      let tmdbMovieData: { title?: string; original_language?: string } | null = null;
+      
+      if (primaryRelease.tmdb_id) {
+        // First check if we already have tmdb_title and tmdb_original_language in release data
+        if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
+          // Try to get from synced Radarr data first (as a cache)
+          const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
+          if (syncedMovie && syncedMovie.title) {
+            primaryRelease.tmdb_title = syncedMovie.title;
+          }
+          
+          // If still missing title or language, fetch from TMDB API
+          if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
+            const allSettings = settingsModel.getAll();
+            const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+            if (tmdbApiKey) {
+              try {
+                const tmdbClient = new TMDBClient();
+                tmdbClient.setApiKey(tmdbApiKey);
+                tmdbMovieData = await tmdbClient.getMovie(primaryRelease.tmdb_id);
+                if (tmdbMovieData) {
+                  if (tmdbMovieData.title && !primaryRelease.tmdb_title) {
+                    primaryRelease.tmdb_title = tmdbMovieData.title;
+                    // Update the database for future use
+                    db.prepare('UPDATE movie_releases SET tmdb_title = ? WHERE tmdb_id = ?')
+                      .run(tmdbMovieData.title, primaryRelease.tmdb_id);
+                  }
+                  if (tmdbMovieData.original_language && !primaryRelease.tmdb_original_language) {
+                    primaryRelease.tmdb_original_language = tmdbMovieData.original_language;
+                    // Update the database for future use
+                    db.prepare('UPDATE movie_releases SET tmdb_original_language = ? WHERE tmdb_id = ?')
+                      .run(tmdbMovieData.original_language, primaryRelease.tmdb_id);
+                  }
+                }
+              } catch (error) {
+                console.error(`Error fetching TMDB movie ${primaryRelease.tmdb_id}:`, error);
+              }
+            }
+          }
         }
       }
       
       if (primaryRelease.radarr_movie_id && !primaryRelease.radarr_movie_title) {
+        // Try to get title from synced Radarr data
         const syncedMovie = getSyncedRadarrMovieByRadarrId(primaryRelease.radarr_movie_id);
         if (syncedMovie && syncedMovie.title) {
           primaryRelease.radarr_movie_title = syncedMovie.title;
@@ -265,7 +401,31 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         }
       }
       
-      const movieTitle = buildDisplayTitle(primaryRelease);
+      // Build title - prefer proper titles, but fall back to extracted clean name if title looks like a filename
+      // IMPORTANT: For unmatched movies (no tmdb_id/radarr_movie_id), always use the filename as-is
+      let movieTitle: string;
+      const builtTitle = buildDisplayTitle(primaryRelease);
+      
+      // For unmatched movies, always use the filename (don't try to clean it up)
+      if (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id) {
+        movieTitle = builtTitle;
+      } else {
+        // For matched movies, check if title looks like a filename
+        const looksLikeFilename = /(1080p|720p|480p|2160p|4k|uhd|x264|x265|h\.?264|h\.?265|hevc|web[- ]?dl|webrip|bluray|dvd|ddp|dd\+|ac3|atmos|dts|\.mkv|\.mp4)/i.test(builtTitle);
+        
+        if (looksLikeFilename) {
+          // Extract clean name from release title for matched movies
+          const cleanName = extractMovieNameAndYear(primaryRelease.normalized_title, primaryRelease.year);
+          // Capitalize first letter of each word
+          movieTitle = cleanName
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        } else {
+          // Use the proper title from TMDB/Radarr
+          movieTitle = builtTitle;
+        }
+      }
 
       let hasRadarrMatch = releases.some(r => Boolean(r.radarr_movie_id));
       let radarrMovieId: number | undefined = primaryRelease.radarr_movie_id;
@@ -329,6 +489,26 @@ router.get('/dashboard', async (req: Request, res: Response) => {
             }
             
             if (radarrInfo) {
+              // Extract languages from mediaInfo if available
+              if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioLanguages) {
+                radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
+              } else if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioCodec) {
+                // Try to infer from audio codec metadata
+                radarrInfo.languages = null;
+              }
+
+              // Extract quality from Radarr API
+              if (syncedRadarrMovie.movie_file) {
+                try {
+                  const movieFile = JSON.parse(syncedRadarrMovie.movie_file);
+                  if (movieFile.quality?.quality?.name) {
+                    radarrInfo.quality = movieFile.quality.quality.name;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
+                }
+              }
+
               const releaseWithHistory = releases.find(r => r.radarr_history);
               if (releaseWithHistory && releaseWithHistory.radarr_history) {
                 try {
@@ -344,32 +524,66 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                         new Date(b.date).getTime() - new Date(a.date).getTime()
                       );
                       const lastDownload = downloadEvents[0];
+                      
+                      // CRITICAL: Preserve lastDownload.sourceTitle as the most important field
                       radarrInfo.lastDownload = {
                         sourceTitle: lastDownload.sourceTitle || null,
                         date: lastDownload.date || null,
                         releaseGroup: lastDownload.data?.releaseGroup || null,
                       };
                       
-                      if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
-                          !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
-                          !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
-                          !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
+                      // Extract source type from lastDownload.sourceTitle FIRST (highest priority)
+                      if (lastDownload.sourceTitle) {
                         try {
                           const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
+                          // Source type from lastDownload is highest priority
+                          radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
+                          
+                          // For WEB-DL/WEBRip, check if there's a streaming service in the filename
+                          if ((radarrInfo.sourceTag === 'WEB-DL' || radarrInfo.sourceTag === 'WEBRip') && lastDownload.sourceTitle) {
+                            const upperTitle = lastDownload.sourceTitle.toUpperCase();
+                            // Check for streaming services in filename
+                            if (/AMZN|AMAZON|PRIME/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'AMZN';
+                            } else if (/NF|NETFLIX/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'NF';
+                            } else if (/JC|JIOCINEMA/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'JC';
+                            } else if (/DSNP|DISNEY|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'DSNP';
+                            } else if (/ZEE5/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'ZEE5';
+                            } else if (/HS|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'HS';
+                            } else if (/\bSS\b/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'SS';
+                            }
+                          }
+                          
+                          // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
                             radarrInfo.resolution = parsed.resolution;
                           }
                           if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
                             radarrInfo.codec = parsed.codec;
                           }
-                          if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
-                            radarrInfo.sourceTag = parsed.sourceTag;
-                          }
                           if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
                             radarrInfo.audio = parsed.audio;
                           }
                           if (!radarrInfo.sizeMb && parsed.sizeMb) {
                             radarrInfo.sizeMb = parsed.sizeMb;
+                          }
+                          // Extract languages from filename if not in mediaInfo
+                          if (!radarrInfo.languages && parsed.audioLanguages) {
+                            radarrInfo.languages = parsed.audioLanguages;
+                          }
+                          // Extract release group from filename if not in lastDownload.data
+                          if (!radarrInfo.lastDownload.releaseGroup) {
+                            // Try to extract from filename (usually at the end after a dash)
+                            const releaseGroupMatch = lastDownload.sourceTitle.match(/-([A-Z0-9]{2,8})$/i);
+                            if (releaseGroupMatch) {
+                              radarrInfo.lastDownload.releaseGroup = releaseGroupMatch[1];
+                            }
                           }
                         } catch (e) {
                           console.error('Error parsing lastDownload.sourceTitle:', e);
@@ -379,6 +593,18 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                   }
                 } catch (e) {
                   console.error('Error parsing radarr_history:', e);
+                }
+              }
+              
+              // If sourceTag is still OTHER or missing, try to extract from fileName
+              if ((!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') && radarrInfo.fileName) {
+                try {
+                  const parsed = parseReleaseFromTitle(radarrInfo.fileName);
+                  if (parsed.sourceTag && parsed.sourceTag !== 'OTHER') {
+                    radarrInfo.sourceTag = parsed.sourceTag;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
                 }
               }
             }
@@ -409,12 +635,31 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         }
       }
       
+      // Get RSS item ID from first release (for re-categorization)
+      const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
+      
+      // Get original language from TMDB ONLY (tmdb_original_language) - NEVER use Radarr language at movie level
+      // Radarr language should only be used in Radarr Data card
+      let originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
+      
+      // If we just fetched from TMDB API, use that language
+      if (!originalLanguageCode && tmdbMovieData?.original_language) {
+        originalLanguageCode = tmdbMovieData.original_language;
+      }
+      
+      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : undefined;
+      const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId,
         imdbId: imdbIdFromRelease,
+        originalLanguage: originalLanguageName,
+        originalLanguageCode: originalLanguageCode,
+        isIndianLanguage: isIndian,
+        rssItemId: rssItemId,
         radarrInfo,
         add,
         existing,
@@ -460,9 +705,9 @@ router.get('/dashboard', async (req: Request, res: Response) => {
               movieGroup.imdbId = syncedMovie.imdb_id;
             }
             
-            if (syncedMovie.original_language && !movieGroup.originalLanguage) {
-              movieGroup.originalLanguage = syncedMovie.original_language;
-            }
+            // DO NOT use Radarr language at movie level - only use TMDB language
+            // Radarr language should only appear in Radarr Data card
+            // Language is already set from tmdb_original_language in the initial movie group creation
             
             if (syncedMovie.tmdb_id && !movieGroup.tmdbId) {
               movieGroup.tmdbId = syncedMovie.tmdb_id;
@@ -477,6 +722,16 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
         if (releaseWithImdb?.imdb_id) {
           movieGroup.imdbId = releaseWithImdb.imdb_id;
+        }
+      }
+      
+      // Check for original language from release data (tmdb_original_language) if not already set
+      if (!movieGroup.originalLanguageCode) {
+        const releaseWithLanguage = groupReleases.find((r: any) => r.tmdb_original_language);
+        if (releaseWithLanguage?.tmdb_original_language) {
+          movieGroup.originalLanguageCode = releaseWithLanguage.tmdb_original_language;
+          movieGroup.originalLanguage = getLanguageName(releaseWithLanguage.tmdb_original_language);
+          movieGroup.isIndianLanguage = isIndianLanguage(releaseWithLanguage.tmdb_original_language);
         }
       }
       
@@ -539,6 +794,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     );
 
     const newMovies: typeof movieGroups = [];
+    const upgradeMovies: typeof movieGroups = [];
     const existingMovies: typeof movieGroups = [];
     const unmatchedMovies: typeof movieGroups = [];
 
@@ -556,6 +812,9 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
       if (!group.tmdbId && !group.radarrMovieId) {
         unmatchedMovies.push(group);
+      } else if (group.upgrade.length > 0 && (group.radarrMovieId || group.existing.length > 0)) {
+        // Movies with upgrades that are already in Radarr
+        upgradeMovies.push(group);
       } else if (group.radarrMovieId || group.existing.length > 0) {
         existingMovies.push(group);
       } else if (group.add.length > 0 || group.upgrade.length > 0) {
@@ -602,6 +861,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     };
 
     const newMoviesByPeriod = groupByTimePeriod(newMovies);
+    const upgradeMoviesByPeriod = groupByTimePeriod(upgradeMovies);
     const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
 
     // ========== PROCESS TV SHOWS (same logic as /tv route) ==========
@@ -649,6 +909,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       sonarrSeriesId?: number;
       sonarrSeriesTitle?: string;
       posterUrl?: string;
+      rssItemId?: number | null;
       newShows: any[];
       existingShows: any[];
       unmatched: any[];
@@ -689,6 +950,9 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       const tvdbSlug = primaryRelease.tvdb_slug;
       const tvdbUrl = getTvdbUrl(tvdbId, tvdbSlug, showName);
 
+      // Get RSS item ID from first release (for re-categorization)
+      const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
+
       showGroups.push({
         showKey,
         showName,
@@ -699,6 +963,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         sonarrSeriesId: primaryRelease.sonarr_series_id,
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
+        rssItemId: rssItemId,
         newShows,
         existingShows,
         unmatched,
@@ -799,9 +1064,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     
     // ========== RENDER COMBINED VIEW ==========
     res.render('dashboard', {
+      currentPage: 'dashboard',
       viewType: 'combined',
       // Movies data
       newMoviesByPeriod,
+      upgradeMoviesByPeriod,
       existingMoviesByPeriod,
       unmatchedItems: unmatchedMovies,
       // TV shows data
@@ -915,7 +1182,10 @@ router.get('/movies', async (req: Request, res: Response) => {
       posterUrl?: string;
       imdbId?: string;
       originalLanguage?: string;
+      originalLanguageCode?: string;
+      isIndianLanguage?: boolean;
       radarrInfo?: any;
+      rssItemId?: number | null;
       add: any[];
       existing: any[];
       upgrade: any[];
@@ -930,13 +1200,47 @@ router.get('/movies', async (req: Request, res: Response) => {
                             releases.find(r => r.tmdb_id) || 
                             releases[0];
       
-      // Ensure we have the proper title from synced Radarr data if we have IDs
+      // Ensure we have the proper title and language from TMDB (not Radarr)
       // This ensures we use the actual movie title instead of the release filename
-      if (primaryRelease.tmdb_id && !primaryRelease.tmdb_title) {
-        // Get title from synced Radarr data
-        const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
-        if (syncedMovie && syncedMovie.title) {
-          primaryRelease.tmdb_title = syncedMovie.title;
+      let tmdbMovieData: { title?: string; original_language?: string } | null = null;
+      
+      if (primaryRelease.tmdb_id) {
+        // First check if we already have tmdb_title and tmdb_original_language in release data
+        if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
+          // Try to get from synced Radarr data first (as a cache)
+          const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
+          if (syncedMovie && syncedMovie.title) {
+            primaryRelease.tmdb_title = syncedMovie.title;
+          }
+          
+          // If still missing title or language, fetch from TMDB API
+          if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
+            const allSettings = settingsModel.getAll();
+            const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+            if (tmdbApiKey) {
+              try {
+                const tmdbClient = new TMDBClient();
+                tmdbClient.setApiKey(tmdbApiKey);
+                tmdbMovieData = await tmdbClient.getMovie(primaryRelease.tmdb_id);
+                if (tmdbMovieData) {
+                  if (tmdbMovieData.title && !primaryRelease.tmdb_title) {
+                    primaryRelease.tmdb_title = tmdbMovieData.title;
+                    // Update the database for future use
+                    db.prepare('UPDATE movie_releases SET tmdb_title = ? WHERE tmdb_id = ?')
+                      .run(tmdbMovieData.title, primaryRelease.tmdb_id);
+                  }
+                  if (tmdbMovieData.original_language && !primaryRelease.tmdb_original_language) {
+                    primaryRelease.tmdb_original_language = tmdbMovieData.original_language;
+                    // Update the database for future use
+                    db.prepare('UPDATE movie_releases SET tmdb_original_language = ? WHERE tmdb_id = ?')
+                      .run(tmdbMovieData.original_language, primaryRelease.tmdb_id);
+                  }
+                }
+              } catch (error) {
+                console.error(`Error fetching TMDB movie ${primaryRelease.tmdb_id}:`, error);
+              }
+            }
+          }
         }
       }
       
@@ -962,7 +1266,31 @@ router.get('/movies', async (req: Request, res: Response) => {
         }
       }
       
-      const movieTitle = buildDisplayTitle(primaryRelease);
+      // Build title - prefer proper titles, but fall back to extracted clean name if title looks like a filename
+      // IMPORTANT: For unmatched movies (no tmdb_id/radarr_movie_id), always use the filename as-is
+      let movieTitle: string;
+      const builtTitle = buildDisplayTitle(primaryRelease);
+      
+      // For unmatched movies, always use the filename (don't try to clean it up)
+      if (!primaryRelease.tmdb_id && !primaryRelease.radarr_movie_id) {
+        movieTitle = builtTitle;
+      } else {
+        // For matched movies, check if title looks like a filename
+        const looksLikeFilename = /(1080p|720p|480p|2160p|4k|uhd|x264|x265|h\.?264|h\.?265|hevc|web[- ]?dl|webrip|bluray|dvd|ddp|dd\+|ac3|atmos|dts|\.mkv|\.mp4)/i.test(builtTitle);
+        
+        if (looksLikeFilename) {
+          // Extract clean name from release title for matched movies
+          const cleanName = extractMovieNameAndYear(primaryRelease.normalized_title, primaryRelease.year);
+          // Capitalize first letter of each word
+          movieTitle = cleanName
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        } else {
+          // Use the proper title from TMDB/Radarr
+          movieTitle = builtTitle;
+        }
+      }
 
       // Check if movie is in Radarr by checking synced Radarr data (even if releases don't have radarr_movie_id set)
       // IMPORTANT: Do this BEFORE categorizing releases to ensure proper categorization
@@ -1042,6 +1370,30 @@ router.get('/movies', async (req: Request, res: Response) => {
             // Get last download from history stored in releases
             // Only if radarrInfo was successfully created
             if (radarrInfo) {
+              // Extract languages from mediaInfo if available
+              if (radarrInfo.mediaInfo && radarrInfo.mediaInfo.audioLanguages) {
+                // Ensure it's an array
+                if (Array.isArray(radarrInfo.mediaInfo.audioLanguages)) {
+                  radarrInfo.languages = radarrInfo.mediaInfo.audioLanguages;
+                } else {
+                  radarrInfo.languages = null;
+                }
+              } else {
+                radarrInfo.languages = null;
+              }
+
+              // Extract quality from Radarr API
+              if (syncedRadarrMovie.movie_file) {
+                try {
+                  const movieFile = JSON.parse(syncedRadarrMovie.movie_file);
+                  if (movieFile.quality?.quality?.name) {
+                    radarrInfo.quality = movieFile.quality.quality.name;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
+                }
+              }
+
               const releaseWithHistory = releases.find(r => r.radarr_history);
               if (releaseWithHistory && releaseWithHistory.radarr_history) {
                 try {
@@ -1059,34 +1411,66 @@ router.get('/movies', async (req: Request, res: Response) => {
                         new Date(b.date).getTime() - new Date(a.date).getTime()
                       );
                       const lastDownload = downloadEvents[0];
+                      
+                      // CRITICAL: Preserve lastDownload.sourceTitle as the most important field
                       radarrInfo.lastDownload = {
                         sourceTitle: lastDownload.sourceTitle || null,
                         date: lastDownload.date || null,
                         releaseGroup: lastDownload.data?.releaseGroup || null,
                       };
                       
-                      // Parse lastDownload.sourceTitle to extract metadata if missing
-                      if (lastDownload.sourceTitle && (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN' || 
-                          !radarrInfo.codec || radarrInfo.codec === 'UNKNOWN' || 
-                          !radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER' ||
-                          !radarrInfo.audio || radarrInfo.audio === 'Unknown')) {
+                      // Extract source type from lastDownload.sourceTitle FIRST (highest priority)
+                      if (lastDownload.sourceTitle) {
                         try {
                           const parsed = parseReleaseFromTitle(lastDownload.sourceTitle);
-                          // Only use parsed values if current values are missing/unknown
+                          // Source type from lastDownload is highest priority
+                          radarrInfo.sourceTag = parsed.sourceTag || radarrInfo.sourceTag;
+                          
+                          // For WEB-DL/WEBRip, check if there's a streaming service in the filename
+                          if ((radarrInfo.sourceTag === 'WEB-DL' || radarrInfo.sourceTag === 'WEBRip') && lastDownload.sourceTitle) {
+                            const upperTitle = lastDownload.sourceTitle.toUpperCase();
+                            // Check for streaming services in filename
+                            if (/AMZN|AMAZON|PRIME/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'AMZN';
+                            } else if (/NF|NETFLIX/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'NF';
+                            } else if (/JC|JIOCINEMA/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'JC';
+                            } else if (/DSNP|DISNEY|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'DSNP';
+                            } else if (/ZEE5/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'ZEE5';
+                            } else if (/HS|HOTSTAR/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'HS';
+                            } else if (/\bSS\b/gi.test(upperTitle)) {
+                              radarrInfo.sourceSite = 'SS';
+                            }
+                          }
+                          
+                          // Fill in missing metadata from lastDownload
                           if (!radarrInfo.resolution || radarrInfo.resolution === 'UNKNOWN') {
                             radarrInfo.resolution = parsed.resolution;
                           }
                           if (!radarrInfo.codec || radarrInfo.codec === 'UNKNOWN') {
                             radarrInfo.codec = parsed.codec;
                           }
-                          if (!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') {
-                            radarrInfo.sourceTag = parsed.sourceTag;
-                          }
                           if (!radarrInfo.audio || radarrInfo.audio === 'Unknown') {
                             radarrInfo.audio = parsed.audio;
                           }
                           if (!radarrInfo.sizeMb && parsed.sizeMb) {
                             radarrInfo.sizeMb = parsed.sizeMb;
+                          }
+                          // Extract languages from filename if not in mediaInfo
+                          if (!radarrInfo.languages && parsed.audioLanguages) {
+                            radarrInfo.languages = parsed.audioLanguages;
+                          }
+                          // Extract release group from filename if not in lastDownload.data
+                          if (!radarrInfo.lastDownload.releaseGroup) {
+                            // Try to extract from filename (usually at the end after a dash)
+                            const releaseGroupMatch = lastDownload.sourceTitle.match(/-([A-Z0-9]{2,8})$/i);
+                            if (releaseGroupMatch) {
+                              radarrInfo.lastDownload.releaseGroup = releaseGroupMatch[1];
+                            }
                           }
                         } catch (e) {
                           console.error('Error parsing lastDownload.sourceTitle:', e);
@@ -1096,6 +1480,18 @@ router.get('/movies', async (req: Request, res: Response) => {
                   }
                 } catch (e) {
                   console.error('Error parsing radarr_history:', e);
+                }
+              }
+              
+              // If sourceTag is still OTHER or missing, try to extract from fileName
+              if ((!radarrInfo.sourceTag || radarrInfo.sourceTag === 'OTHER') && radarrInfo.fileName) {
+                try {
+                  const parsed = parseReleaseFromTitle(radarrInfo.fileName);
+                  if (parsed.sourceTag && parsed.sourceTag !== 'OTHER') {
+                    radarrInfo.sourceTag = parsed.sourceTag;
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
                 }
               }
             }
@@ -1132,12 +1528,28 @@ router.get('/movies', async (req: Request, res: Response) => {
         }
       }
       
+      // Get original language from TMDB ONLY (tmdb_original_language) - NEVER use Radarr language at movie level
+      // Radarr language should only be used in Radarr Data card
+      let originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
+      
+      // If we just fetched from TMDB API, use that language
+      if (!originalLanguageCode && tmdbMovieData?.original_language) {
+        originalLanguageCode = tmdbMovieData.original_language;
+      }
+      
+      const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : undefined;
+      const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
+      
       movieGroups.push({
         movieKey,
         movieTitle,
         tmdbId: primaryRelease.tmdb_id,
         radarrMovieId: finalRadarrMovieId, // Use the verified Radarr movie ID
         imdbId: imdbIdFromRelease, // Add IMDB ID from releases
+        originalLanguage: originalLanguageName || undefined,
+        originalLanguageCode: originalLanguageCode,
+        isIndianLanguage: isIndian,
+        rssItemId: releases.find(r => r.rss_item_id)?.rss_item_id || null,
         radarrInfo, // Add Radarr info to the movie group
         add,
         existing,
@@ -1190,10 +1602,9 @@ router.get('/movies', async (req: Request, res: Response) => {
               movieGroup.imdbId = syncedMovie.imdb_id;
             }
             
-            // Get original language from synced data
-            if (syncedMovie.original_language && !movieGroup.originalLanguage) {
-              movieGroup.originalLanguage = syncedMovie.original_language;
-            }
+            // DO NOT use Radarr language at movie level - only use TMDB language
+            // Radarr language should only appear in Radarr Data card
+            // Language is already set from tmdb_original_language in the initial movie group creation
             
             // Ensure TMDB ID is set
             if (syncedMovie.tmdb_id && !movieGroup.tmdbId) {
@@ -1211,6 +1622,16 @@ router.get('/movies', async (req: Request, res: Response) => {
         const releaseWithImdb = groupReleases.find((r: any) => r.imdb_id);
         if (releaseWithImdb?.imdb_id) {
           movieGroup.imdbId = releaseWithImdb.imdb_id;
+        }
+      }
+      
+      // Check for original language from release data (tmdb_original_language) if not already set
+      if (!movieGroup.originalLanguageCode) {
+        const releaseWithLanguage = groupReleases.find((r: any) => r.tmdb_original_language);
+        if (releaseWithLanguage?.tmdb_original_language) {
+          movieGroup.originalLanguageCode = releaseWithLanguage.tmdb_original_language;
+          movieGroup.originalLanguage = getLanguageName(releaseWithLanguage.tmdb_original_language);
+          movieGroup.isIndianLanguage = isIndianLanguage(releaseWithLanguage.tmdb_original_language);
         }
       }
       
@@ -1277,8 +1698,9 @@ router.get('/movies', async (req: Request, res: Response) => {
       group.ignored.length > 0
     );
 
-    // Separate into New Movies, Existing Movies, and Unmatched Items
+    // Separate into New Movies, Upgrade Movies, Existing Movies, and Unmatched Items
     const newMovies: typeof movieGroups = [];
+    const upgradeMovies: typeof movieGroups = [];
     const existingMovies: typeof movieGroups = [];
     const unmatchedItems: typeof movieGroups = [];
 
@@ -1298,6 +1720,9 @@ router.get('/movies', async (req: Request, res: Response) => {
       if (!group.tmdbId && !group.radarrMovieId) {
         // All unmatched items go to "Unmatched Items" (including ignored ones)
         unmatchedItems.push(group);
+      } else if (group.upgrade.length > 0 && (group.radarrMovieId || group.existing.length > 0)) {
+        // Movies with upgrades that are already in Radarr
+        upgradeMovies.push(group);
       } else if (group.radarrMovieId || group.existing.length > 0) {
         // Movie is in Radarr or has existing releases - goes to "Existing Movies"
         // (ignored releases are included but don't create separate entries)
@@ -1352,6 +1777,7 @@ router.get('/movies', async (req: Request, res: Response) => {
     };
 
     const newMoviesByPeriod = groupByTimePeriod(newMovies);
+    const upgradeMoviesByPeriod = groupByTimePeriod(upgradeMovies);
     const existingMoviesByPeriod = groupByTimePeriod(existingMovies);
     // Unmatched and Ignored items don't need time period grouping
 
@@ -1393,8 +1819,10 @@ router.get('/movies', async (req: Request, res: Response) => {
     const appSettings = settingsModel.getAppSettings();
     
     res.render('dashboard', {
+      currentPage: 'movies',
       viewType: 'movies',
       newMoviesByPeriod,
+      upgradeMoviesByPeriod,
       existingMoviesByPeriod,
       unmatchedItems,
       radarrBaseUrl,
@@ -1461,6 +1889,7 @@ router.get('/tv', async (req: Request, res: Response) => {
       sonarrSeriesId?: number;
       sonarrSeriesTitle?: string;
       posterUrl?: string;
+      rssItemId?: number | null;
       newShows: any[];      // NEW_SHOW or NEW_SEASON status (not in Sonarr)
       existingShows: any[]; // IGNORED or ADDED status (in Sonarr)
       unmatched: any[];     // No IDs, not in Sonarr
@@ -1508,6 +1937,9 @@ router.get('/tv', async (req: Request, res: Response) => {
       const tvdbSlug = primaryRelease.tvdb_slug;
       const tvdbUrl = getTvdbUrl(tvdbId, tvdbSlug, showName);
 
+      // Get RSS item ID from first release (for re-categorization)
+      const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
+
       showGroups.push({
         showKey,
         showName,
@@ -1518,6 +1950,7 @@ router.get('/tv', async (req: Request, res: Response) => {
         sonarrSeriesId: primaryRelease.sonarr_series_id,
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
+        rssItemId: rssItemId,
         newShows,
         existingShows,
         unmatched,
@@ -1644,6 +2077,7 @@ router.get('/tv', async (req: Request, res: Response) => {
     const appSettings = settingsModel.getAppSettings();
     
     res.render('dashboard', {
+      currentPage: 'tv',
       viewType: 'tv',
       newTvShowsByPeriod,
       existingTvShowsByPeriod,
