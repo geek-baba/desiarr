@@ -95,7 +95,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
   try {
     const tmdbId = parseInt(req.params.tmdbId, 10);
-    if (!tmdbId) {
+    if (isNaN(tmdbId)) {
       return res.status(400).json({ success: false, error: 'Invalid TMDB ID' });
     }
 
