@@ -467,19 +467,39 @@ router.get('/backfill', async (req: Request, res: Response) => {
       console.log('[TMDB Backfill] Total movies from SQL query:', allMovies.length);
       
       // Filter in JavaScript to get accurate list of movies actually missing origin_country
+      // IMPORTANT: We check origin_country field itself, NOT primary_country (which can be derived)
+      let sampleChecked = 0;
+      let sampleWithOriginCountry = 0;
       const validMovies = allMovies.filter(movie => {
+        sampleChecked++;
+        if (sampleChecked <= 5) {
+          console.log(`[TMDB Backfill] Sample movie ${sampleChecked}: tmdb_id=${movie.tmdb_id}, origin_country="${movie.origin_country}", primary_country="${movie.primary_country}"`);
+        }
+        
+        // Check if origin_country exists and has data
         if (movie.origin_country) {
           try {
             const originCountry = JSON.parse(movie.origin_country);
+            // If it's a valid array with at least one element, exclude it
             if (Array.isArray(originCountry) && originCountry.length > 0) {
+              sampleWithOriginCountry++;
+              if (sampleChecked <= 5) {
+                console.log(`[TMDB Backfill] Sample movie ${sampleChecked} HAS origin_country:`, originCountry);
+              }
               return false; // Has origin_country, exclude
             }
           } catch (e) {
-            // Invalid JSON, include (treat as missing)
+            // Invalid JSON, treat as missing (include)
+            if (sampleChecked <= 5) {
+              console.log(`[TMDB Backfill] Sample movie ${sampleChecked} has invalid JSON:`, e.message);
+            }
           }
         }
-        return true; // No origin_country or empty array, include
+        // No origin_country or empty array, include in results
+        return true;
       });
+      
+      console.log(`[TMDB Backfill] Sample check: ${sampleChecked} movies checked, ${sampleWithOriginCountry} had origin_country`);
       
       // Sort by title
       validMovies.sort((a, b) => {
@@ -607,21 +627,25 @@ router.get('/backfill/ids', async (req: Request, res: Response) => {
       const allMovies = db.prepare(query).all(params) as any[];
       const validIds = allMovies
         .filter(movie => {
+          // Check if origin_country exists and has data (not derived primary_country)
           if (movie.origin_country) {
             try {
               const originCountry = JSON.parse(movie.origin_country);
+              // If it's a valid array with at least one element, exclude it
               if (Array.isArray(originCountry) && originCountry.length > 0) {
                 return false; // Has origin_country, exclude
               }
             } catch (e) {
-              // Invalid JSON, include
+              // Invalid JSON, treat as missing (include)
             }
           }
+          // No origin_country or empty array, include
           return true;
         })
         .map(movie => movie.tmdb_id) as number[];
       
-      console.log('[TMDB Backfill IDs] Total IDs found:', validIds.length);
+      console.log('[TMDB Backfill IDs] Total movies from SQL:', allMovies.length);
+      console.log('[TMDB Backfill IDs] Valid IDs after validation:', validIds.length);
       res.json({ success: true, ids: validIds });
     } else {
       const movies = db.prepare(query).all(params) as any[];
