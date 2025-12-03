@@ -466,7 +466,23 @@ router.get('/rss', (req: Request, res: Response) => {
     const feedId = req.query.feedId ? parseInt(req.query.feedId as string, 10) : undefined;
     const feedType = req.query.feedType as string | undefined; // 'movie' or 'tv'
     const feeds = feedsModel.getAll();
-    const itemsByFeed = getSyncedRssItemsByFeed();
+    const itemsByFeedRaw = getSyncedRssItemsByFeed();
+    
+    // Convert lastSync dates to ISO strings for client-side formatting
+    const itemsByFeed = itemsByFeedRaw.map((feed: any) => {
+      let lastSyncISO: string | null = null;
+      if (feed.lastSync) {
+        if (typeof feed.lastSync === 'string') {
+          lastSyncISO = feed.lastSync.includes('T') ? feed.lastSync : new Date(feed.lastSync).toISOString();
+        } else if (feed.lastSync instanceof Date) {
+          lastSyncISO = feed.lastSync.toISOString();
+        }
+      }
+      return {
+        ...feed,
+        lastSyncISO,
+      };
+    });
     
     // Get items with feed type and TVDB ID (from rss_feed_items first, then tv_releases as fallback)
     let items: any[];
@@ -516,18 +532,25 @@ router.get('/rss', (req: Request, res: Response) => {
     // Convert lastSync to ISO string for header display
     const lastRefresh = lastSync ? (typeof lastSync === 'string' ? lastSync : lastSync.toISOString()) : null;
     
-    // Enrich items with TVDB URLs (for TV shows)
+    // Enrich items with TVDB URLs (for TV shows) and convert dates to ISO strings
     // Use stored slug from database if available
     const itemsWithUrls = items.map((item: any) => {
+      const enriched: any = { ...item };
+      
       if (item.feed_type === 'tv' && item.tvdb_id) {
         // Try to get show name from title or normalized_title
         const showName = item.title || item.normalized_title || '';
-        return {
-          ...item,
-          tvdb_url: getTvdbUrl(item.tvdb_id, item.tvdb_slug, showName),
-        };
+        enriched.tvdb_url = getTvdbUrl(item.tvdb_id, item.tvdb_slug, showName);
       }
-      return item;
+      
+      // Convert published_at to ISO string for client-side formatting
+      if (item.published_at) {
+        enriched.published_at_iso = typeof item.published_at === 'string'
+          ? (item.published_at.includes('T') ? item.published_at : new Date(item.published_at).toISOString())
+          : item.published_at.toISOString();
+      }
+      
+      return enriched;
     });
     
     res.render('rss-data', {
