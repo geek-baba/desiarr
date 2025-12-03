@@ -491,7 +491,7 @@ router.get('/backfill', async (req: Request, res: Response) => {
           } catch (e) {
             // Invalid JSON, treat as missing (include)
             if (sampleChecked <= 5) {
-              console.log(`[TMDB Backfill] Sample movie ${sampleChecked} has invalid JSON:`, e.message);
+              console.log(`[TMDB Backfill] Sample movie ${sampleChecked} has invalid JSON:`, e instanceof Error ? e.message : String(e));
             }
           }
         }
