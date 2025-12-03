@@ -3,6 +3,7 @@ import { TMDBClient, TMDBMovie } from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 import { syncProgress } from './syncProgress';
 import { logger } from './structuredLogging';
+import { getCountryName } from '../utils/countryMapping';
 
 export interface TmdbSyncStats {
   totalMovies: number;
@@ -157,9 +158,14 @@ export async function initialTmdbSync(resume: boolean = true): Promise<TmdbSyncS
           }
 
           // Extract primary country
-          const primaryCountry = tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0
-            ? tmdbMovie.production_countries[0].name
-            : null;
+          // Priority: production_countries[0].name > origin_country[0] (converted to name) > null
+          let primaryCountry: string | null = null;
+          if (tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0) {
+            primaryCountry = tmdbMovie.production_countries[0].name;
+          } else if (tmdbMovie.origin_country && tmdbMovie.origin_country.length > 0) {
+            // Fallback to origin_country if production_countries is empty
+            primaryCountry = getCountryName(tmdbMovie.origin_country[0]);
+          }
 
           // Store in cache with all fields
           db.prepare(`
@@ -412,9 +418,14 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
           stats.moviesDeleted++;
         } else {
           // Extract primary country
-          const primaryCountry = tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0
-            ? tmdbMovie.production_countries[0].name
-            : null;
+          // Priority: production_countries[0].name > origin_country[0] (converted to name) > null
+          let primaryCountry: string | null = null;
+          if (tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0) {
+            primaryCountry = tmdbMovie.production_countries[0].name;
+          } else if (tmdbMovie.origin_country && tmdbMovie.origin_country.length > 0) {
+            // Fallback to origin_country if production_countries is empty
+            primaryCountry = getCountryName(tmdbMovie.origin_country[0]);
+          }
 
           // Update cache
           const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);

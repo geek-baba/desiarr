@@ -42,6 +42,7 @@ export interface TMDBMovie {
   overview?: string;
   tagline?: string;
   production_countries?: TMDBProductionCountry[];
+  origin_country?: string[]; // ISO 3166-1 alpha-2 country codes
   genres?: TMDBGenre[];
   production_companies?: TMDBProductionCompany[];
   spoken_languages?: TMDBSpokenLanguage[];

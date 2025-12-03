@@ -12,6 +12,7 @@ import {
 import { TMDBClient } from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 import { getLanguageName } from '../utils/languageMapping';
+import { getCountryName } from '../utils/countryMapping';
 import db from '../db';
 
 const router = Router();
@@ -121,9 +122,15 @@ router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
     }
 
     // Extract primary country
-    const primaryCountry = tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0
-      ? tmdbMovie.production_countries[0].name
-      : null;
+    // Extract primary country
+    // Priority: production_countries[0].name > origin_country[0] (converted to name) > null
+    let primaryCountry: string | null = null;
+    if (tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0) {
+      primaryCountry = tmdbMovie.production_countries[0].name;
+    } else if (tmdbMovie.origin_country && tmdbMovie.origin_country.length > 0) {
+      // Fallback to origin_country if production_countries is empty
+      primaryCountry = getCountryName(tmdbMovie.origin_country[0]);
+    }
 
     // Update tmdb_movie_cache with all fields (maintain consistency with sync logic)
     const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
