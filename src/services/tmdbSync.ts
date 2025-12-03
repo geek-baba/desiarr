@@ -59,6 +59,7 @@ export async function initialTmdbSync(resume: boolean = true): Promise<TmdbSyncS
 
     if (resume) {
       // Get list of already synced movies (have synced_at and is_deleted = 0)
+      // Also retry movies marked as deleted if they're still in Radarr (might have been temporary 404)
       const syncedMovies = new Set(
         (db.prepare(`
           SELECT tmdb_id FROM tmdb_movie_cache 
@@ -66,7 +67,15 @@ export async function initialTmdbSync(resume: boolean = true): Promise<TmdbSyncS
         `).all() as Array<{ tmdb_id: number }>).map(row => row.tmdb_id)
       );
 
-      movies = allMovies.filter(m => !syncedMovies.has(m.tmdb_id));
+      // Filter: include movies not synced, OR movies marked as deleted (retry them)
+      movies = allMovies.filter(m => {
+        if (syncedMovies.has(m.tmdb_id)) {
+          // Check if it's marked as deleted - if so, retry it
+          const cached = db.prepare('SELECT is_deleted FROM tmdb_movie_cache WHERE tmdb_id = ?').get(m.tmdb_id) as { is_deleted: number } | undefined;
+          return cached?.is_deleted === 1; // Retry deleted movies
+        }
+        return true; // Not in cache, sync it
+      });
       alreadySynced = allMovies.length - movies.length;
 
       if (alreadySynced > 0) {
