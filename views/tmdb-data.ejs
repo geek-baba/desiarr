@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
   <%- include('partials/app-sidebar', { currentPage: 'tmdb-data' }) %>
   
   <div class="lg:pl-64">
@@ -649,7 +651,7 @@
         // Update count to show total
         document.getElementById('selectedCount').textContent = total;
         document.getElementById('backfillButton').disabled = false;
-        alert(`Selected all ${total} movies across all pages. Click "Backfill Selected" to process them.`);
+        showToast(`Selected all ${total} movies across all pages. Click "Backfill Selected" to process them.`, 'success', 4000);
       } else {
         // Select all on current page only
         const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -712,44 +714,50 @@
     }
 
     // Toast notification function
-    function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', duration = 5000) {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      
       const toast = document.createElement('div');
-      toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 ${
-        type === 'success' ? 'bg-green-500 text-white' :
-        type === 'error' ? 'bg-red-500 text-white' :
-        type === 'warning' ? 'bg-yellow-500 text-white' :
-        'bg-blue-500 text-white'
-      }`;
-      toast.textContent = message;
-      document.body.appendChild(toast);
+      const bgColors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+      };
+      
+      toast.className = `${bgColors[type] || bgColors.info} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md animate-slide-in`;
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">×</button>
+      `;
+      
+      container.appendChild(toast);
       
       setTimeout(() => {
         toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
         setTimeout(() => toast.remove(), 300);
-      }, 3000);
+      }, duration);
     }
 
     async function backfillSelected() {
       const missingFieldEl = document.getElementById('missingField');
       const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
 
-      // First, check actual selected checkboxes on the page
-      const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
-      const selectedFromPage = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
-      
       let selectedIds = [];
       const selectAllFlag = sessionStorage.getItem('tmdbBackfillSelectAll') === 'true';
 
-      // Only use "Select All" if:
-      // 1. No checkboxes are selected on current page AND
-      // 2. The selectAll flag is set
-      if (selectedFromPage.length === 0 && selectAllFlag) {
+      // If "Select All (All Pages)" flag is set, ALWAYS fetch all IDs from server
+      // Otherwise, use checkboxes on current page
+      if (selectAllFlag) {
         // Fetch all IDs from the server
         try {
           const response = await fetch(`/tmdb-data/backfill/ids?missing=${encodeURIComponent(missingField)}&search=`);
           const data = await response.json();
           if (data.success && data.ids) {
             selectedIds = data.ids;
+            console.log(`[Backfill] Using Select All: fetched ${selectedIds.length} IDs from server`);
           } else {
             showToast('Error fetching all movie IDs: ' + (data.error || 'Unknown error'), 'error');
             return;
@@ -761,7 +769,9 @@
         }
       } else {
         // Use checkboxes on current page
-        selectedIds = selectedFromPage;
+        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+        selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+        console.log(`[Backfill] Using page checkboxes: ${selectedIds.length} selected`);
       }
 
       if (selectedIds.length === 0) {
@@ -770,18 +780,16 @@
       }
 
       // Clear sessionStorage after getting IDs (if it was used)
-      if (selectAllFlag && selectedFromPage.length === 0) {
+      if (selectAllFlag) {
         sessionStorage.removeItem('tmdbBackfillSelectAll');
         sessionStorage.removeItem('tmdbBackfillMissingField');
         sessionStorage.removeItem('tmdbBackfillTotal');
       }
       
-      if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
-        return;
-      }
+      // Show confirmation toast instead of browser dialog
+      showToast(`Starting backfill for ${selectedIds.length} movie(s) for missing ${missingField}...`, 'info', 4000);
 
       console.log(`[Backfill] Starting backfill for ${selectedIds.length} movies, missingField: ${missingField}`);
-      showToast(`Starting backfill for ${selectedIds.length} movie(s)...`, 'info');
 
       try {
         const response = await fetch('/tmdb-data/backfill', {
