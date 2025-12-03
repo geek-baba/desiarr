@@ -465,29 +465,53 @@ router.get('/backfill', async (req: Request, res: Response) => {
     const movies = db.prepare(query).all(params) as any[];
 
     // Enrich with language names and derive primary_country if missing
-    const enrichedMovies = movies.map(movie => {
-      const enriched = { ...movie };
-      if (movie.original_language) {
-        enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
-      }
-      // Derive primary_country if it's missing but we have production_countries or origin_country
-      if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
-        try {
-          const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
-          const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
-          if (productionCountries && productionCountries.length > 0) {
-            enriched.primary_country = productionCountries[0].name;
-          } else if (originCountry && originCountry.length > 0) {
-            // Use country mapping utility
-            const { getCountryName } = require('../utils/countryMapping');
-            enriched.primary_country = getCountryName(originCountry[0]) || originCountry[0];
-          }
-        } catch (e) {
-          // Invalid JSON, ignore
+    // Also filter out movies that actually have origin_country (for origin_country filter)
+    const enrichedMovies = movies
+      .map(movie => {
+        const enriched = { ...movie };
+        if (movie.original_language) {
+          enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
         }
-      }
-      return enriched;
-    });
+        
+        // Parse origin_country to validate it's actually missing
+        let hasOriginCountry = false;
+        if (movie.origin_country) {
+          try {
+            const originCountry = JSON.parse(movie.origin_country);
+            if (Array.isArray(originCountry) && originCountry.length > 0) {
+              hasOriginCountry = true;
+            }
+          } catch (e) {
+            // Invalid JSON, treat as missing
+          }
+        }
+        enriched._hasOriginCountry = hasOriginCountry;
+        
+        // Derive primary_country if it's missing but we have production_countries or origin_country
+        if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
+          try {
+            const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
+            const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
+            if (productionCountries && productionCountries.length > 0) {
+              enriched.primary_country = productionCountries[0].name;
+            } else if (originCountry && originCountry.length > 0) {
+              // Use country mapping utility
+              const { getCountryName } = require('../utils/countryMapping');
+              enriched.primary_country = getCountryName(originCountry[0]) || originCountry[0];
+            }
+          } catch (e) {
+            // Invalid JSON, ignore
+          }
+        }
+        return enriched;
+      })
+      .filter(movie => {
+        // For origin_country filter, exclude movies that actually have it
+        if (missing === 'origin_country' && movie._hasOriginCountry) {
+          return false;
+        }
+        return true;
+      });
 
     console.log('[TMDB Backfill] Enriched movies count:', enrichedMovies.length);
 
