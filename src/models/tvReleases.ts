@@ -1,6 +1,21 @@
 import db from '../db';
 import { TvRelease, TvReleaseStatus } from '../types/Release';
 
+/**
+ * Sanitize value for SQLite binding - converts undefined, objects, arrays to null
+ * Only allows: numbers, strings, bigints, buffers, and null
+ */
+function sanitizeForSqlite(value: any): string | number | bigint | Buffer | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint' || Buffer.isBuffer(value)) {
+    return value;
+  }
+  // If it's an object or array, convert to null (SQLite can't bind these)
+  return null;
+}
+
 function convertTvRelease(row: any): TvRelease {
   return {
     ...row,
@@ -102,25 +117,25 @@ export const tvReleasesModel = {
           last_checked_at = datetime('now')
         WHERE guid = ?
       `).run(
-        release.title ?? null,
-        release.normalized_title ?? null,
-        release.show_name ?? null,
-        release.season_number ?? null, // Optional field - convert undefined to null
-        release.source_site ?? null,
-        release.feed_id ?? null,
-        release.link ?? null,
-        release.published_at ?? null,
-        tvdbId ?? null, // Already converted but add defensive check
-        tvdbSlug ?? null, // Already converted but add defensive check
-        tmdbId ?? null, // Already converted but add defensive check
-        imdbId ?? null, // Already converted but add defensive check
-        release.tvdb_poster_url ?? null, // Optional field - convert undefined to null
-        release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
-        release.sonarr_series_id ?? null, // Optional field - convert undefined to null
-        release.sonarr_series_title ?? null, // Optional field - convert undefined to null
-        status ?? null,
+        sanitizeForSqlite(release.title),
+        sanitizeForSqlite(release.normalized_title),
+        sanitizeForSqlite(release.show_name),
+        sanitizeForSqlite(release.season_number),
+        sanitizeForSqlite(release.source_site),
+        sanitizeForSqlite(release.feed_id),
+        sanitizeForSqlite(release.link),
+        sanitizeForSqlite(release.published_at),
+        sanitizeForSqlite(tvdbId),
+        sanitizeForSqlite(tvdbSlug),
+        sanitizeForSqlite(tmdbId),
+        sanitizeForSqlite(imdbId),
+        sanitizeForSqlite(release.tvdb_poster_url),
+        sanitizeForSqlite(release.tmdb_poster_url),
+        sanitizeForSqlite(release.sonarr_series_id),
+        sanitizeForSqlite(release.sonarr_series_title),
+        sanitizeForSqlite(status),
         manuallyIgnored ? 1 : 0,
-        release.guid ?? null
+        sanitizeForSqlite(release.guid)
       );
       return tvReleasesModel.getByGuid(release.guid)!;
     } else {
@@ -136,24 +151,24 @@ export const tvReleasesModel = {
           sonarr_series_id, sonarr_series_title, status, manually_ignored
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        release.guid ?? null,
-        release.title ?? null,
-        release.normalized_title ?? null,
-        release.show_name ?? null,
-        release.season_number ?? null, // Optional field - convert undefined to null
-        release.source_site ?? null,
-        release.feed_id ?? null,
-        release.link ?? null,
-        release.published_at ?? null,
-        release.tvdb_id ?? null, // Optional field - convert undefined to null
-        release.tvdb_slug ?? null, // Optional field - convert undefined to null
-        release.tmdb_id ?? null, // Optional field - convert undefined to null
-        release.imdb_id ?? null, // Optional field - convert undefined to null
-        release.tvdb_poster_url ?? null, // Optional field - convert undefined to null
-        release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
-        release.sonarr_series_id ?? null, // Optional field - convert undefined to null
-        release.sonarr_series_title ?? null, // Optional field - convert undefined to null
-        finalStatus ?? null,
+        sanitizeForSqlite(release.guid),
+        sanitizeForSqlite(release.title),
+        sanitizeForSqlite(release.normalized_title),
+        sanitizeForSqlite(release.show_name),
+        sanitizeForSqlite(release.season_number),
+        sanitizeForSqlite(release.source_site),
+        sanitizeForSqlite(release.feed_id),
+        sanitizeForSqlite(release.link),
+        sanitizeForSqlite(release.published_at),
+        sanitizeForSqlite(release.tvdb_id),
+        sanitizeForSqlite(release.tvdb_slug),
+        sanitizeForSqlite(release.tmdb_id),
+        sanitizeForSqlite(release.imdb_id),
+        sanitizeForSqlite(release.tvdb_poster_url),
+        sanitizeForSqlite(release.tmdb_poster_url),
+        sanitizeForSqlite(release.sonarr_series_id),
+        sanitizeForSqlite(release.sonarr_series_title),
+        sanitizeForSqlite(finalStatus),
         finalManuallyIgnored ?? 0
       );
       return tvReleasesModel.getById(result.lastInsertRowid as number)!;
