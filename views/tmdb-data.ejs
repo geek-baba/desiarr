@@ -747,6 +747,12 @@
         const data = await response.json();
 
         if (data.success) {
+          // Show progress container immediately
+          const progressContainer = document.getElementById('backfillProgressContainer');
+          if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+          }
+          
           // Start polling for progress
           if (!backfillProgressInterval) {
             backfillProgressInterval = setInterval(updateBackfillProgress, 1000);
@@ -756,7 +762,8 @@
           alert('Error: ' + (data.error || 'Failed to start backfill'));
         }
       } catch (error) {
-        alert('Error: ' + error.message);
+        console.error('Backfill error:', error);
+        alert('Error: ' + (error.message || 'Failed to start backfill'));
       }
     }
 

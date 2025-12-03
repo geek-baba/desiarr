@@ -708,8 +708,9 @@ router.post('/backfill', async (req: Request, res: Response) => {
 
     // Start progress tracking
     const jobId = `backfill-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log(`[TMDB Backfill] Starting backfill for ${tmdbIds.length} movies, jobId: ${jobId}`);
     syncProgress.start('tmdb-backfill', tmdbIds.length);
-    syncProgress.update(`Starting backfill for ${tmdbIds.length} movies...`, 0);
+    syncProgress.update(`Starting backfill for ${tmdbIds.length} movies...`, 0, tmdbIds.length, 0);
 
     // Process in background
     (async () => {
