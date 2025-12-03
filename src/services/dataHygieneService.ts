@@ -399,6 +399,42 @@ export function getLanguageMismatches(): DataHygieneMovie[] {
 }
 
 /**
+ * Get movies marked as deleted in TMDB cache but still in Radarr
+ * These are movies that returned 404 from TMDB API but are still in Radarr
+ */
+export function getDeletedTitles(): DataHygieneMovie[] {
+  const rows = db
+    .prepare(`
+      SELECT DISTINCT
+        r.radarr_id,
+        r.tmdb_id,
+        r.imdb_id,
+        r.title,
+        r.year,
+        r.path,
+        r.movie_file,
+        r.original_language,
+        t.synced_at as deleted_synced_at
+      FROM radarr_movies r
+      INNER JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id
+      WHERE t.is_deleted = 1
+      ORDER BY r.title
+    `)
+    .all() as any[];
+
+  return rows.map(movie => ({
+    radarr_id: movie.radarr_id,
+    tmdb_id: movie.tmdb_id,
+    imdb_id: movie.imdb_id,
+    title: movie.title,
+    year: movie.year,
+    path: movie.path,
+    movie_file: movie.movie_file,
+    original_language: movie.original_language,
+  }));
+}
+
+/**
  * Normalize string for comparison (remove special chars, lowercase, trim)
  */
 function normalizeForComparison(str: string): string {

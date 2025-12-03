@@ -6,6 +6,7 @@ import {
   getFolderNameMismatches,
   getFileNameMismatches,
   getLanguageMismatches,
+  getDeletedTitles,
   DataHygieneMovie,
 } from '../services/dataHygieneService';
 import { TMDBClient } from '../tmdb/client';
@@ -45,6 +46,9 @@ router.get('/', async (req: Request, res: Response) => {
         break;
       case 'language-mismatch':
         movies = getLanguageMismatches();
+        break;
+      case 'deleted-titles':
+        movies = getDeletedTitles();
         break;
       default:
         movies = getMissingImdbMovies();
