@@ -102,14 +102,14 @@ export const tvReleasesModel = {
           last_checked_at = datetime('now')
         WHERE guid = ?
       `).run(
-        release.title,
-        release.normalized_title,
-        release.show_name,
+        release.title ?? null,
+        release.normalized_title ?? null,
+        release.show_name ?? null,
         release.season_number ?? null, // Optional field - convert undefined to null
-        release.source_site,
-        release.feed_id,
-        release.link,
-        release.published_at,
+        release.source_site ?? null,
+        release.feed_id ?? null,
+        release.link ?? null,
+        release.published_at ?? null,
         tvdbId,
         tvdbSlug,
         tmdbId,
@@ -118,9 +118,9 @@ export const tvReleasesModel = {
         release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
         release.sonarr_series_id ?? null, // Optional field - convert undefined to null
         release.sonarr_series_title ?? null, // Optional field - convert undefined to null
-        status,
+        status ?? null,
         manuallyIgnored ? 1 : 0,
-        release.guid
+        release.guid ?? null
       );
       return tvReleasesModel.getByGuid(release.guid)!;
     } else {
@@ -136,15 +136,15 @@ export const tvReleasesModel = {
           sonarr_series_id, sonarr_series_title, status, manually_ignored
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        release.guid,
-        release.title,
-        release.normalized_title,
-        release.show_name,
+        release.guid ?? null,
+        release.title ?? null,
+        release.normalized_title ?? null,
+        release.show_name ?? null,
         release.season_number ?? null, // Optional field - convert undefined to null
-        release.source_site,
-        release.feed_id,
-        release.link,
-        release.published_at,
+        release.source_site ?? null,
+        release.feed_id ?? null,
+        release.link ?? null,
+        release.published_at ?? null,
         release.tvdb_id ?? null, // Optional field - convert undefined to null
         release.tvdb_slug ?? null, // Optional field - convert undefined to null
         release.tmdb_id ?? null, // Optional field - convert undefined to null
@@ -153,8 +153,8 @@ export const tvReleasesModel = {
         release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
         release.sonarr_series_id ?? null, // Optional field - convert undefined to null
         release.sonarr_series_title ?? null, // Optional field - convert undefined to null
-        finalStatus,
-        finalManuallyIgnored
+        finalStatus ?? null,
+        finalManuallyIgnored ?? 0
       );
       return tvReleasesModel.getById(result.lastInsertRowid as number)!;
     }
