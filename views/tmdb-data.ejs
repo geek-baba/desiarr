@@ -712,19 +712,42 @@
     }
 
     async function backfillSelected() {
-      const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
-      const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+      const missingFieldEl = document.getElementById('missingField');
+      const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
+
+      // Check if "Select All (All Pages)" was used
+      const selectAllFlag = sessionStorage.getItem('tmdbBackfillSelectAll') === 'true';
+      let selectedIds = [];
+
+      if (selectAllFlag) {
+        // Fetch all IDs from the server
+        try {
+          const response = await fetch(`/tmdb-data/backfill/ids?missing=${encodeURIComponent(missingField)}&search=`);
+          const data = await response.json();
+          if (data.success && data.ids) {
+            selectedIds = data.ids;
+          } else {
+            alert('Error fetching all movie IDs: ' + (data.error || 'Unknown error'));
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching all movie IDs:', error);
+          alert('Error fetching all movie IDs: ' + error.message);
+          return;
+        }
+      } else {
+        // Use checkboxes on current page
+        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+        selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+      }
 
       if (selectedIds.length === 0) {
         alert('Please select at least one movie to backfill');
         return;
       }
 
-      const missingFieldEl = document.getElementById('missingField');
-      const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
-
       // Clear sessionStorage after getting IDs
-      if (selectAll) {
+      if (selectAllFlag) {
         sessionStorage.removeItem('tmdbBackfillSelectAll');
         sessionStorage.removeItem('tmdbBackfillMissingField');
         sessionStorage.removeItem('tmdbBackfillTotal');
@@ -733,6 +756,8 @@
       if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
         return;
       }
+
+      console.log(`[Backfill] Starting backfill for ${selectedIds.length} movies, missingField: ${missingField}`);
 
       try {
         const response = await fetch('/tmdb-data/backfill', {
