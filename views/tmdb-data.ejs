@@ -430,7 +430,12 @@
   </div>
 
   <script>
+    <% 
+      // Set default missingField for JavaScript
+      const defaultMissingField = typeof missingField !== 'undefined' ? missingField : 'origin_country';
+    %>
     let progressInterval = null;
+    const defaultMissingFieldValue = '<%= defaultMissingField %>';
 
     function updateProgress() {
       fetch('/tmdb-data/sync/progress')
@@ -679,7 +684,7 @@
       }
 
       const missingFieldEl = document.getElementById('missingField');
-      const missingField = missingFieldEl ? missingFieldEl.value : '<%- typeof missingField !== "undefined" ? missingField : "origin_country" %>';
+      const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
 
       if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
         return;
