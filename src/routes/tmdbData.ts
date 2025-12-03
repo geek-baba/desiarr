@@ -744,6 +744,8 @@ router.post('/backfill', async (req: Request, res: Response) => {
             continue;
           }
 
+          console.log(`[TMDB Backfill] Movie ${tmdbId}: origin_country=`, tmdbMovie.origin_country);
+
           // Derive primary country
           const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
 
