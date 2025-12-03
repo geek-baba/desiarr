@@ -407,7 +407,16 @@ router.get('/backfill', async (req: Request, res: Response) => {
     // Filter by missing field
     switch (missing) {
       case 'origin_country':
-        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')`;
+        // origin_country is stored as JSON array string, e.g., '["IN"]' or '[]'
+        // We need to check if it's NULL, empty string, or an empty JSON array
+        // Since SQLite doesn't have native JSON parsing, we check for:
+        // - NULL
+        // - Empty string
+        // - '[]' (empty array)
+        // - 'null' (JSON null)
+        // - Any string that when parsed is an empty array
+        // For now, we'll use a simple check and validate in JavaScript
+        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]' OR origin_country = 'null')`;
         break;
       case 'release_date':
         query += ` AND (release_date IS NULL OR release_date = '')`;
@@ -482,6 +491,11 @@ router.get('/backfill', async (req: Request, res: Response) => {
 
     console.log('[TMDB Backfill] Enriched movies count:', enrichedMovies.length);
 
+    // Recalculate total after filtering
+    const actualTotal = enrichedMovies.length === MOVIES_PER_PAGE && page < totalPages 
+      ? total 
+      : enrichedMovies.length + (page - 1) * MOVIES_PER_PAGE;
+    
     res.render('tmdb-data', {
       currentPage: 'tmdb-data',
       view: 'backfill',
@@ -489,17 +503,79 @@ router.get('/backfill', async (req: Request, res: Response) => {
       movies: enrichedMovies,
       currentPageNum: page,
       totalPages,
-      total,
+      total: actualTotal,
       search,
       lastSyncDate: null,
       totalCached: 0,
       pendingUpdates: 0,
       isSyncing: false,
       progress: null,
+      selectAllTotal: total, // Total across all pages for "Select All" functionality
     });
   } catch (error) {
     console.error('Backfill page error:', error);
     res.status(500).send('Internal server error');
+  }
+});
+
+/**
+ * Get all TMDB IDs for movies matching the missing field filter (for "Select All" across pages)
+ */
+router.get('/backfill/ids', async (req: Request, res: Response) => {
+  try {
+    const missing = (req.query.missing as string) || 'origin_country';
+
+    // Build query to find movies with missing field (same logic as main backfill route)
+    let query = `SELECT tmdb_id FROM tmdb_movie_cache WHERE is_deleted = 0`;
+    const params: any[] = [];
+
+    // Filter by missing field (same switch as main route)
+    switch (missing) {
+      case 'origin_country':
+        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]' OR origin_country = 'null')`;
+        break;
+      case 'release_date':
+        query += ` AND (release_date IS NULL OR release_date = '')`;
+        break;
+      case 'overview':
+        query += ` AND (overview IS NULL OR overview = '')`;
+        break;
+      case 'tagline':
+        query += ` AND (tagline IS NULL OR tagline = '')`;
+        break;
+      case 'homepage':
+        query += ` AND (homepage IS NULL OR homepage = '')`;
+        break;
+      case 'primary_country':
+        query += ` AND (primary_country IS NULL OR primary_country = '' OR primary_country = '-')`;
+        break;
+      default:
+        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]' OR origin_country = 'null')`;
+    }
+
+    const movies = db.prepare(query).all(params) as any[];
+
+    // Filter out movies that actually have origin_country (same validation as main route)
+    const validIds = movies
+      .map(movie => {
+        if (missing === 'origin_country' && movie.origin_country) {
+          try {
+            const originCountry = JSON.parse(movie.origin_country);
+            if (Array.isArray(originCountry) && originCountry.length > 0) {
+              return null; // Has origin_country, exclude
+            }
+          } catch (e) {
+            // Invalid JSON, include
+          }
+        }
+        return movie.tmdb_id;
+      })
+      .filter(id => id !== null) as number[];
+
+    res.json({ success: true, ids: validIds });
+  } catch (error) {
+    console.error('Backfill IDs error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 

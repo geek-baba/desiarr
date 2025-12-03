@@ -59,10 +59,18 @@
             </div>
             <div class="flex gap-2">
               <button
-                onclick="selectAllMovies()"
+                onclick="selectAllMovies(false)"
                 class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+                title="Select all movies on this page"
               >
-                Select All
+                Select All (Page)
+              </button>
+              <button
+                onclick="selectAllMovies(true)"
+                class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+                title="Select all movies across all pages"
+              >
+                Select All (<%= typeof selectAllTotal !== 'undefined' ? selectAllTotal : total %>)
               </button>
               <button
                 onclick="backfillSelected()"
@@ -617,11 +625,29 @@
       updateSelectedCount();
     }
 
-    function selectAllMovies() {
-      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-      if (selectAllCheckbox) {
-        selectAllCheckbox.checked = true;
+    function selectAllMovies(allPages = false) {
+      if (allPages) {
+        // Select all across all pages - store in sessionStorage
+        const missingField = document.getElementById('missingField')?.value || '<%= typeof missingField !== "undefined" ? missingField : "origin_country" %>';
+        const total = <%= typeof selectAllTotal !== 'undefined' ? selectAllTotal : total %>;
+        sessionStorage.setItem('tmdbBackfillSelectAll', 'true');
+        sessionStorage.setItem('tmdbBackfillMissingField', missingField);
+        sessionStorage.setItem('tmdbBackfillTotal', total.toString());
+        // Check all checkboxes on current page
         toggleAllMovies(true);
+        // Update count to show total
+        document.getElementById('selectedCount').textContent = total;
+        document.getElementById('backfillButton').disabled = false;
+        alert(`Selected all ${total} movies across all pages. Click "Backfill Selected" to process them.`);
+      } else {
+        // Select all on current page only
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (selectAllCheckbox) {
+          selectAllCheckbox.checked = true;
+          toggleAllMovies(true);
+        }
+        // Clear sessionStorage
+        sessionStorage.removeItem('tmdbBackfillSelectAll');
       }
     }
 
@@ -686,6 +712,13 @@
       const missingFieldEl = document.getElementById('missingField');
       const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
 
+      // Clear sessionStorage after getting IDs
+      if (selectAll) {
+        sessionStorage.removeItem('tmdbBackfillSelectAll');
+        sessionStorage.removeItem('tmdbBackfillMissingField');
+        sessionStorage.removeItem('tmdbBackfillTotal');
+      }
+      
       if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
         return;
       }
