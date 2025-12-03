@@ -250,12 +250,14 @@ export async function initialTmdbSync(resume: boolean = true): Promise<TmdbSyncS
         total: stats.totalMovies
       }
     });
+    // Store as ISO string like other sync functions do (with UTC timezone indicator)
+    const syncCompleteTime = new Date();
     db.prepare(`
       INSERT OR REPLACE INTO app_settings (key, value)
-      VALUES ('tmdb_last_sync_date', datetime('now'))
-    `).run();
+      VALUES ('tmdb_last_sync_date', ?)
+    `).run(syncCompleteTime.toISOString());
 
-    stats.lastSyncAt = new Date();
+    stats.lastSyncAt = syncCompleteTime;
     syncProgress.complete();
   } catch (error: any) {
     const errorMsg = `Sync failed: ${error?.message || 'Unknown error'}`;
@@ -358,11 +360,13 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
       logger.info('tmdb', 'No relevant changes found (none of the changed movies are in Radarr)', { jobId });
       syncProgress.complete();
       // Still update sync date (use datetime for timezone-aware calculations)
+      // Store as ISO string like other sync functions do (with UTC timezone indicator)
+      const syncCompleteTime = new Date();
       db.prepare(`
         INSERT OR REPLACE INTO app_settings (key, value)
-        VALUES ('tmdb_last_sync_date', datetime('now'))
-      `).run();
-      stats.lastSyncAt = new Date();
+        VALUES ('tmdb_last_sync_date', ?)
+      `).run(syncCompleteTime.toISOString());
+      stats.lastSyncAt = syncCompleteTime;
       return stats;
     }
 
@@ -543,12 +547,14 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
         total: stats.totalMovies
       }
     });
+    // Store as ISO string like other sync functions do (with UTC timezone indicator)
+    const syncCompleteTime = new Date();
     db.prepare(`
       INSERT OR REPLACE INTO app_settings (key, value)
-      VALUES ('tmdb_last_sync_date', datetime('now'))
-    `).run();
+      VALUES ('tmdb_last_sync_date', ?)
+    `).run(syncCompleteTime.toISOString());
 
-    stats.lastSyncAt = new Date();
+    stats.lastSyncAt = syncCompleteTime;
     syncProgress.complete();
   } catch (error: any) {
     const errorMsg = `Incremental sync failed: ${error?.message || 'Unknown error'}`;
@@ -574,7 +580,7 @@ export async function incrementalTmdbSync(): Promise<TmdbSyncStats> {
  * Get sync status
  */
 export function getTmdbSyncStatus(): {
-  lastSyncDate: string | null;
+  lastSyncDate: Date | null;
   totalCached: number;
   pendingUpdates: number;
 } {
@@ -585,8 +591,11 @@ export function getTmdbSyncStatus(): {
   const totalCached = (db.prepare('SELECT COUNT(*) as count FROM tmdb_movie_cache WHERE is_deleted = 0').get() as { count: number }).count;
   const pendingUpdates = (db.prepare('SELECT COUNT(*) as count FROM radarr_movies WHERE tmdb_id IS NOT NULL AND tmdb_id NOT IN (SELECT tmdb_id FROM tmdb_movie_cache WHERE is_deleted = 0)').get() as { count: number }).count;
 
+  // Parse date like other sync functions do (returns Date | null)
+  const lastSyncDate = lastSyncSetting?.value ? new Date(lastSyncSetting.value) : null;
+
   return {
-    lastSyncDate: lastSyncSetting?.value || null,
+    lastSyncDate,
     totalCached,
     pendingUpdates,
   };
