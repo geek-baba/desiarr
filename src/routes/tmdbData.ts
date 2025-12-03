@@ -398,6 +398,8 @@ router.get('/backfill', async (req: Request, res: Response) => {
     const missing = (req.query.missing as string) || 'origin_country';
     const search = (req.query.search as string) || '';
 
+    console.log('[TMDB Backfill] Query params:', { missing, search, page });
+
     // Build query to find movies with missing field
     let query = `SELECT * FROM tmdb_movie_cache WHERE is_deleted = 0`;
     const params: any[] = [];
@@ -420,11 +422,21 @@ router.get('/backfill', async (req: Request, res: Response) => {
         query += ` AND (homepage IS NULL OR homepage = '')`;
         break;
       case 'primary_country':
-        query += ` AND (primary_country IS NULL OR primary_country = '')`;
+        // primary_country can be NULL, empty, or '-' (placeholder)
+        // Also check if production_countries and origin_country are both empty/null
+        query += ` AND (
+          (primary_country IS NULL OR primary_country = '' OR primary_country = '-') 
+          AND (
+            (production_countries IS NULL OR production_countries = '' OR production_countries = '[]')
+            AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')
+          )
+        )`;
         break;
       default:
         query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')`;
     }
+
+    console.log('[TMDB Backfill] Query:', query);
 
     // Add search filter
     if (search) {
@@ -449,14 +461,32 @@ router.get('/backfill', async (req: Request, res: Response) => {
 
     const movies = db.prepare(query).all(params) as any[];
 
-    // Enrich with language names
+    // Enrich with language names and derive primary_country if missing
     const enrichedMovies = movies.map(movie => {
       const enriched = { ...movie };
       if (movie.original_language) {
         enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
       }
+      // Derive primary_country if it's missing but we have production_countries or origin_country
+      if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
+        try {
+          const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
+          const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
+          if (productionCountries && productionCountries.length > 0) {
+            enriched.primary_country = productionCountries[0].name;
+          } else if (originCountry && originCountry.length > 0) {
+            // Use country mapping utility
+            const { getCountryName } = require('../utils/countryMapping');
+            enriched.primary_country = getCountryName(originCountry[0]) || originCountry[0];
+          }
+        } catch (e) {
+          // Invalid JSON, ignore
+        }
+      }
       return enriched;
     });
+
+    console.log('[TMDB Backfill] Enriched movies count:', enrichedMovies.length);
 
     res.render('tmdb-data', {
       currentPage: 'tmdb-data',
