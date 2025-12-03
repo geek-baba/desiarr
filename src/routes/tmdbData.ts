@@ -452,66 +452,96 @@ router.get('/backfill', async (req: Request, res: Response) => {
       params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    // Get total count
-    const countQuery = query.replace(/SELECT \*/, 'SELECT COUNT(*) as count');
-    const totalResult = db.prepare(countQuery).get(params) as { count: number };
-    const total = totalResult.count;
-    const totalPages = Math.ceil(total / MOVIES_PER_PAGE);
-
-    // Add pagination
-    query += ` ORDER BY title LIMIT ? OFFSET ?`;
-    params.push(MOVIES_PER_PAGE, (page - 1) * MOVIES_PER_PAGE);
-
-    const movies = db.prepare(query).all(params) as any[];
-
-    // Enrich with language names and derive primary_country if missing
-    // Also filter out movies that actually have origin_country (for origin_country filter)
-    const enrichedMovies = movies
-      .map(movie => {
-        const enriched = { ...movie };
-        if (movie.original_language) {
-          enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
-        }
-        
-        // Parse origin_country to validate it's actually missing
-        let hasOriginCountry = false;
+    // For origin_country, we need to validate ALL movies first, then paginate
+    // For other fields, use standard SQL count
+    let total = 0;
+    let totalPages = 0;
+    let movies: any[] = [];
+    
+    if (missing === 'origin_country') {
+      // Query ALL movies matching the SQL criteria (no pagination yet)
+      // Build query without ORDER BY and LIMIT/OFFSET
+      let allMoviesQuery = query;
+      const allMovies = db.prepare(allMoviesQuery).all(params) as any[];
+      
+      console.log('[TMDB Backfill] Total movies from SQL query:', allMovies.length);
+      
+      // Filter in JavaScript to get accurate list of movies actually missing origin_country
+      const validMovies = allMovies.filter(movie => {
         if (movie.origin_country) {
           try {
             const originCountry = JSON.parse(movie.origin_country);
             if (Array.isArray(originCountry) && originCountry.length > 0) {
-              hasOriginCountry = true;
+              return false; // Has origin_country, exclude
             }
           } catch (e) {
-            // Invalid JSON, treat as missing
+            // Invalid JSON, include (treat as missing)
           }
         }
-        enriched._hasOriginCountry = hasOriginCountry;
-        
-        // Derive primary_country if it's missing but we have production_countries or origin_country
-        if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
-          try {
-            const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
-            const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
-            if (productionCountries && productionCountries.length > 0) {
-              enriched.primary_country = productionCountries[0].name;
-            } else if (originCountry && originCountry.length > 0) {
-              // Use country mapping utility
-              const { getCountryName } = require('../utils/countryMapping');
-              enriched.primary_country = getCountryName(originCountry[0]) || originCountry[0];
-            }
-          } catch (e) {
-            // Invalid JSON, ignore
-          }
-        }
-        return enriched;
-      })
-      .filter(movie => {
-        // For origin_country filter, exclude movies that actually have it
-        if (missing === 'origin_country' && movie._hasOriginCountry) {
-          return false;
-        }
-        return true;
+        return true; // No origin_country or empty array, include
       });
+      
+      // Sort by title
+      validMovies.sort((a, b) => {
+        const titleA = (a.title || '').toLowerCase();
+        const titleB = (b.title || '').toLowerCase();
+        return titleA.localeCompare(titleB);
+      });
+      
+      total = validMovies.length;
+      totalPages = Math.ceil(total / MOVIES_PER_PAGE);
+      
+      // Apply pagination to filtered results
+      const startIndex = (page - 1) * MOVIES_PER_PAGE;
+      const endIndex = startIndex + MOVIES_PER_PAGE;
+      movies = validMovies.slice(startIndex, endIndex);
+      
+      console.log('[TMDB Backfill] Total movies after validation:', total);
+      console.log('[TMDB Backfill] Movies filtered out:', allMovies.length - total);
+      console.log('[TMDB Backfill] Movies on current page:', movies.length);
+    } else {
+      // For other fields, use standard SQL approach
+      const countQuery = query.replace(/SELECT \*/, 'SELECT COUNT(*) as count');
+      const totalResult = db.prepare(countQuery).get(params) as { count: number };
+      total = totalResult.count;
+      totalPages = Math.ceil(total / MOVIES_PER_PAGE);
+      
+      console.log('[TMDB Backfill] Query:', query);
+      console.log('[TMDB Backfill] Params:', params);
+      console.log('[TMDB Backfill] Total movies found:', total);
+
+      // Add pagination
+      query += ` ORDER BY title LIMIT ? OFFSET ?`;
+      params.push(MOVIES_PER_PAGE, (page - 1) * MOVIES_PER_PAGE);
+
+      movies = db.prepare(query).all(params) as any[];
+    }
+
+    // Enrich with language names and derive primary_country if missing
+    const enrichedMovies = movies.map(movie => {
+      const enriched = { ...movie };
+      if (movie.original_language) {
+        enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
+      }
+      
+      // Derive primary_country if it's missing but we have production_countries or origin_country
+      if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
+        try {
+          const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
+          const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
+          if (productionCountries && productionCountries.length > 0) {
+            enriched.primary_country = productionCountries[0].name;
+          } else if (originCountry && originCountry.length > 0) {
+            // Use country mapping utility
+            const { getCountryName } = require('../utils/countryMapping');
+            enriched.primary_country = getCountryName(originCountry[0]) || originCountry[0];
+          }
+        } catch (e) {
+          // Invalid JSON, ignore
+        }
+      }
+      return enriched;
+    });
 
     console.log('[TMDB Backfill] Enriched movies count:', enrichedMovies.length);
 
