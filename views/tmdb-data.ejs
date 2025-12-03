@@ -117,7 +117,9 @@
           </div>
         </div>
       </div>
-    <% } else { %>
+    <% } %>
+    
+    <% if (typeof view === 'undefined' || view !== 'backfill') { %>
       <!-- All Movies View -->
       <div class="mb-6">
       <div class="flex justify-between items-center mb-4">
@@ -423,6 +425,7 @@
         </div>
       <% } %>
     </div>
+    <% } %>
     </main>
   </div>
 
@@ -593,123 +596,123 @@
       setTimeout(formatLastSyncTime, 100);
     })();
 
-    // Backfill functions
+    // Backfill functions (only define if in backfill view)
     <% if (typeof view !== 'undefined' && view === 'backfill') { %>
-      function updateSelectedCount() {
-        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
-        const count = checkboxes.length;
-        document.getElementById('selectedCount').textContent = count;
-        document.getElementById('backfillButton').disabled = count === 0;
-      }
+    function updateSelectedCount() {
+      const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+      const count = checkboxes.length;
+      document.getElementById('selectedCount').textContent = count;
+      document.getElementById('backfillButton').disabled = count === 0;
+    }
 
-      function toggleAllMovies(checked) {
-        const checkboxes = document.querySelectorAll('.movie-checkbox');
-        checkboxes.forEach(cb => {
-          cb.checked = checked;
-        });
-        updateSelectedCount();
-      }
-
-      function selectAllMovies() {
-        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-        if (selectAllCheckbox) {
-          selectAllCheckbox.checked = true;
-          toggleAllMovies(true);
-        }
-      }
-
-      let backfillProgressInterval = null;
-
-      function updateBackfillProgress() {
-        fetch('/tmdb-data/sync/progress')
-          .then(res => res.json())
-          .then(data => {
-            if (data.success && data.progress && data.progress.type === 'tmdb-backfill') {
-              const progress = data.progress;
-              const progressContainer = document.getElementById('backfillProgressContainer');
-              const progressStep = document.getElementById('backfillProgressStep');
-              const progressBar = document.getElementById('backfillProgressBar');
-              const progressPercent = document.getElementById('backfillProgressPercent');
-              const progressStats = document.getElementById('backfillProgressStats');
-              const backfillButton = document.getElementById('backfillButton');
-
-              if (progress.isRunning) {
-                progressContainer.classList.remove('hidden');
-                if (backfillButton) {
-                  backfillButton.disabled = true;
-                }
-
-                progressStep.textContent = progress.currentStep || 'Processing...';
-                progressBar.style.width = progress.progress + '%';
-                progressPercent.textContent = progress.progress + '%';
-
-                if (progress.total > 0) {
-                  progressStats.textContent = `Processed: ${progress.processed} / ${progress.total}${progress.errors > 0 ? ` | Errors: ${progress.errors}` : ''}`;
-                } else if (progress.currentStep) {
-                  progressStats.textContent = progress.currentStep;
-                }
-              } else {
-                progressContainer.classList.add('hidden');
-                if (backfillButton) {
-                  backfillButton.disabled = false;
-                }
-                if (backfillProgressInterval) {
-                  clearInterval(backfillProgressInterval);
-                  backfillProgressInterval = null;
-                }
-                // Reload page to show updated data
-                setTimeout(() => window.location.reload(), 1000);
-              }
-            }
-          })
-          .catch(error => {
-            console.error('Failed to fetch backfill progress:', error);
-          });
-      }
-
-      async function backfillSelected() {
-        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
-        const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
-
-        if (selectedIds.length === 0) {
-          alert('Please select at least one movie to backfill');
-          return;
-        }
-
-        const missingField = document.getElementById('missingField')?.value || '<%= typeof missingField !== "undefined" ? missingField : "origin_country" %>';
-
-        if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
-          return;
-        }
-
-        try {
-          const response = await fetch('/tmdb-data/backfill', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tmdbIds: selectedIds,
-              missingField: missingField,
-            }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            // Start polling for progress
-            if (!backfillProgressInterval) {
-              backfillProgressInterval = setInterval(updateBackfillProgress, 1000);
-              updateBackfillProgress();
-            }
-          } else {
-            alert('Error: ' + (data.error || 'Failed to start backfill'));
-          }
-        } catch (error) {
-          alert('Error: ' + error.message);
-        }
-      }
-
-      // Initialize selected count on page load
+    function toggleAllMovies(checked) {
+      const checkboxes = document.querySelectorAll('.movie-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = checked;
+      });
       updateSelectedCount();
+    }
+
+    function selectAllMovies() {
+      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      if (selectAllCheckbox) {
+        selectAllCheckbox.checked = true;
+        toggleAllMovies(true);
+      }
+    }
+
+    let backfillProgressInterval = null;
+
+    function updateBackfillProgress() {
+      fetch('/tmdb-data/sync/progress')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.progress && data.progress.type === 'tmdb-backfill') {
+            const progress = data.progress;
+            const progressContainer = document.getElementById('backfillProgressContainer');
+            const progressStep = document.getElementById('backfillProgressStep');
+            const progressBar = document.getElementById('backfillProgressBar');
+            const progressPercent = document.getElementById('backfillProgressPercent');
+            const progressStats = document.getElementById('backfillProgressStats');
+            const backfillButton = document.getElementById('backfillButton');
+
+            if (progress.isRunning) {
+              progressContainer.classList.remove('hidden');
+              if (backfillButton) {
+                backfillButton.disabled = true;
+              }
+
+              progressStep.textContent = progress.currentStep || 'Processing...';
+              progressBar.style.width = progress.progress + '%';
+              progressPercent.textContent = progress.progress + '%';
+
+              if (progress.total > 0) {
+                progressStats.textContent = `Processed: ${progress.processed} / ${progress.total}${progress.errors > 0 ? ` | Errors: ${progress.errors}` : ''}`;
+              } else if (progress.currentStep) {
+                progressStats.textContent = progress.currentStep;
+              }
+            } else {
+              progressContainer.classList.add('hidden');
+              if (backfillButton) {
+                backfillButton.disabled = false;
+              }
+              if (backfillProgressInterval) {
+                clearInterval(backfillProgressInterval);
+                backfillProgressInterval = null;
+              }
+              // Reload page to show updated data
+              setTimeout(() => window.location.reload(), 1000);
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to fetch backfill progress:', error);
+        });
+    }
+
+    async function backfillSelected() {
+      const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+      const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+
+      if (selectedIds.length === 0) {
+        alert('Please select at least one movie to backfill');
+        return;
+      }
+
+        const missingField = document.getElementById('missingField')?.value || '<%= (typeof missingField !== "undefined" ? missingField : "origin_country") %>';
+
+      if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/tmdb-data/backfill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tmdbIds: selectedIds,
+            missingField: missingField,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Start polling for progress
+          if (!backfillProgressInterval) {
+            backfillProgressInterval = setInterval(updateBackfillProgress, 1000);
+            updateBackfillProgress();
+          }
+        } else {
+          alert('Error: ' + (data.error || 'Failed to start backfill'));
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    }
+
+    // Initialize selected count on page load
+    updateSelectedCount();
     <% } %>
 
     async function refreshMovie(tmdbId, event) {
