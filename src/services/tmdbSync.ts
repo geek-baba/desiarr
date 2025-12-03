@@ -592,7 +592,21 @@ export function getTmdbSyncStatus(): {
   const pendingUpdates = (db.prepare('SELECT COUNT(*) as count FROM radarr_movies WHERE tmdb_id IS NOT NULL AND tmdb_id NOT IN (SELECT tmdb_id FROM tmdb_movie_cache WHERE is_deleted = 0)').get() as { count: number }).count;
 
   // Parse date like other sync functions do (returns Date | null)
-  const lastSyncDate = lastSyncSetting?.value ? new Date(lastSyncSetting.value) : null;
+  // Handle both old format (SQLite datetime without timezone) and new format (ISO string)
+  let lastSyncDate: Date | null = null;
+  if (lastSyncSetting?.value) {
+    const value = lastSyncSetting.value;
+    // If it's already an ISO string (has 'T' and 'Z'), parse directly
+    if (value.includes('T') && value.includes('Z')) {
+      lastSyncDate = new Date(value);
+    } else if (value.includes('T')) {
+      // Has 'T' but no 'Z' - assume UTC and add 'Z'
+      lastSyncDate = new Date(value.endsWith('Z') ? value : value + 'Z');
+    } else {
+      // Old SQLite format: "YYYY-MM-DD HH:MM:SS" - treat as UTC by adding 'Z'
+      lastSyncDate = new Date(value.replace(' ', 'T') + 'Z');
+    }
+  }
 
   return {
     lastSyncDate,

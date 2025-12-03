@@ -69,7 +69,7 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // Convert lastSyncDate to ISO string for consistent formatting (like other pages)
-    // Use the same pattern as data.ts routes
+    // getTmdbSyncStatus() now handles old format parsing, so we just need to convert to ISO
     const lastSyncDateISO = status.lastSyncDate 
       ? (typeof status.lastSyncDate === 'string' ? status.lastSyncDate : status.lastSyncDate.toISOString())
       : null;
