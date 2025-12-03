@@ -17,7 +17,109 @@
     <main class="p-4 lg:p-6">
     <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">TMDB Data</h2>
 
-    <div class="mb-6">
+    <!-- Tabs -->
+    <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+      <nav class="flex space-x-8" aria-label="Tabs">
+        <a
+          href="/tmdb-data"
+          class="<%= typeof view === 'undefined' || view !== 'backfill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300' %> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+        >
+          All Movies
+        </a>
+        <a
+          href="/tmdb-data/backfill"
+          class="<%= typeof view !== 'undefined' && view === 'backfill' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300' %> whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+        >
+          Backfill Missing Data
+        </a>
+      </nav>
+    </div>
+
+    <% if (typeof view !== 'undefined' && view === 'backfill') { %>
+      <!-- Backfill View -->
+      <div class="mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+          <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
+            <div class="flex-1">
+              <label for="missingField" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Filter by Missing Field
+              </label>
+              <select
+                id="missingField"
+                onchange="window.location.href = '/tmdb-data/backfill?missing=' + this.value + '<%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>'"
+                class="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="origin_country" <%= typeof missingField !== 'undefined' && missingField === 'origin_country' ? 'selected' : '' %>>Missing Origin Country</option>
+                <option value="release_date" <%= typeof missingField !== 'undefined' && missingField === 'release_date' ? 'selected' : '' %>>Missing Release Date</option>
+                <option value="overview" <%= typeof missingField !== 'undefined' && missingField === 'overview' ? 'selected' : '' %>>Missing Overview</option>
+                <option value="tagline" <%= typeof missingField !== 'undefined' && missingField === 'tagline' ? 'selected' : '' %>>Missing Tagline</option>
+                <option value="homepage" <%= typeof missingField !== 'undefined' && missingField === 'homepage' ? 'selected' : '' %>>Missing Homepage</option>
+                <option value="primary_country" <%= typeof missingField !== 'undefined' && missingField === 'primary_country' ? 'selected' : '' %>>Missing Primary Country</option>
+              </select>
+            </div>
+            <div class="flex gap-2">
+              <button
+                onclick="selectAllMovies()"
+                class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+              >
+                Select All
+              </button>
+              <button
+                onclick="backfillSelected()"
+                id="backfillButton"
+                class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                Backfill Selected (<span id="selectedCount">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <!-- Search Bar -->
+          <form method="GET" action="/tmdb-data/backfill" class="mb-4">
+            <input type="hidden" name="missing" value="<%= typeof missingField !== 'undefined' ? missingField : 'origin_country' %>" />
+            <div class="flex gap-2">
+              <input
+                type="text"
+                name="search"
+                value="<%= typeof search !== 'undefined' ? search : '' %>"
+                placeholder="Search by title, TMDB ID..."
+                class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+              >
+                Search
+              </button>
+              <% if (typeof search !== 'undefined' && search) { %>
+                <a
+                  href="/tmdb-data/backfill?missing=<%= typeof missingField !== 'undefined' ? missingField : 'origin_country' %>"
+                  class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                >
+                  Clear
+                </a>
+              <% } %>
+            </div>
+          </form>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="backfillProgressContainer" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <span id="backfillProgressStep" class="text-sm font-medium text-gray-700 dark:text-gray-300">Starting backfill...</span>
+            <span id="backfillProgressPercent" class="text-sm text-gray-600 dark:text-gray-400">0%</span>
+          </div>
+          <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+            <div id="backfillProgressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <span id="backfillProgressStats">Processing...</span>
+          </div>
+        </div>
+      </div>
+    <% } else { %>
+      <!-- All Movies View -->
+      <div class="mb-6">
       <div class="flex justify-between items-center mb-4">
         <div class="flex items-center gap-4">
           <div class="text-right">
@@ -100,6 +202,11 @@
           <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead class="bg-gray-50 dark:bg-gray-700">
               <tr>
+                <% if (typeof view !== 'undefined' && view === 'backfill') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">
+                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleAllMovies(this.checked)" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                  </th>
+                <% } %>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Poster</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
@@ -107,15 +214,27 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                <% if (typeof view === 'undefined' || view !== 'backfill') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                <% } %>
               </tr>
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               <% movies.forEach(movie => { %>
                 <tr 
-                  class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                  onclick="window.location.href='/tmdb-data/movie/<%= movie.tmdb_id %>'"
+                  class="hover:bg-gray-50 dark:hover:bg-gray-700 <%= typeof view !== 'undefined' && view === 'backfill' ? '' : 'cursor-pointer' %>"
+                  <%= typeof view === 'undefined' || view !== 'backfill' ? 'onclick="window.location.href=\'/tmdb-data/movie/' + movie.tmdb_id + '\'"' : '' %>
                 >
+                  <% if (typeof view !== 'undefined' && view === 'backfill') { %>
+                    <td class="px-4 py-3" onclick="event.stopPropagation()">
+                      <input 
+                        type="checkbox" 
+                        class="movie-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500" 
+                        value="<%= movie.tmdb_id %>"
+                        onchange="updateSelectedCount()"
+                      />
+                    </td>
+                  <% } %>
                   <td class="px-4 py-3">
                     <% if (movie.poster_path) { %>
                       <img 
@@ -175,19 +294,21 @@
                       -
                     <% } %>
                   </td>
-                  <td class="px-4 py-3 text-sm">
-                    <button
-                      onclick="refreshMovie(<%= movie.tmdb_id %>, event)"
-                      class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors"
-                      title="Refresh TMDB data for this movie"
-                      id="refresh-btn-<%= movie.tmdb_id %>"
-                    >
-                      <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                      </svg>
-                      <span class="ml-1" id="refresh-text-<%= movie.tmdb_id %>">Refresh</span>
-                    </button>
-                  </td>
+                  <% if (typeof view === 'undefined' || view !== 'backfill') { %>
+                    <td class="px-4 py-3 text-sm">
+                      <button
+                        onclick="refreshMovie(<%= movie.tmdb_id %>, event)"
+                        class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors"
+                        title="Refresh TMDB data for this movie"
+                        id="refresh-btn-<%= movie.tmdb_id %>"
+                      >
+                        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span class="ml-1" id="refresh-text-<%= movie.tmdb_id %>">Refresh</span>
+                      </button>
+                    </td>
+                  <% } %>
                 </tr>
               <% }); %>
             </tbody>
@@ -196,11 +317,22 @@
 
         <!-- Pagination -->
         <% if (typeof totalPages !== 'undefined' && totalPages > 1) { %>
+          <% 
+            const baseUrl = typeof view !== 'undefined' && view === 'backfill' ? '/tmdb-data/backfill' : '/tmdb-data';
+            const queryParams = [];
+            if (typeof view !== 'undefined' && view === 'backfill' && typeof missingField !== 'undefined') {
+              queryParams.push('missing=' + encodeURIComponent(missingField));
+            }
+            if (typeof search !== 'undefined' && search) {
+              queryParams.push('search=' + encodeURIComponent(search));
+            }
+            const queryPrefix = queryParams.length > 0 ? '?' + queryParams.join('&') + '&' : '?';
+          %>
           <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-600 sm:px-6">
             <div class="flex-1 flex justify-between sm:hidden">
               <% if (typeof currentPageNum !== 'undefined' && currentPageNum > 1) { %>
                 <a 
-                  href="?page=<%= currentPageNum - 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                  href="<%= baseUrl %><%= queryPrefix %>page=<%= currentPageNum - 1 %>" 
                   class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Previous
@@ -212,7 +344,7 @@
               <% } %>
               <% if (typeof currentPageNum !== 'undefined' && currentPageNum < totalPages) { %>
                 <a 
-                  href="?page=<%= currentPageNum + 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                  href="<%= baseUrl %><%= queryPrefix %>page=<%= currentPageNum + 1 %>" 
                   class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Next
@@ -235,7 +367,7 @@
                 <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
                   <% if (typeof currentPageNum !== 'undefined' && currentPageNum > 1) { %>
                     <a 
-                      href="?page=<%= currentPageNum - 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                      href="<%= baseUrl %><%= queryPrefix %>page=<%= currentPageNum - 1 %>" 
                       class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
                       Previous
@@ -253,7 +385,7 @@
                       </span>
                     <% } else { %>
                       <a 
-                        href="?page=<%= i %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                        href="<%= baseUrl %><%= queryPrefix %>page=<%= i %>" 
                         class="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         <%= i %>
@@ -263,7 +395,7 @@
                   
                   <% if (typeof currentPageNum !== 'undefined' && currentPageNum < totalPages) { %>
                     <a 
-                      href="?page=<%= currentPageNum + 1 %><%= typeof search !== 'undefined' && search ? '&search=' + encodeURIComponent(search) : '' %>" 
+                      href="<%= baseUrl %><%= queryPrefix %>page=<%= currentPageNum + 1 %>" 
                       class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
                       Next
@@ -460,6 +592,125 @@
       // Also try again after a short delay to catch any timing issues
       setTimeout(formatLastSyncTime, 100);
     })();
+
+    // Backfill functions
+    <% if (typeof view !== 'undefined' && view === 'backfill') { %>
+      function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+        const count = checkboxes.length;
+        document.getElementById('selectedCount').textContent = count;
+        document.getElementById('backfillButton').disabled = count === 0;
+      }
+
+      function toggleAllMovies(checked) {
+        const checkboxes = document.querySelectorAll('.movie-checkbox');
+        checkboxes.forEach(cb => {
+          cb.checked = checked;
+        });
+        updateSelectedCount();
+      }
+
+      function selectAllMovies() {
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (selectAllCheckbox) {
+          selectAllCheckbox.checked = true;
+          toggleAllMovies(true);
+        }
+      }
+
+      let backfillProgressInterval = null;
+
+      function updateBackfillProgress() {
+        fetch('/tmdb-data/sync/progress')
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.progress && data.progress.type === 'tmdb-backfill') {
+              const progress = data.progress;
+              const progressContainer = document.getElementById('backfillProgressContainer');
+              const progressStep = document.getElementById('backfillProgressStep');
+              const progressBar = document.getElementById('backfillProgressBar');
+              const progressPercent = document.getElementById('backfillProgressPercent');
+              const progressStats = document.getElementById('backfillProgressStats');
+              const backfillButton = document.getElementById('backfillButton');
+
+              if (progress.isRunning) {
+                progressContainer.classList.remove('hidden');
+                if (backfillButton) {
+                  backfillButton.disabled = true;
+                }
+
+                progressStep.textContent = progress.currentStep || 'Processing...';
+                progressBar.style.width = progress.progress + '%';
+                progressPercent.textContent = progress.progress + '%';
+
+                if (progress.total > 0) {
+                  progressStats.textContent = `Processed: ${progress.processed} / ${progress.total}${progress.errors > 0 ? ` | Errors: ${progress.errors}` : ''}`;
+                } else if (progress.currentStep) {
+                  progressStats.textContent = progress.currentStep;
+                }
+              } else {
+                progressContainer.classList.add('hidden');
+                if (backfillButton) {
+                  backfillButton.disabled = false;
+                }
+                if (backfillProgressInterval) {
+                  clearInterval(backfillProgressInterval);
+                  backfillProgressInterval = null;
+                }
+                // Reload page to show updated data
+                setTimeout(() => window.location.reload(), 1000);
+              }
+            }
+          })
+          .catch(error => {
+            console.error('Failed to fetch backfill progress:', error);
+          });
+      }
+
+      async function backfillSelected() {
+        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+        const selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+
+        if (selectedIds.length === 0) {
+          alert('Please select at least one movie to backfill');
+          return;
+        }
+
+        const missingField = document.getElementById('missingField')?.value || '<%= typeof missingField !== 'undefined' ? missingField : 'origin_country' %>';
+
+        if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
+          return;
+        }
+
+        try {
+          const response = await fetch('/tmdb-data/backfill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tmdbIds: selectedIds,
+              missingField: missingField,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            // Start polling for progress
+            if (!backfillProgressInterval) {
+              backfillProgressInterval = setInterval(updateBackfillProgress, 1000);
+              updateBackfillProgress();
+            }
+          } else {
+            alert('Error: ' + (data.error || 'Failed to start backfill'));
+          }
+        } catch (error) {
+          alert('Error: ' + error.message);
+        }
+      }
+
+      // Initialize selected count on page load
+      updateSelectedCount();
+    <% } %>
 
     async function refreshMovie(tmdbId, event) {
       if (event) {

@@ -389,5 +389,297 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Backfill page - List movies with missing fields
+ */
+router.get('/backfill', async (req: Request, res: Response) => {
+  try {
+    const page = parseInt((req.query.page as string) || '1', 10);
+    const missing = (req.query.missing as string) || 'origin_country';
+    const search = (req.query.search as string) || '';
+
+    // Build query to find movies with missing field
+    let query = `SELECT * FROM tmdb_movie_cache WHERE is_deleted = 0`;
+    const params: any[] = [];
+
+    // Filter by missing field
+    switch (missing) {
+      case 'origin_country':
+        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')`;
+        break;
+      case 'release_date':
+        query += ` AND (release_date IS NULL OR release_date = '')`;
+        break;
+      case 'overview':
+        query += ` AND (overview IS NULL OR overview = '')`;
+        break;
+      case 'tagline':
+        query += ` AND (tagline IS NULL OR tagline = '')`;
+        break;
+      case 'homepage':
+        query += ` AND (homepage IS NULL OR homepage = '')`;
+        break;
+      case 'primary_country':
+        query += ` AND (primary_country IS NULL OR primary_country = '')`;
+        break;
+      default:
+        query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')`;
+    }
+
+    // Add search filter
+    if (search) {
+      query += ` AND (
+        title LIKE ? OR 
+        original_title LIKE ? OR 
+        tmdb_id LIKE ?
+      )`;
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    // Get total count
+    const countQuery = query.replace(/SELECT \*/, 'SELECT COUNT(*) as count');
+    const totalResult = db.prepare(countQuery).get(params) as { count: number };
+    const total = totalResult.count;
+    const totalPages = Math.ceil(total / MOVIES_PER_PAGE);
+
+    // Add pagination
+    query += ` ORDER BY title LIMIT ? OFFSET ?`;
+    params.push(MOVIES_PER_PAGE, (page - 1) * MOVIES_PER_PAGE);
+
+    const movies = db.prepare(query).all(params) as any[];
+
+    // Enrich with language names
+    const enrichedMovies = movies.map(movie => {
+      const enriched = { ...movie };
+      if (movie.original_language) {
+        enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
+      }
+      return enriched;
+    });
+
+    res.render('tmdb-data', {
+      currentPage: 'tmdb-data',
+      view: 'backfill',
+      missingField: missing,
+      movies: enrichedMovies,
+      currentPageNum: page,
+      totalPages,
+      total,
+      search,
+      lastSyncDate: null,
+      totalCached: 0,
+      pendingUpdates: 0,
+      isSyncing: false,
+      progress: null,
+    });
+  } catch (error) {
+    console.error('Backfill page error:', error);
+    res.status(500).send('Internal server error');
+  }
+});
+
+/**
+ * Bulk backfill selected movies
+ */
+router.post('/backfill', async (req: Request, res: Response) => {
+  try {
+    const { tmdbIds, missingField } = req.body;
+
+    if (!Array.isArray(tmdbIds) || tmdbIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No movies selected for backfill',
+      });
+    }
+
+    if (!missingField) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing field not specified',
+      });
+    }
+
+    const tmdbClient = new TMDBClient();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+
+    if (!tmdbApiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'TMDB API key not configured',
+      });
+    }
+
+    tmdbClient.setApiKey(tmdbApiKey);
+
+    // Start progress tracking
+    const jobId = `backfill-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    syncProgress.start('tmdb-backfill', tmdbIds.length);
+    syncProgress.update(`Starting backfill for ${tmdbIds.length} movies...`, 0);
+
+    // Process in background
+    (async () => {
+      let processed = 0;
+      let updated = 0;
+      let errors = 0;
+      const errorDetails: string[] = [];
+
+      for (let i = 0; i < tmdbIds.length; i++) {
+        const tmdbId = parseInt(tmdbIds[i], 10);
+        if (isNaN(tmdbId)) {
+          errors++;
+          errorDetails.push(`Invalid TMDB ID: ${tmdbIds[i]}`);
+          processed++;
+          continue;
+        }
+
+        try {
+          // Rate limiting: 3 requests per second (333ms delay)
+          if (i > 0 && i % 3 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+
+          if (!tmdbMovie) {
+            errors++;
+            errorDetails.push(`Movie ${tmdbId} not found in TMDB`);
+            processed++;
+            syncProgress.update(`Processing ${processed}/${tmdbIds.length}...`, processed, tmdbIds.length, errors);
+            continue;
+          }
+
+          // Derive primary country
+          const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
+
+          // Update cache
+          const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
+
+          if (existing) {
+            db.prepare(`
+              UPDATE tmdb_movie_cache SET
+                title = ?, original_title = ?, original_language = ?, release_date = ?,
+                production_countries = ?, origin_country = ?, primary_country = ?, poster_path = ?,
+                backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+                genres = ?, production_companies = ?, spoken_languages = ?,
+                belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+                popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+                adult = ?, video = ?, homepage = ?,
+                last_updated_at = datetime('now'), is_deleted = 0
+              WHERE tmdb_id = ?
+            `).run(
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null,
+              tmdbId
+            );
+            updated++;
+          } else {
+            // Insert new entry
+            db.prepare(`
+              INSERT INTO tmdb_movie_cache (
+                tmdb_id, title, original_title, original_language, release_date,
+                production_countries, origin_country, primary_country, poster_path, backdrop_path,
+                overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+                belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+                vote_count, status, adult, video, homepage,
+                synced_at, last_updated_at, is_deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+            `).run(
+              tmdbMovie.id,
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null
+            );
+            updated++;
+          }
+
+          processed++;
+          syncProgress.update(
+            `Processed ${processed}/${tmdbIds.length} movies (${updated} updated, ${errors} errors)...`,
+            processed,
+            tmdbIds.length,
+            errors
+          );
+        } catch (error: any) {
+          errors++;
+          errorDetails.push(`Movie ${tmdbId}: ${error?.message || 'Unknown error'}`);
+          processed++;
+          syncProgress.update(
+            `Processed ${processed}/${tmdbIds.length} movies (${updated} updated, ${errors} errors)...`,
+            processed,
+            tmdbIds.length,
+            errors
+          );
+        }
+      }
+
+      syncProgress.complete();
+    })().catch(error => {
+      console.error('Background backfill error:', error);
+      syncProgress.error('Backfill failed: ' + (error?.message || 'Unknown error'));
+    });
+
+    res.json({
+      success: true,
+      message: `Backfill started for ${tmdbIds.length} movies`,
+      jobId,
+    });
+  } catch (error: any) {
+    console.error('Backfill error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to start backfill',
+    });
+  }
+});
+
 export default router;
 
