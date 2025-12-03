@@ -676,7 +676,7 @@
           return;
         }
 
-        const missingField = document.getElementById('missingField')?.value || '<%= typeof missingField !== 'undefined' ? missingField : 'origin_country' %>';
+        const missingField = document.getElementById('missingField')?.value || '<%= typeof missingField !== "undefined" ? missingField : "origin_country" %>';
 
         if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
           return;
