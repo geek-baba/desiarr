@@ -581,21 +581,22 @@ router.get('/backfill/ids', async (req: Request, res: Response) => {
 
     // Filter out movies that actually have origin_country (same validation as main route)
     const validIds = movies
-      .map(movie => {
+      .filter(movie => {
         if (missing === 'origin_country' && movie.origin_country) {
           try {
             const originCountry = JSON.parse(movie.origin_country);
             if (Array.isArray(originCountry) && originCountry.length > 0) {
-              return null; // Has origin_country, exclude
+              return false; // Has origin_country, exclude
             }
           } catch (e) {
             // Invalid JSON, include
           }
         }
-        return movie.tmdb_id;
+        return true;
       })
-      .filter(id => id !== null) as number[];
+      .map(movie => movie.tmdb_id) as number[];
 
+    console.log('[TMDB Backfill IDs] Total IDs found:', validIds.length);
     res.json({ success: true, ids: validIds });
   } catch (error) {
     console.error('Backfill IDs error:', error);
