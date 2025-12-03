@@ -110,10 +110,10 @@ export const tvReleasesModel = {
         release.feed_id ?? null,
         release.link ?? null,
         release.published_at ?? null,
-        tvdbId,
-        tvdbSlug,
-        tmdbId,
-        imdbId,
+        tvdbId ?? null, // Already converted but add defensive check
+        tvdbSlug ?? null, // Already converted but add defensive check
+        tmdbId ?? null, // Already converted but add defensive check
+        imdbId ?? null, // Already converted but add defensive check
         release.tvdb_poster_url ?? null, // Optional field - convert undefined to null
         release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
         release.sonarr_series_id ?? null, // Optional field - convert undefined to null
