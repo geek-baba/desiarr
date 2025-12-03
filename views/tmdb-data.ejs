@@ -711,15 +711,39 @@
         });
     }
 
+    // Toast notification function
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all duration-300 ${
+        type === 'success' ? 'bg-green-500 text-white' :
+        type === 'error' ? 'bg-red-500 text-white' :
+        type === 'warning' ? 'bg-yellow-500 text-white' :
+        'bg-blue-500 text-white'
+      }`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
     async function backfillSelected() {
       const missingFieldEl = document.getElementById('missingField');
       const missingField = missingFieldEl ? missingFieldEl.value : defaultMissingFieldValue;
 
-      // Check if "Select All (All Pages)" was used
-      const selectAllFlag = sessionStorage.getItem('tmdbBackfillSelectAll') === 'true';
+      // First, check actual selected checkboxes on the page
+      const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
+      const selectedFromPage = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+      
       let selectedIds = [];
+      const selectAllFlag = sessionStorage.getItem('tmdbBackfillSelectAll') === 'true';
 
-      if (selectAllFlag) {
+      // Only use "Select All" if:
+      // 1. No checkboxes are selected on current page AND
+      // 2. The selectAll flag is set
+      if (selectedFromPage.length === 0 && selectAllFlag) {
         // Fetch all IDs from the server
         try {
           const response = await fetch(`/tmdb-data/backfill/ids?missing=${encodeURIComponent(missingField)}&search=`);
@@ -727,27 +751,26 @@
           if (data.success && data.ids) {
             selectedIds = data.ids;
           } else {
-            alert('Error fetching all movie IDs: ' + (data.error || 'Unknown error'));
+            showToast('Error fetching all movie IDs: ' + (data.error || 'Unknown error'), 'error');
             return;
           }
         } catch (error) {
           console.error('Error fetching all movie IDs:', error);
-          alert('Error fetching all movie IDs: ' + error.message);
+          showToast('Error fetching all movie IDs: ' + error.message, 'error');
           return;
         }
       } else {
         // Use checkboxes on current page
-        const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
-        selectedIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+        selectedIds = selectedFromPage;
       }
 
       if (selectedIds.length === 0) {
-        alert('Please select at least one movie to backfill');
+        showToast('Please select at least one movie to backfill', 'warning');
         return;
       }
 
-      // Clear sessionStorage after getting IDs
-      if (selectAllFlag) {
+      // Clear sessionStorage after getting IDs (if it was used)
+      if (selectAllFlag && selectedFromPage.length === 0) {
         sessionStorage.removeItem('tmdbBackfillSelectAll');
         sessionStorage.removeItem('tmdbBackfillMissingField');
         sessionStorage.removeItem('tmdbBackfillTotal');
@@ -758,6 +781,7 @@
       }
 
       console.log(`[Backfill] Starting backfill for ${selectedIds.length} movies, missingField: ${missingField}`);
+      showToast(`Starting backfill for ${selectedIds.length} movie(s)...`, 'info');
 
       try {
         const response = await fetch('/tmdb-data/backfill', {
@@ -783,12 +807,14 @@
             backfillProgressInterval = setInterval(updateBackfillProgress, 1000);
             updateBackfillProgress();
           }
+          
+          showToast(`Backfill started for ${selectedIds.length} movie(s)`, 'success');
         } else {
-          alert('Error: ' + (data.error || 'Failed to start backfill'));
+          showToast('Error: ' + (data.error || 'Failed to start backfill'), 'error');
         }
       } catch (error) {
         console.error('Backfill error:', error);
-        alert('Error: ' + (error.message || 'Failed to start backfill'));
+        showToast('Error: ' + (error.message || 'Failed to start backfill'), 'error');
       }
     }
 
