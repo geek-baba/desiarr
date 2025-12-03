@@ -107,6 +107,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -173,6 +174,19 @@
                     <% } else { %>
                       -
                     <% } %>
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    <button
+                      onclick="refreshMovie(<%= movie.tmdb_id %>, event)"
+                      class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900 transition-colors"
+                      title="Refresh TMDB data for this movie"
+                      id="refresh-btn-<%= movie.tmdb_id %>"
+                    >
+                      <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                      </svg>
+                      <span class="ml-1" id="refresh-text-<%= movie.tmdb_id %>">Refresh</span>
+                    </button>
                   </td>
                 </tr>
               <% }); %>
@@ -446,6 +460,68 @@
       // Also try again after a short delay to catch any timing issues
       setTimeout(formatLastSyncTime, 100);
     })();
+
+    async function refreshMovie(tmdbId, event) {
+      if (event) {
+        event.stopPropagation(); // Prevent row click
+      }
+
+      const button = document.getElementById(`refresh-btn-${tmdbId}`);
+      const text = document.getElementById(`refresh-text-${tmdbId}`);
+      
+      if (!button || !text) return;
+
+      // Disable button and show loading state
+      button.disabled = true;
+      button.classList.add('opacity-50', 'cursor-not-allowed');
+      text.textContent = 'Refreshing...';
+
+      try {
+        const response = await fetch(`/tmdb-data/refresh/${tmdbId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          text.textContent = 'Refreshed!';
+          button.classList.remove('text-blue-600', 'hover:text-blue-800');
+          button.classList.add('text-green-600');
+          
+          // Reload page after a short delay to show updated data
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        } else {
+          text.textContent = 'Error';
+          button.classList.remove('text-blue-600', 'hover:text-blue-800');
+          button.classList.add('text-red-600');
+          alert('Error: ' + (data.error || 'Failed to refresh movie'));
+          
+          // Reset after 2 seconds
+          setTimeout(() => {
+            button.disabled = false;
+            button.classList.remove('opacity-50', 'cursor-not-allowed', 'text-red-600');
+            button.classList.add('text-blue-600', 'hover:text-blue-800');
+            text.textContent = 'Refresh';
+          }, 2000);
+        }
+      } catch (error) {
+        text.textContent = 'Error';
+        button.classList.remove('text-blue-600', 'hover:text-blue-800');
+        button.classList.add('text-red-600');
+        alert('Error: ' + error.message);
+        
+        // Reset after 2 seconds
+        setTimeout(() => {
+          button.disabled = false;
+          button.classList.remove('opacity-50', 'cursor-not-allowed', 'text-red-600');
+          button.classList.add('text-blue-600', 'hover:text-blue-800');
+          text.textContent = 'Refresh';
+        }, 2000);
+      }
+    }
   </script>
   <script src="/js/ui.js"></script>
 </body>

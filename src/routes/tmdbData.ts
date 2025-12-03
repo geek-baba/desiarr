@@ -3,6 +3,7 @@ import { initialTmdbSync, incrementalTmdbSync, getTmdbSyncStatus } from '../serv
 import { syncProgress } from '../services/syncProgress';
 import db from '../db';
 import { getLanguageName } from '../utils/languageMapping';
+import { getCountryName } from '../utils/countryMapping';
 import { TMDBClient } from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 
@@ -251,6 +252,142 @@ router.get('/sync/progress', (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to get progress',
+    });
+  }
+});
+
+/**
+ * Refresh a single movie's TMDB data
+ */
+router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
+  try {
+    const tmdbId = parseInt(req.params.tmdbId, 10);
+    if (isNaN(tmdbId)) {
+      return res.status(400).json({ success: false, error: 'Invalid TMDB ID' });
+    }
+
+    const tmdbClient = new TMDBClient();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+
+    if (!tmdbApiKey) {
+      return res.status(400).json({ success: false, error: 'TMDB API key not configured' });
+    }
+
+    tmdbClient.setApiKey(tmdbApiKey);
+    const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+
+    if (!tmdbMovie) {
+      return res.status(404).json({ success: false, error: 'Movie not found in TMDB' });
+    }
+
+    // Extract primary country (same logic as sync service)
+    let primaryCountry: string | null = null;
+    if (tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0) {
+      primaryCountry = tmdbMovie.production_countries[0].name;
+    } else if (tmdbMovie.origin_country && tmdbMovie.origin_country.length > 0) {
+      primaryCountry = getCountryName(tmdbMovie.origin_country[0]);
+    }
+
+    // Update tmdb_movie_cache with all fields (maintain consistency with sync logic)
+    const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
+    
+    if (existing) {
+      // Update existing cache entry
+      db.prepare(`
+        UPDATE tmdb_movie_cache SET
+          title = ?, original_title = ?, original_language = ?, release_date = ?,
+          production_countries = ?, primary_country = ?, poster_path = ?,
+          backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+          genres = ?, production_companies = ?, spoken_languages = ?,
+          belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+          popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+          adult = ?, video = ?, homepage = ?,
+          last_updated_at = datetime('now'), is_deleted = 0
+        WHERE tmdb_id = ?
+      `).run(
+        tmdbMovie.title || null,
+        tmdbMovie.original_title || null,
+        tmdbMovie.original_language || null,
+        tmdbMovie.release_date || null,
+        tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+        primaryCountry,
+        tmdbMovie.poster_path || null,
+        tmdbMovie.backdrop_path || null,
+        tmdbMovie.overview || null,
+        tmdbMovie.tagline || null,
+        tmdbMovie.imdb_id || null,
+        tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+        tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+        tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+        tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+        tmdbMovie.budget || null,
+        tmdbMovie.revenue || null,
+        tmdbMovie.runtime || null,
+        tmdbMovie.popularity || null,
+        tmdbMovie.vote_average || null,
+        tmdbMovie.vote_count || null,
+        tmdbMovie.status || null,
+        tmdbMovie.adult ? 1 : 0,
+        tmdbMovie.video ? 1 : 0,
+        tmdbMovie.homepage || null,
+        tmdbId
+      );
+    } else {
+      // Insert new cache entry
+      db.prepare(`
+        INSERT INTO tmdb_movie_cache (
+          tmdb_id, title, original_title, original_language, release_date,
+          production_countries, primary_country, poster_path, backdrop_path,
+          overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+          belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+          vote_count, status, adult, video, homepage,
+          synced_at, last_updated_at, is_deleted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+      `).run(
+        tmdbMovie.id,
+        tmdbMovie.title || null,
+        tmdbMovie.original_title || null,
+        tmdbMovie.original_language || null,
+        tmdbMovie.release_date || null,
+        tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+        primaryCountry,
+        tmdbMovie.poster_path || null,
+        tmdbMovie.backdrop_path || null,
+        tmdbMovie.overview || null,
+        tmdbMovie.tagline || null,
+        tmdbMovie.imdb_id || null,
+        tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+        tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+        tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+        tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+        tmdbMovie.budget || null,
+        tmdbMovie.revenue || null,
+        tmdbMovie.runtime || null,
+        tmdbMovie.popularity || null,
+        tmdbMovie.vote_average || null,
+        tmdbMovie.vote_count || null,
+        tmdbMovie.status || null,
+        tmdbMovie.adult ? 1 : 0,
+        tmdbMovie.video ? 1 : 0,
+        tmdbMovie.homepage || null
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        title: tmdbMovie.title,
+        original_language: tmdbMovie.original_language,
+        primary_country: primaryCountry,
+        release_date: tmdbMovie.release_date,
+      },
+    });
+  } catch (error: any) {
+    console.error('Refresh TMDB data error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to refresh TMDB data',
     });
   }
 });
