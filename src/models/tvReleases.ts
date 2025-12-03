@@ -105,7 +105,7 @@ export const tvReleasesModel = {
         release.title,
         release.normalized_title,
         release.show_name,
-        release.season_number || null,
+        release.season_number ?? null, // Optional field - convert undefined to null
         release.source_site,
         release.feed_id,
         release.link,
@@ -114,10 +114,10 @@ export const tvReleasesModel = {
         tvdbSlug,
         tmdbId,
         imdbId,
-        release.tvdb_poster_url || null,
-        release.tmdb_poster_url || null,
-        release.sonarr_series_id || null,
-        release.sonarr_series_title || null,
+        release.tvdb_poster_url ?? null, // Optional field - convert undefined to null
+        release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
+        release.sonarr_series_id ?? null, // Optional field - convert undefined to null
+        release.sonarr_series_title ?? null, // Optional field - convert undefined to null
         status,
         manuallyIgnored ? 1 : 0,
         release.guid
@@ -140,19 +140,19 @@ export const tvReleasesModel = {
         release.title,
         release.normalized_title,
         release.show_name,
-        release.season_number || null,
+        release.season_number ?? null, // Optional field - convert undefined to null
         release.source_site,
         release.feed_id,
         release.link,
         release.published_at,
-        release.tvdb_id || null,
-        release.tvdb_slug || null,
-        release.tmdb_id || null,
-        release.imdb_id || null,
-        release.tvdb_poster_url || null,
-        release.tmdb_poster_url || null,
-        release.sonarr_series_id || null,
-        release.sonarr_series_title || null,
+        release.tvdb_id ?? null, // Optional field - convert undefined to null
+        release.tvdb_slug ?? null, // Optional field - convert undefined to null
+        release.tmdb_id ?? null, // Optional field - convert undefined to null
+        release.imdb_id ?? null, // Optional field - convert undefined to null
+        release.tvdb_poster_url ?? null, // Optional field - convert undefined to null
+        release.tmdb_poster_url ?? null, // Optional field - convert undefined to null
+        release.sonarr_series_id ?? null, // Optional field - convert undefined to null
+        release.sonarr_series_title ?? null, // Optional field - convert undefined to null
         finalStatus,
         finalManuallyIgnored
       );
