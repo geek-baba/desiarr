@@ -199,6 +199,7 @@ db.exec(`
     original_language TEXT,
     release_date TEXT,
     production_countries TEXT,
+    origin_country TEXT,
     primary_country TEXT,
     poster_path TEXT,
     backdrop_path TEXT,
@@ -280,6 +281,7 @@ try {
     { name: 'adult', type: 'INTEGER DEFAULT 0' },
     { name: 'video', type: 'INTEGER DEFAULT 0' },
     { name: 'homepage', type: 'TEXT' },
+    { name: 'origin_country', type: 'TEXT' },
   ];
   
   for (const col of newTmdbColumns) {

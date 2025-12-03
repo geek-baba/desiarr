@@ -3,7 +3,7 @@ import { initialTmdbSync, incrementalTmdbSync, getTmdbSyncStatus } from '../serv
 import { syncProgress } from '../services/syncProgress';
 import db from '../db';
 import { getLanguageName } from '../utils/languageMapping';
-import { getCountryName } from '../utils/countryMapping';
+import { derivePrimaryCountryFromMovie } from '../utils/tmdbCountryDerivation';
 import { TMDBClient } from '../tmdb/client';
 import { settingsModel } from '../models/settings';
 
@@ -281,15 +281,10 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Movie not found in TMDB' });
     }
 
-    // Extract primary country (same logic as sync service)
-    let primaryCountry: string | null = null;
-    if (tmdbMovie.production_countries && tmdbMovie.production_countries.length > 0) {
-      primaryCountry = tmdbMovie.production_countries[0].name;
-    } else if (tmdbMovie.origin_country && tmdbMovie.origin_country.length > 0) {
-      primaryCountry = getCountryName(tmdbMovie.origin_country[0]);
-    }
+    // Derive primary country (stored for backward compatibility, but should be derived at query time)
+    const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
 
-    // Update tmdb_movie_cache with all fields (maintain consistency with sync logic)
+    // Update tmdb_movie_cache with all fields including origin_country (maintain consistency with sync logic)
     const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
     
     if (existing) {
@@ -297,7 +292,7 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
       db.prepare(`
         UPDATE tmdb_movie_cache SET
           title = ?, original_title = ?, original_language = ?, release_date = ?,
-          production_countries = ?, primary_country = ?, poster_path = ?,
+          production_countries = ?, origin_country = ?, primary_country = ?, poster_path = ?,
           backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
           genres = ?, production_companies = ?, spoken_languages = ?,
           belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
@@ -311,6 +306,7 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
         tmdbMovie.original_language || null,
         tmdbMovie.release_date || null,
         tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+        tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
         primaryCountry,
         tmdbMovie.poster_path || null,
         tmdbMovie.backdrop_path || null,
@@ -338,12 +334,12 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
       db.prepare(`
         INSERT INTO tmdb_movie_cache (
           tmdb_id, title, original_title, original_language, release_date,
-          production_countries, primary_country, poster_path, backdrop_path,
+          production_countries, origin_country, primary_country, poster_path, backdrop_path,
           overview, tagline, imdb_id, genres, production_companies, spoken_languages,
           belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
           vote_count, status, adult, video, homepage,
           synced_at, last_updated_at, is_deleted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
       `).run(
         tmdbMovie.id,
         tmdbMovie.title || null,
@@ -351,6 +347,7 @@ router.post('/refresh/:tmdbId', async (req: Request, res: Response) => {
         tmdbMovie.original_language || null,
         tmdbMovie.release_date || null,
         tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+        tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
         primaryCountry,
         tmdbMovie.poster_path || null,
         tmdbMovie.backdrop_path || null,
