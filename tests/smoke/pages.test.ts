@@ -17,11 +17,23 @@ import logsRouter from '../../src/routes/logs';
 // Mock database and models before importing anything that uses them
 vi.mock('../../src/db', () => {
   const mockDb = {
-    prepare: vi.fn(() => ({
-      get: vi.fn(() => null),
-      all: vi.fn(() => []),
-      run: vi.fn(() => ({ changes: 0, lastInsertRowid: 1 })),
-    })),
+    prepare: vi.fn((query: string) => {
+      // For count queries (used by sync services), return { count: 0 }
+      if (query.includes('COUNT') || query.includes('count')) {
+        return {
+          get: vi.fn(() => ({ count: 0 })),
+          all: vi.fn(() => []),
+          run: vi.fn(() => ({ changes: 0, lastInsertRowid: 1 })),
+        };
+      }
+      // For other queries (like app_settings), return undefined (no result)
+      return {
+        get: vi.fn(() => undefined),
+        all: vi.fn(() => []),
+        run: vi.fn(() => ({ changes: 0, lastInsertRowid: 1 })),
+      };
+    }),
+    exec: vi.fn(),
   };
   return {
     default: mockDb,
@@ -68,6 +80,10 @@ vi.mock('../../src/models/releases', () => ({
     getAll: vi.fn(() => []),
     getByStatus: vi.fn(() => []),
   },
+  releasesModel: {
+    getAll: vi.fn(() => []),
+    getByStatus: vi.fn(() => []),
+  },
 }));
 
 vi.mock('../../src/models/tvReleases', () => ({
@@ -85,12 +101,20 @@ vi.mock('../../src/services/logStorage', () => ({
   },
 }));
 
-// Mock axios for GitHub API calls
+// Mock axios for GitHub API calls and TMDB client
 vi.mock('axios', async () => {
   const actual = await vi.importActual('axios');
+  const mockAxiosInstance = {
+    get: vi.fn(() => Promise.reject(new Error('Mock: API call not expected in smoke tests'))),
+    post: vi.fn(() => Promise.reject(new Error('Mock: API call not expected in smoke tests'))),
+    put: vi.fn(() => Promise.reject(new Error('Mock: API call not expected in smoke tests'))),
+    delete: vi.fn(() => Promise.reject(new Error('Mock: API call not expected in smoke tests'))),
+  };
   return {
     ...actual,
     default: {
+      ...actual.default,
+      create: vi.fn(() => mockAxiosInstance),
       get: vi.fn(() => Promise.reject(new Error('Mock: API call not expected in smoke tests'))),
     },
   };
