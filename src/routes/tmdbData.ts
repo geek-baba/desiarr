@@ -70,9 +70,28 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Convert lastSyncDate to ISO string for consistent formatting (like other pages)
     // getTmdbSyncStatus() now handles old format parsing, so we just need to convert to ISO
-    const lastSyncDateISO = status.lastSyncDate 
-      ? (typeof status.lastSyncDate === 'string' ? status.lastSyncDate : status.lastSyncDate.toISOString())
-      : null;
+    let lastSyncDateISO: string | null = null;
+    if (status.lastSyncDate) {
+      lastSyncDateISO = status.lastSyncDate.toISOString();
+    } else {
+      // Fallback: check raw database value if Date parsing failed
+      const rawSetting = db.prepare('SELECT value FROM app_settings WHERE key = ?').get('tmdb_last_sync_date') as { value: string } | undefined;
+      if (rawSetting?.value) {
+        const rawValue = rawSetting.value;
+        // Handle old format: convert to UTC ISO string
+        if (rawValue.includes('T') && rawValue.includes('Z')) {
+          lastSyncDateISO = rawValue; // Already ISO
+        } else if (rawValue.includes('T')) {
+          lastSyncDateISO = rawValue.endsWith('Z') ? rawValue : rawValue + 'Z';
+        } else {
+          // Old SQLite format: "YYYY-MM-DD HH:MM:SS" - treat as UTC
+          lastSyncDateISO = rawValue.replace(' ', 'T') + 'Z';
+        }
+      }
+    }
+    
+    // Debug: log what we're passing to template
+    console.log('[TMDB Data] lastSyncDateISO:', lastSyncDateISO);
 
     res.render('tmdb-data', {
       currentPage: 'tmdb-data',
