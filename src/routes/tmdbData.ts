@@ -544,11 +544,24 @@ router.get('/backfill', async (req: Request, res: Response) => {
         enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
       }
       
+      // Parse origin_country for display
+      if (movie.origin_country && movie.origin_country !== 'null' && movie.origin_country !== '[]') {
+        try {
+          const originCountry = JSON.parse(movie.origin_country);
+          if (Array.isArray(originCountry) && originCountry.length > 0) {
+            const { getCountryName } = require('../utils/countryMapping');
+            enriched.origin_country_display = originCountry.map((code: string) => getCountryName(code) || code).join(', ');
+          }
+        } catch (e) {
+          // Invalid JSON, ignore
+        }
+      }
+      
       // Derive primary_country if it's missing but we have production_countries or origin_country
       if (!enriched.primary_country || enriched.primary_country === '' || enriched.primary_country === '-') {
         try {
           const productionCountries = movie.production_countries ? JSON.parse(movie.production_countries) : null;
-          const originCountry = movie.origin_country ? JSON.parse(movie.origin_country) : null;
+          const originCountry = movie.origin_country && movie.origin_country !== 'null' ? JSON.parse(movie.origin_country) : null;
           if (productionCountries && productionCountries.length > 0) {
             enriched.primary_country = productionCountries[0].name;
           } else if (originCountry && originCountry.length > 0) {

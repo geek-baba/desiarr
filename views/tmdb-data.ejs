@@ -222,7 +222,10 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Year</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Language</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Origin Country (TMDB)</th>
+                <% if (typeof view !== 'undefined' && view === 'backfill' && typeof missingField !== 'undefined' && missingField === 'origin_country') { %>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Primary Country (Derived)</th>
+                <% } %>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IMDB ID</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
                 <% if (typeof view === 'undefined' || view !== 'backfill') { %>
@@ -275,8 +278,16 @@
                     <%= movie.original_language_display || movie.original_language || '-' %>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                    <%= movie.primary_country || '-' %>
+                    <span class="<%= typeof movie.origin_country_display === 'undefined' || !movie.origin_country_display ? 'text-red-600 font-semibold' : 'text-gray-600' %>">
+                      <%= typeof movie.origin_country_display !== 'undefined' && movie.origin_country_display ? movie.origin_country_display : '-' %>
+                    </span>
                   </td>
+                  <% if (typeof view !== 'undefined' && view === 'backfill' && typeof missingField !== 'undefined' && missingField === 'origin_country') { %>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 italic">
+                      <%= movie.primary_country || '-' %>
+                      <span class="text-xs text-gray-400">(from production_countries)</span>
+                    </td>
+                  <% } %>
                   <td class="px-4 py-3 text-sm text-gray-600">
                     <% if (movie.imdb_id) { %>
                       <a 
