@@ -68,9 +68,33 @@ router.get('/', async (req: Request, res: Response) => {
       return enriched;
     });
 
+    // Format lastSyncDate to EST if it exists
+    let formattedLastSyncDate: string | null = null;
+    if (status.lastSyncDate) {
+      try {
+        // Parse the date (handles both YYYY-MM-DD and YYYY-MM-DD HH:MM:SS formats)
+        const dateStr = status.lastSyncDate.includes(' ') ? status.lastSyncDate : `${status.lastSyncDate}T00:00:00`;
+        const date = new Date(dateStr);
+        // Format to EST (America/New_York timezone)
+        formattedLastSyncDate = date.toLocaleString('en-US', {
+          timeZone: 'America/New_York',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true,
+        }) + ' EST';
+      } catch (error) {
+        // If parsing fails, use the raw value
+        formattedLastSyncDate = status.lastSyncDate;
+      }
+    }
+
     res.render('tmdb-data', {
       currentPage: 'tmdb-data',
-      lastSyncDate: status.lastSyncDate,
+      lastSyncDate: formattedLastSyncDate,
       totalCached: status.totalCached,
       pendingUpdates: status.pendingUpdates,
       isSyncing: progress?.isRunning && progress?.type === 'tmdb-sync',
