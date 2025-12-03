@@ -412,44 +412,40 @@
     <% } %>
 
     // Format last sync time in user's local timezone (same as header)
-    // Run immediately if DOM is already loaded, otherwise wait for DOMContentLoaded
-    (function formatLastSyncTime() {
-      const lastSyncElement = document.getElementById('lastSyncTime');
-      if (lastSyncElement && lastSyncElement.dataset.utc) {
-        const utcDate = new Date(lastSyncElement.dataset.utc);
-        // Format in user's local timezone with timezone info
-        const options = {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          timeZoneName: 'short'
-        };
-        lastSyncElement.textContent = utcDate.toLocaleString(undefined, options);
-      }
-    })();
-    
-    // Also run on DOMContentLoaded in case script runs before element exists
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
+    // Use the same pattern as ui.js for consistency
+    (function() {
+      function formatLastSyncTime() {
         const lastSyncElement = document.getElementById('lastSyncTime');
-        if (lastSyncElement && lastSyncElement.dataset.utc && lastSyncElement.textContent === 'Loading...') {
-          const utcDate = new Date(lastSyncElement.dataset.utc);
-          const options = {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            timeZoneName: 'short'
-          };
-          lastSyncElement.textContent = utcDate.toLocaleString(undefined, options);
+        if (lastSyncElement && lastSyncElement.dataset.utc) {
+          try {
+            const utcDate = new Date(lastSyncElement.dataset.utc);
+            // Format in user's local timezone with timezone info
+            const options = {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              timeZoneName: 'short'
+            };
+            lastSyncElement.textContent = utcDate.toLocaleString(undefined, options);
+          } catch (e) {
+            console.error('Error formatting last sync time:', e);
+          }
         }
-      });
-    }
+      }
+      
+      // Run immediately if DOM is ready, otherwise wait
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', formatLastSyncTime);
+      } else {
+        formatLastSyncTime();
+      }
+      
+      // Also try again after a short delay to catch any timing issues
+      setTimeout(formatLastSyncTime, 100);
+    })();
   </script>
   <script src="/js/ui.js"></script>
 </body>
