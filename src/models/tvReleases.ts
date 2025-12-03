@@ -141,7 +141,7 @@ export const tvReleasesModel = {
     } else {
       // Insert new release
       // Check if show is ignored and override status/manually_ignored if needed
-      const finalManuallyIgnored = isIgnoredInList || (release.manually_ignored ? 1 : 0);
+      const finalManuallyIgnored = (isIgnoredInList || release.manually_ignored) ? 1 : 0; // Ensure it's always a number, not boolean
       const finalStatus = isIgnoredInList ? 'IGNORED' : release.status;
       
       const result = db.prepare(`
@@ -169,7 +169,7 @@ export const tvReleasesModel = {
         sanitizeForSqlite(release.sonarr_series_id),
         sanitizeForSqlite(release.sonarr_series_title),
         sanitizeForSqlite(finalStatus),
-        finalManuallyIgnored ?? 0
+        finalManuallyIgnored // Already a number (0 or 1), no need for ?? 0
       );
       return tvReleasesModel.getById(result.lastInsertRowid as number)!;
     }
