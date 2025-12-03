@@ -596,8 +596,7 @@
       setTimeout(formatLastSyncTime, 100);
     })();
 
-    // Backfill functions (only define if in backfill view)
-    <% if (typeof view !== 'undefined' && view === 'backfill') { %>
+    // Backfill functions (defined for all views, but only used in backfill view)
     function updateSelectedCount() {
       const checkboxes = document.querySelectorAll('.movie-checkbox:checked');
       const count = checkboxes.length;
@@ -679,7 +678,8 @@
         return;
       }
 
-        const missingField = document.getElementById('missingField')?.value || '<%= (typeof missingField !== "undefined" ? missingField : "origin_country") %>';
+      const missingFieldEl = document.getElementById('missingField');
+      const missingField = missingFieldEl ? missingFieldEl.value : '<%- typeof missingField !== "undefined" ? missingField : "origin_country" %>';
 
       if (!confirm(`Backfill ${selectedIds.length} movie(s) for missing ${missingField}?`)) {
         return;
@@ -711,7 +711,8 @@
       }
     }
 
-    // Initialize selected count on page load
+    // Initialize selected count on page load (only if in backfill view)
+    <% if (typeof view !== 'undefined' && view === 'backfill') { %>
     updateSelectedCount();
     <% } %>
 
