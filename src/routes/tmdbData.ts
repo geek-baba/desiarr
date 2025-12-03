@@ -770,7 +770,9 @@ router.post('/backfill', async (req: Request, res: Response) => {
               tmdbMovie.original_language || null,
               tmdbMovie.release_date || null,
               tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
-              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              tmdbMovie.origin_country && Array.isArray(tmdbMovie.origin_country) && tmdbMovie.origin_country.length > 0 
+                ? JSON.stringify(tmdbMovie.origin_country) 
+                : null,
               primaryCountry,
               tmdbMovie.poster_path || null,
               tmdbMovie.backdrop_path || null,
@@ -812,7 +814,9 @@ router.post('/backfill', async (req: Request, res: Response) => {
               tmdbMovie.original_language || null,
               tmdbMovie.release_date || null,
               tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
-              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              tmdbMovie.origin_country && Array.isArray(tmdbMovie.origin_country) && tmdbMovie.origin_country.length > 0 
+                ? JSON.stringify(tmdbMovie.origin_country) 
+                : null,
               primaryCountry,
               tmdbMovie.poster_path || null,
               tmdbMovie.backdrop_path || null,
