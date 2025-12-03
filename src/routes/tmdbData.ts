@@ -423,14 +423,8 @@ router.get('/backfill', async (req: Request, res: Response) => {
         break;
       case 'primary_country':
         // primary_country can be NULL, empty, or '-' (placeholder)
-        // Also check if production_countries and origin_country are both empty/null
-        query += ` AND (
-          (primary_country IS NULL OR primary_country = '' OR primary_country = '-') 
-          AND (
-            (production_countries IS NULL OR production_countries = '' OR production_countries = '[]')
-            AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')
-          )
-        )`;
+        // Show movies where primary_country is missing (we'll derive it in enrichment if possible)
+        query += ` AND (primary_country IS NULL OR primary_country = '' OR primary_country = '-')`;
         break;
       default:
         query += ` AND (origin_country IS NULL OR origin_country = '' OR origin_country = '[]')`;
