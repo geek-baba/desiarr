@@ -69,11 +69,20 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // Convert lastSyncDate to ISO string for consistent formatting (like other pages)
+    // SQLite datetime('now') stores in UTC, so we need to parse it as UTC
     let lastSyncDateISO: string | null = null;
     if (status.lastSyncDate) {
       try {
         // Parse the date (handles both YYYY-MM-DD and YYYY-MM-DD HH:MM:SS formats)
-        const dateStr = status.lastSyncDate.includes(' ') ? status.lastSyncDate : `${status.lastSyncDate}T00:00:00`;
+        // SQLite datetime('now') returns UTC, so append 'Z' to indicate UTC
+        let dateStr = status.lastSyncDate;
+        if (dateStr.includes(' ')) {
+          // Format: YYYY-MM-DD HH:MM:SS (UTC from SQLite)
+          dateStr = dateStr.replace(' ', 'T') + 'Z';
+        } else {
+          // Format: YYYY-MM-DD (treat as UTC midnight)
+          dateStr = `${dateStr}T00:00:00Z`;
+        }
         const date = new Date(dateStr);
         lastSyncDateISO = date.toISOString();
       } catch (error) {
