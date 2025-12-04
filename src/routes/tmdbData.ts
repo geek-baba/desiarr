@@ -60,7 +60,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
       
       // Parse origin_country for display
-      if (movie.origin_country && movie.origin_country !== 'null' && movie.origin_country !== '[]') {
+      if (movie.origin_country && movie.origin_country !== 'null' && movie.origin_country !== '[]' && movie.origin_country.trim() !== '') {
         try {
           const originCountry = JSON.parse(movie.origin_country);
           if (Array.isArray(originCountry) && originCountry.length > 0) {
@@ -68,8 +68,14 @@ router.get('/', async (req: Request, res: Response) => {
             enriched.origin_country_display = originCountry.map((code: string) => getCountryName(code) || code).join(', ');
           }
         } catch (e) {
-          // Invalid JSON, ignore
+          // Invalid JSON, log for debugging
+          console.log(`[TMDB Data] Failed to parse origin_country for movie ${movie.tmdb_id}: "${movie.origin_country}"`, e instanceof Error ? e.message : String(e));
         }
+      }
+      
+      // Debug: log first few movies to see what we have
+      if (enrichedMovies.length < 3) {
+        console.log(`[TMDB Data] Movie ${movie.tmdb_id}: origin_country="${movie.origin_country}", origin_country_display="${enriched.origin_country_display || 'NOT SET'}"`);
       }
       
       // Parse JSON fields
