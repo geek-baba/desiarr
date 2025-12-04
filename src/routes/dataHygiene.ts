@@ -19,6 +19,7 @@ import { getLanguageName } from '../utils/languageMapping';
 import { derivePrimaryCountryFromMovie } from '../utils/tmdbCountryDerivation';
 import { preserveMovieHistory } from '../services/movieHistoryPreservation';
 import { convertLanguageToRadarrFormat } from '../utils/radarrLanguageHelper';
+import { syncRadarrMovies } from '../services/radarrSync';
 import db from '../db';
 
 const router = Router();
@@ -251,6 +252,23 @@ router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
       WHERE tmdb_id = ?
     `).run(tmdbMovie.original_language || null, tmdbId);
 
+    // Trigger Radarr scan to pick up the updated TMDB data
+    // Find the Radarr ID for this TMDB ID
+    const radarrMovie = db.prepare('SELECT radarr_id FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number } | undefined;
+    if (radarrMovie) {
+      try {
+        const radarrClient = new RadarrClient();
+        await radarrClient.refreshMovie(radarrMovie.radarr_id);
+        // Wait a moment for Radarr to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Trigger Radarr sync to update local DB
+        await syncRadarrMovies();
+      } catch (radarrError: any) {
+        console.error('Failed to trigger Radarr refresh after TMDB update:', radarrError);
+        // Continue anyway - TMDB data was updated successfully
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -264,6 +282,321 @@ router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to refresh TMDB data',
+    });
+  }
+});
+
+/**
+ * Scan a movie in Radarr (triggers Radarr to refresh metadata from TMDB)
+ * POST /data-hygiene/scan-radarr/:radarrId
+ */
+router.post('/scan-radarr/:radarrId', async (req: Request, res: Response) => {
+  try {
+    const radarrId = parseInt(req.params.radarrId, 10);
+    if (isNaN(radarrId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    }
+
+    const radarrClient = new RadarrClient();
+    
+    // Step 1: Trigger Radarr refresh
+    await radarrClient.refreshMovie(radarrId);
+    
+    // Step 2: Wait for Radarr to process (2-3 seconds)
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Step 3: Trigger Radarr sync to update local DB
+    await syncRadarrMovies();
+    
+    res.json({
+      success: true,
+      message: 'Movie scanned in Radarr and local database synced',
+    });
+  } catch (error: any) {
+    console.error('Scan Radarr error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to scan movie in Radarr',
+    });
+  }
+});
+
+/**
+ * Mass scan movies in Radarr (batch processing)
+ * POST /data-hygiene/mass-scan-radarr
+ * Body: { radarrIds: number[] }
+ */
+router.post('/mass-scan-radarr', async (req: Request, res: Response) => {
+  try {
+    const { radarrIds } = req.body;
+    if (!Array.isArray(radarrIds) || radarrIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid or empty radarrIds array' });
+    }
+
+    const radarrClient = new RadarrClient();
+    const batchSize = 10;
+    const delayBetweenBatches = 2000; // 2 seconds
+    const results: { radarrId: number; success: boolean; error?: string }[] = [];
+
+    // Process in batches
+    for (let i = 0; i < radarrIds.length; i += batchSize) {
+      const batch = radarrIds.slice(i, i + batchSize);
+      
+      // Process batch
+      for (const radarrId of batch) {
+        try {
+          await radarrClient.refreshMovie(radarrId);
+          results.push({ radarrId, success: true });
+        } catch (error: any) {
+          results.push({
+            radarrId,
+            success: false,
+            error: error?.message || 'Failed to refresh movie',
+          });
+        }
+      }
+      
+      // Wait between batches (except for the last batch)
+      if (i + batchSize < radarrIds.length) {
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+      }
+    }
+
+    // Wait a bit for Radarr to process all refreshes
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Trigger Radarr sync to update local DB
+    try {
+      await syncRadarrMovies();
+    } catch (syncError: any) {
+      console.error('Failed to sync Radarr after mass scan:', syncError);
+      // Continue anyway - individual refreshes may have succeeded
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      message: `Scanned ${successCount} movie(s) in Radarr. ${failureCount} failed.`,
+      results,
+      summary: {
+        total: radarrIds.length,
+        successful: successCount,
+        failed: failureCount,
+      },
+    });
+  } catch (error: any) {
+    console.error('Mass scan Radarr error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to mass scan movies in Radarr',
+    });
+  }
+});
+
+/**
+ * Mass refresh TMDB data for multiple movies
+ * POST /data-hygiene/mass-refresh-tmdb
+ * Body: { tmdbIds: number[] }
+ */
+router.post('/mass-refresh-tmdb', async (req: Request, res: Response) => {
+  try {
+    const { tmdbIds } = req.body;
+    if (!Array.isArray(tmdbIds) || tmdbIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid or empty tmdbIds array' });
+    }
+
+    const tmdbClient = new TMDBClient();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+
+    if (!tmdbApiKey) {
+      return res.status(400).json({ success: false, error: 'TMDB API key not configured' });
+    }
+
+    tmdbClient.setApiKey(tmdbApiKey);
+    const radarrClient = new RadarrClient();
+    const batchSize = 5; // Smaller batch for TMDB API (rate limiting)
+    const delayBetweenBatches = 1000; // 1 second delay
+    const results: { tmdbId: number; success: boolean; error?: string }[] = [];
+    const radarrIdsToRefresh: number[] = [];
+
+    // Process in batches
+    for (let i = 0; i < tmdbIds.length; i += batchSize) {
+      const batch = tmdbIds.slice(i, i + batchSize);
+      
+      // Process batch
+      for (const tmdbId of batch) {
+        try {
+          const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+          if (!tmdbMovie) {
+            results.push({ tmdbId, success: false, error: 'Movie not found in TMDB' });
+            continue;
+          }
+
+          const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
+          const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
+          
+          if (existing) {
+            db.prepare(`
+              UPDATE tmdb_movie_cache SET
+                title = ?, original_title = ?, original_language = ?, release_date = ?,
+                production_countries = ?, origin_country = ?, primary_country = ?, poster_path = ?,
+                backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+                genres = ?, production_companies = ?, spoken_languages = ?,
+                belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+                popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+                adult = ?, video = ?, homepage = ?,
+                last_updated_at = datetime('now'), is_deleted = 0
+              WHERE tmdb_id = ?
+            `).run(
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null,
+              tmdbId
+            );
+          } else {
+            db.prepare(`
+              INSERT INTO tmdb_movie_cache (
+                tmdb_id, title, original_title, original_language, release_date,
+                production_countries, origin_country, primary_country, poster_path, backdrop_path,
+                overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+                belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+                vote_count, status, adult, video, homepage,
+                synced_at, last_updated_at, is_deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+            `).run(
+              tmdbMovie.id,
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null
+            );
+          }
+
+          // Update radarr_movies table
+          db.prepare(`
+            UPDATE radarr_movies
+            SET original_language = ?
+            WHERE tmdb_id = ?
+          `).run(tmdbMovie.original_language || null, tmdbId);
+
+          // Collect Radarr ID for batch refresh
+          const radarrMovie = db.prepare('SELECT radarr_id FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number } | undefined;
+          if (radarrMovie) {
+            radarrIdsToRefresh.push(radarrMovie.radarr_id);
+          }
+
+          results.push({ tmdbId, success: true });
+        } catch (error: any) {
+          results.push({
+            tmdbId,
+            success: false,
+            error: error?.message || 'Failed to refresh TMDB data',
+          });
+        }
+      }
+      
+      // Wait between batches (except for the last batch)
+      if (i + batchSize < tmdbIds.length) {
+        await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+      }
+    }
+
+    // Trigger Radarr refresh for all updated movies (batch)
+    if (radarrIdsToRefresh.length > 0) {
+      try {
+        // Process Radarr refreshes in batches
+        const radarrBatchSize = 10;
+        for (let i = 0; i < radarrIdsToRefresh.length; i += radarrBatchSize) {
+          const batch = radarrIdsToRefresh.slice(i, i + radarrBatchSize);
+          for (const radarrId of batch) {
+            try {
+              await radarrClient.refreshMovie(radarrId);
+            } catch (error) {
+              console.error(`Failed to refresh Radarr movie ${radarrId}:`, error);
+            }
+          }
+          if (i + radarrBatchSize < radarrIdsToRefresh.length) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+        
+        // Wait for Radarr to process
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Trigger Radarr sync
+        await syncRadarrMovies();
+      } catch (radarrError: any) {
+        console.error('Failed to trigger Radarr refresh after TMDB update:', radarrError);
+        // Continue anyway - TMDB data was updated successfully
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      message: `Refreshed TMDB data for ${successCount} movie(s). ${failureCount} failed.`,
+      results,
+      summary: {
+        total: tmdbIds.length,
+        successful: successCount,
+        failed: failureCount,
+      },
+    });
+  } catch (error: any) {
+    console.error('Mass refresh TMDB error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to mass refresh TMDB data',
     });
   }
 });

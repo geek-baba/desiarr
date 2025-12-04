@@ -82,7 +82,7 @@
       </nav>
     </div>
 
-    <!-- Stats -->
+    <!-- Stats and Mass Actions -->
     <div class="mb-4 flex items-center justify-between">
       <div class="text-sm text-gray-600 dark:text-gray-400">
         Total: <span class="font-semibold"><%= total %></span> movies
@@ -90,6 +90,24 @@
           | Filtered: <span class="font-semibold"><%= filteredCount %></span>
         <% } %>
       </div>
+      <% if (view === 'language-mismatch') { %>
+        <div class="flex gap-2">
+          <button
+            onclick="massScanRadarr()"
+            class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition-colors"
+            title="Scan all mismatched movies in Radarr"
+          >
+            Scan All in Radarr
+          </button>
+          <button
+            onclick="massRefreshTmdb()"
+            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded transition-colors"
+            title="Refresh TMDB data for all mismatched movies"
+          >
+            Refresh TMDB for All
+          </button>
+        </div>
+      <% } %>
     </div>
 
     <!-- Content Area -->
@@ -212,7 +230,7 @@
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               <% movies.forEach(movie => { %>
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700" data-radarr-id="<%= movie.radarr_id %>" data-tmdb-id="<%= movie.tmdb_id || '' %>">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><%= movie.title %></td>
                   <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400"><%= movie.year || '-' %></td>
                   <td class="px-4 py-3 text-sm text-gray-600">
@@ -276,15 +294,24 @@
                       <% } %>
                     </td>
                     <td class="px-4 py-3 text-sm">
-                      <% if (movie.tmdb_id) { %>
+                      <div class="flex gap-2">
                         <button
-                          onclick="refreshTmdbData(<%= movie.tmdb_id %>)"
-                          class="text-blue-600 hover:text-blue-800 text-xs"
-                          title="Refresh TMDB data"
+                          onclick="scanRadarr(<%= movie.radarr_id %>, '<%= movie.title %>')"
+                          class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"
+                          title="Scan movie in Radarr to refresh metadata"
                         >
-                          Refresh
+                          Scan Radarr
                         </button>
-                      <% } %>
+                        <% if (movie.tmdb_id) { %>
+                          <button
+                            onclick="refreshTmdbData(<%= movie.tmdb_id %>)"
+                            class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
+                            title="Refresh TMDB data and trigger Radarr scan"
+                          >
+                            Refresh TMDB
+                          </button>
+                        <% } %>
+                      </div>
                     </td>
                   <% } %>
                   <% if (view === 'deleted-titles') { %>
@@ -542,8 +569,31 @@
       }
     }
 
+    async function scanRadarr(radarrId, title) {
+      showConfirm(`Scan "${title}" in Radarr?\n\nThis will trigger Radarr to refresh metadata from TMDB and update the local database.`, async () => {
+        try {
+          showToast('Scanning movie in Radarr...', 'info');
+          const response = await fetch(`/data-hygiene/scan-radarr/${radarrId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showToast('Movie scanned successfully! Refreshing page...', 'success');
+            setTimeout(() => window.location.reload(), 2000);
+          } else {
+            showToast('Error: ' + (data.error || 'Failed to scan movie in Radarr'), 'error');
+          }
+        } catch (error) {
+          showToast('Error: ' + error.message, 'error');
+        }
+      });
+    }
+
     async function refreshTmdbData(tmdbId) {
-      showConfirm('Refresh TMDB data for this movie?', async () => {
+      showConfirm('Refresh TMDB data for this movie?\n\nThis will fetch fresh data from TMDB, update the cache, and trigger a Radarr scan.', async () => {
         try {
           showToast('Refreshing TMDB data...', 'info');
           const response = await fetch(`/data-hygiene/refresh-tmdb/${tmdbId}`, {
@@ -554,10 +604,102 @@
           const data = await response.json();
 
           if (data.success) {
-            showToast('TMDB data refreshed successfully!', 'success');
-            setTimeout(() => window.location.reload(), 1500);
+            showToast('TMDB data refreshed and Radarr scanned! Refreshing page...', 'success');
+            setTimeout(() => window.location.reload(), 2000);
           } else {
             showToast('Error: ' + (data.error || 'Failed to refresh TMDB data'), 'error');
+          }
+        } catch (error) {
+          showToast('Error: ' + error.message, 'error');
+        }
+      });
+    }
+
+    async function massScanRadarr() {
+      const total = <%= typeof total !== 'undefined' ? total : 0 %>;
+      if (total === 0) {
+        showToast('No movies to scan', 'warning');
+        return;
+      }
+
+      showConfirm(`Scan all ${total} mismatched movies in Radarr?\n\nThis will process movies in batches of 10 with delays between batches.\n\nThis may take several minutes.`, async () => {
+        try {
+          // Get all Radarr IDs from the current page
+          const radarrIds = [];
+          document.querySelectorAll('tr[data-radarr-id]').forEach(row => {
+            const id = parseInt(row.getAttribute('data-radarr-id'));
+            if (!isNaN(id)) {
+              radarrIds.push(id);
+            }
+          });
+
+          // If we have pagination, we need to get all IDs
+          // For now, we'll scan all visible movies
+          if (radarrIds.length === 0) {
+            showToast('No movies found to scan', 'warning');
+            return;
+          }
+
+          showToast(`Scanning ${radarrIds.length} movie(s) in Radarr...`, 'info');
+          
+          const response = await fetch(`/data-hygiene/mass-scan-radarr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ radarrIds }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showToast(`Scanned ${data.summary.successful} movie(s) successfully. ${data.summary.failed} failed. Refreshing page...`, 'success', 5000);
+            setTimeout(() => window.location.reload(), 3000);
+          } else {
+            showToast('Error: ' + (data.error || 'Failed to mass scan movies'), 'error');
+          }
+        } catch (error) {
+          showToast('Error: ' + error.message, 'error');
+        }
+      });
+    }
+
+    async function massRefreshTmdb() {
+      const total = <%= typeof total !== 'undefined' ? total : 0 %>;
+      if (total === 0) {
+        showToast('No movies to refresh', 'warning');
+        return;
+      }
+
+      showConfirm(`Refresh TMDB data for all ${total} mismatched movies?\n\nThis will process movies in batches of 5 with delays between batches.\n\nThis may take several minutes.`, async () => {
+        try {
+          // Get all TMDB IDs from the current page
+          const tmdbIds = [];
+          document.querySelectorAll('tr[data-tmdb-id]').forEach(row => {
+            const id = parseInt(row.getAttribute('data-tmdb-id'));
+            if (!isNaN(id)) {
+              tmdbIds.push(id);
+            }
+          });
+
+          if (tmdbIds.length === 0) {
+            showToast('No movies found to refresh', 'warning');
+            return;
+          }
+
+          showToast(`Refreshing TMDB data for ${tmdbIds.length} movie(s)...`, 'info');
+          
+          const response = await fetch(`/data-hygiene/mass-refresh-tmdb`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tmdbIds }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showToast(`Refreshed ${data.summary.successful} movie(s) successfully. ${data.summary.failed} failed. Refreshing page...`, 'success', 5000);
+            setTimeout(() => window.location.reload(), 3000);
+          } else {
+            showToast('Error: ' + (data.error || 'Failed to mass refresh TMDB data'), 'error');
           }
         } catch (error) {
           showToast('Error: ' + error.message, 'error');

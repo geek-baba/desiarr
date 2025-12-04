@@ -228,6 +228,23 @@ class RadarrClient {
     }
   }
 
+  /**
+   * Refresh a movie in Radarr (triggers Radarr to re-fetch metadata from TMDB)
+   * POST /api/v3/command with name: 'RefreshMovie'
+   */
+  async refreshMovie(movieId: number): Promise<void> {
+    try {
+      await this.ensureClient().post(`/command`, {
+        name: 'RefreshMovie',
+        movieIds: [movieId],
+      });
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr refresh movie error:', errorMessage);
+      throw new Error(`Failed to refresh movie in Radarr: ${errorMessage}`);
+    }
+  }
+
   async getMovieHistory(movieId: number): Promise<RadarrHistory[]> {
     try {
       const response = await this.ensureClient().get<RadarrHistory[]>('/history/movie', {
