@@ -1692,19 +1692,46 @@ router.post('/fix-movie-language/:radarrId', async (req: Request, res: Response)
     const radarrApiLanguage = currentMovie.originalLanguage?.name || null;
     console.log(`[Fix Language] Movie ${radarrId}: Database="${dbLanguage}", Radarr API="${radarrApiLanguage}", TMDB="${tmdbLanguageName}" (${tmdbLanguage})`);
 
-    // Step 4: Determine if we need to refresh Radarr
-    let needsRefresh = false;
+    // Step 4: Determine if we need to fix Radarr's originalLanguage
+    let needsUpdate = false;
+    let updatedInRadarr = false;
+    
     if (radarrApiLanguage !== tmdbLanguageName && tmdbLanguageName) {
       // Radarr has wrong language, TMDB has correct one
-      needsRefresh = true;
-      console.log(`[Fix Language] Movie ${radarrId}: Radarr has "${radarrApiLanguage}" but TMDB says "${tmdbLanguageName}", forcing refresh...`);
-      await radarrClient.refreshMovie(radarrId);
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Try to get the correct language ID from Radarr
+      const radarrLanguages = await radarrClient.getLanguages();
+      const correctLanguage = radarrLanguages.find(
+        lang => lang.name.toLowerCase() === tmdbLanguageName.toLowerCase()
+      );
       
-      // Re-fetch after refresh
-      const refreshedMovie = await radarrClient.getMovie(radarrId);
-      if (refreshedMovie) {
-        Object.assign(currentMovie, refreshedMovie);
+      if (correctLanguage) {
+        needsUpdate = true;
+        console.log(`[Fix Language] Movie ${radarrId}: Radarr has "${radarrApiLanguage}" but TMDB says "${tmdbLanguageName}", updating directly via API...`);
+        
+        try {
+          // Update the movie's originalLanguage directly via API
+          const updatedMovie = await radarrClient.updateMovie(radarrId, {
+            originalLanguage: correctLanguage,
+          });
+          
+          console.log(`[Fix Language] Movie ${radarrId}: Successfully updated originalLanguage to "${updatedMovie.originalLanguage?.name}"`);
+          Object.assign(currentMovie, updatedMovie);
+          updatedInRadarr = true;
+        } catch (updateError: any) {
+          console.warn(`[Fix Language] Movie ${radarrId}: Failed to update via API, trying refresh instead:`, updateError?.message || updateError);
+          
+          // Fallback to refresh
+          await radarrClient.refreshMovie(radarrId);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Re-fetch after refresh
+          const refreshedMovie = await radarrClient.getMovie(radarrId);
+          if (refreshedMovie) {
+            Object.assign(currentMovie, refreshedMovie);
+          }
+        }
+      } else {
+        console.warn(`[Fix Language] Movie ${radarrId}: Language "${tmdbLanguageName}" not found in Radarr's language list, cannot update`);
       }
     }
 
@@ -1788,7 +1815,7 @@ router.post('/fix-movie-language/:radarrId', async (req: Request, res: Response)
 
     res.json({
       success: true,
-      message: needsRefresh ? 'Movie refreshed in Radarr and database updated' : 'Database updated with current Radarr data',
+      message: needsUpdate ? (updatedInRadarr ? 'Movie updated in Radarr via API and database updated' : 'Movie refreshed in Radarr and database updated') : 'Database updated with current Radarr data',
       data: {
         radarr_id: radarrId,
         before: {
@@ -1803,7 +1830,8 @@ router.post('/fix-movie-language/:radarrId', async (req: Request, res: Response)
           code: tmdbLanguage,
           name: tmdbLanguageName,
         },
-        radarr_refreshed: needsRefresh,
+        radarr_updated: needsUpdate,
+        radarr_updated_via_api: updatedInRadarr,
         language_changed: dbLanguage !== movieData.original_language,
       },
     });
