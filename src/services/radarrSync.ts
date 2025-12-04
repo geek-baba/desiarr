@@ -53,8 +53,28 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
 
     console.log(`Found ${movies.length} movies in Radarr`);
     
+    // Get all current radarr_ids from local database to identify deleted movies
+    const existingRadarrIds = db
+      .prepare('SELECT radarr_id FROM radarr_movies')
+      .all() as Array<{ radarr_id: number }>;
+    const existingRadarrIdSet = new Set(existingRadarrIds.map(m => m.radarr_id));
+    
+    // Get all radarr_ids from the current Radarr response
+    const currentRadarrIdSet = new Set(movies.map(m => m.id).filter((id): id is number => id !== undefined));
+    
+    // Find movies that are in local DB but not in Radarr (deleted from Radarr)
+    const deletedRadarrIds = existingRadarrIds
+      .map(m => m.radarr_id)
+      .filter(id => !currentRadarrIdSet.has(id));
+    
     if (movies.length === 0) {
       syncProgress.update('No movies found in Radarr (this might be normal if your Radarr library is empty)', 0, 0);
+      // If Radarr is empty, remove all movies from local DB
+      if (existingRadarrIds.length > 0) {
+        console.log(`Radarr is empty, removing all ${existingRadarrIds.length} movies from local database`);
+        db.prepare('DELETE FROM radarr_movies').run();
+        stats.updated = existingRadarrIds.length; // Track as "updated" for stats
+      }
       if (!nestedInFullSync) {
         syncProgress.complete();
       }
@@ -68,6 +88,14 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
 
     // Use transaction for better performance
     const transaction = db.transaction(() => {
+      // First, remove movies that have been deleted from Radarr
+      if (deletedRadarrIds.length > 0) {
+        console.log(`Removing ${deletedRadarrIds.length} movie(s) that were deleted from Radarr: ${deletedRadarrIds.join(', ')}`);
+        const placeholders = deletedRadarrIds.map(() => '?').join(',');
+        db.prepare(`DELETE FROM radarr_movies WHERE radarr_id IN (${placeholders})`).run(...deletedRadarrIds);
+        stats.updated += deletedRadarrIds.length; // Track deletions as "updated" for stats
+      }
+      
       let processed = 0;
       for (const movie of movies) {
         try {
