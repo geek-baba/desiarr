@@ -528,7 +528,7 @@
 
         if (data.success && data.history) {
           // Display history in a modal or alert
-          const historyText = data.history.map((h: any, idx: number) => {
+          const historyText = data.history.map((h, idx) => {
             const date = new Date(h.date).toLocaleString();
             return `${idx + 1}. ${h.eventType} - ${h.sourceTitle || 'N/A'}\n   Date: ${date}\n   Quality: ${h.quality?.quality?.name || 'N/A'}`;
           }).join('\n\n');
@@ -537,8 +537,8 @@
         } else {
           showToast('Error: ' + (data.error || 'Failed to load history'), 'error');
         }
-      } catch (error: any) {
-        showToast('Error: ' + error.message, 'error');
+      } catch (error) {
+        showToast('Error: ' + (error?.message || 'Failed to load history'), 'error');
       }
     }
 
