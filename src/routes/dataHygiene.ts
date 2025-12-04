@@ -15,7 +15,7 @@ import {
 import { TMDBClient } from '../tmdb/client';
 import { RadarrClient } from '../radarr/client';
 import { settingsModel } from '../models/settings';
-import { getLanguageName } from '../utils/languageMapping';
+import { getLanguageName, isIndianLanguage } from '../utils/languageMapping';
 import { derivePrimaryCountryFromMovie } from '../utils/tmdbCountryDerivation';
 import { preserveMovieHistory } from '../services/movieHistoryPreservation';
 import { convertLanguageToRadarrFormat } from '../utils/radarrLanguageHelper';
@@ -73,6 +73,105 @@ function normalizeLanguageName(lang: string): string | null {
   
   // Fallback: capitalize first letter
   return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+}
+
+/**
+ * Fix Radarr file language using priority:
+ * 1. MediaInfo audioLanguages (if available)
+ * 2. TMDB original_language from cache (only if Indian language)
+ * 
+ * Uses cached TMDB data - no API refresh needed
+ * 
+ * @param radarrId - Radarr movie ID
+ * @returns true if language was updated, false otherwise
+ */
+async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
+  try {
+    // 1. Get movie from local DB
+    const radarrMovie = db.prepare('SELECT radarr_id, tmdb_id, movie_file FROM radarr_movies WHERE radarr_id = ?')
+      .get(radarrId) as { radarr_id: number; tmdb_id: number; movie_file: string | null } | undefined;
+    
+    if (!radarrMovie || !radarrMovie.movie_file) {
+      console.log(`[Language Fix] Movie ${radarrId}: No file to update`);
+      return false; // No file to update
+    }
+    
+    const movieFile = JSON.parse(radarrMovie.movie_file) as any;
+    if (!movieFile?.id) {
+      console.log(`[Language Fix] Movie ${radarrId}: No file ID`);
+      return false;
+    }
+    
+    const currentLang = movieFile.language?.name || null;
+    let targetLanguage: string | null = null;
+    let source = '';
+    
+    // 2. PRIORITY 1: Use MediaInfo audioLanguages if available
+    if (movieFile.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
+      const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
+      targetLanguage = normalizeLanguageName(mediaInfoLang);
+      source = `MediaInfo ("${mediaInfoLang}")`;
+      console.log(`[Language Fix] Movie ${radarrId}: Using ${source} → "${targetLanguage}"`);
+    }
+    // 3. PRIORITY 2: Fallback to TMDB original_language (from cached DB, no API call)
+    else {
+      const tmdbData = db.prepare('SELECT original_language FROM tmdb_movie_cache WHERE tmdb_id = ?')
+        .get(radarrMovie.tmdb_id) as { original_language: string | null } | undefined;
+      
+      if (tmdbData?.original_language) {
+        // Only use if it's an Indian language
+        if (isIndianLanguage(tmdbData.original_language)) {
+          targetLanguage = getLanguageName(tmdbData.original_language); // Convert "pa" → "Punjabi"
+          source = `TMDB cache ("${tmdbData.original_language}")`;
+          console.log(`[Language Fix] Movie ${radarrId}: Using ${source} → "${targetLanguage}"`);
+        } else {
+          console.log(`[Language Fix] Movie ${radarrId}: TMDB language "${tmdbData.original_language}" is not an Indian language, skipping`);
+          return false;
+        }
+      } else {
+        console.log(`[Language Fix] Movie ${radarrId}: No MediaInfo audioLanguages and no TMDB cached language available`);
+        return false;
+      }
+    }
+    
+    // 4. If we have a target language and it's different, update Radarr
+    if (targetLanguage && targetLanguage.toLowerCase() !== currentLang?.toLowerCase()) {
+      const radarrClient = new RadarrClient();
+      
+      // Get Radarr languages list
+      const radarrLanguages = await radarrClient.getLanguages();
+      const targetLangObj = radarrLanguages.find(
+        lang => lang.name.toLowerCase() === targetLanguage.toLowerCase()
+      );
+      
+      if (targetLangObj) {
+        // Get full file data from Radarr
+        const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
+        if (fullFileData) {
+          // Update file with correct language
+          await radarrClient.updateMovieFile(movieFile.id, {
+            ...fullFileData,
+            language: targetLangObj,
+          });
+          console.log(`[Language Fix] Movie ${radarrId}: Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLanguage}" (source: ${source})`);
+          return true;
+        } else {
+          console.warn(`[Language Fix] Movie ${radarrId}: Could not fetch full file data from Radarr`);
+        }
+      } else {
+        console.warn(`[Language Fix] Movie ${radarrId}: Language "${targetLanguage}" not found in Radarr's language list`);
+      }
+    } else {
+      if (targetLanguage) {
+        console.log(`[Language Fix] Movie ${radarrId}: Language already correct ("${currentLang}"), no update needed`);
+      }
+    }
+    
+    return false;
+  } catch (error: any) {
+    console.error(`[Language Fix] Movie ${radarrId}: Error fixing file language:`, error?.message || error);
+    return false;
+  }
 }
 
 /**
@@ -303,61 +402,16 @@ router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
       WHERE tmdb_id = ?
     `).run(tmdbMovie.original_language || null, tmdbId);
 
-    // Trigger Radarr scan to pick up the updated TMDB data
+    // Fix Radarr file language (uses cached TMDB data, no API refresh needed)
     // Find the Radarr ID for this TMDB ID
-    const radarrMovie = db.prepare('SELECT radarr_id, movie_file FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number; movie_file: string | null } | undefined;
+    const radarrMovie = db.prepare('SELECT radarr_id FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number } | undefined;
     if (radarrMovie) {
       try {
+        // Fix file language using MediaInfo or cached TMDB data
+        await fixRadarrFileLanguage(radarrMovie.radarr_id);
+        
+        // Trigger Radarr refresh to pick up any other metadata changes
         const radarrClient = new RadarrClient();
-        
-        // Step 1: Fix file language if MediaInfo shows different language than Radarr
-        if (radarrMovie.movie_file) {
-          try {
-            const movieFile = JSON.parse(radarrMovie.movie_file) as any;
-            if (movieFile?.id && movieFile?.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
-              // Get primary audio language from MediaInfo (first in array)
-              const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
-              
-              // Normalize language name (handle variations like "Panjabi" vs "Punjabi")
-              const normalizedLang = normalizeLanguageName(mediaInfoLang);
-              
-              // Get current language from Radarr file
-              const currentLang = movieFile.language?.name || null;
-              
-              // If MediaInfo language differs from Radarr's stored language, fix it
-              if (normalizedLang && normalizedLang.toLowerCase() !== currentLang?.toLowerCase()) {
-                console.log(`[Language Fix] MediaInfo shows "${mediaInfoLang}" (normalized: "${normalizedLang}"), but Radarr has "${currentLang}". Updating...`);
-                
-                // Get full file data from Radarr
-                const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
-                if (fullFileData) {
-                  // Get available languages from Radarr
-                  const radarrLanguages = await radarrClient.getLanguages();
-                  const targetLang = radarrLanguages.find(
-                    lang => lang.name.toLowerCase() === normalizedLang.toLowerCase()
-                  );
-                  
-                  if (targetLang) {
-                    // Update file with correct language
-                    const updatedFile = {
-                      ...fullFileData,
-                      language: targetLang,
-                    };
-                    await radarrClient.updateMovieFile(movieFile.id, updatedFile);
-                    console.log(`[Language Fix] Successfully updated file language to "${targetLang.name}" (ID: ${targetLang.id})`);
-                  } else {
-                    console.warn(`[Language Fix] Language "${normalizedLang}" not found in Radarr's language list`);
-                  }
-                }
-              }
-            }
-          } catch (fileError: any) {
-            console.error('[Language Fix] Error fixing file language:', fileError?.message || fileError);
-            // Continue with refresh even if language fix fails
-          }
-        }
-        
-        // Step 2: Trigger Radarr refresh
         await radarrClient.refreshMovie(radarrMovie.radarr_id);
         // Wait a moment for Radarr to process
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -399,53 +453,8 @@ router.post('/scan-radarr/:radarrId', async (req: Request, res: Response) => {
 
     const radarrClient = new RadarrClient();
     
-    // Step 1: Fix file language if MediaInfo shows different language than Radarr
-    const radarrMovie = db.prepare('SELECT movie_file FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as { movie_file: string | null } | undefined;
-    if (radarrMovie?.movie_file) {
-      try {
-        const movieFile = JSON.parse(radarrMovie.movie_file) as any;
-        if (movieFile?.id && movieFile?.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
-          // Get primary audio language from MediaInfo (first in array)
-          const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
-          
-          // Normalize language name (handle variations like "Panjabi" vs "Punjabi")
-          const normalizedLang = normalizeLanguageName(mediaInfoLang);
-          
-          // Get current language from Radarr file
-          const currentLang = movieFile.language?.name || null;
-          
-          // If MediaInfo language differs from Radarr's stored language, fix it
-          if (normalizedLang && normalizedLang.toLowerCase() !== currentLang?.toLowerCase()) {
-            console.log(`[Language Fix] MediaInfo shows "${mediaInfoLang}" (normalized: "${normalizedLang}"), but Radarr has "${currentLang}". Updating...`);
-            
-            // Get full file data from Radarr
-            const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
-            if (fullFileData) {
-              // Get available languages from Radarr
-              const radarrLanguages = await radarrClient.getLanguages();
-              const targetLang = radarrLanguages.find(
-                lang => lang.name.toLowerCase() === normalizedLang.toLowerCase()
-              );
-              
-              if (targetLang) {
-                // Update file with correct language
-                const updatedFile = {
-                  ...fullFileData,
-                  language: targetLang,
-                };
-                await radarrClient.updateMovieFile(movieFile.id, updatedFile);
-                console.log(`[Language Fix] Successfully updated file language to "${targetLang.name}" (ID: ${targetLang.id})`);
-              } else {
-                console.warn(`[Language Fix] Language "${normalizedLang}" not found in Radarr's language list`);
-              }
-            }
-          }
-        }
-      } catch (fileError: any) {
-        console.error('[Language Fix] Error fixing file language:', fileError?.message || fileError);
-        // Continue with refresh even if language fix fails
-      }
-    }
+    // Step 1: Fix file language using MediaInfo or cached TMDB data
+    await fixRadarrFileLanguage(radarrId);
     
     // Step 2: Trigger Radarr refresh
     await radarrClient.refreshMovie(radarrId);
@@ -700,7 +709,18 @@ router.post('/mass-refresh-tmdb', async (req: Request, res: Response) => {
     // Trigger Radarr refresh for all updated movies (batch)
     if (radarrIdsToRefresh.length > 0) {
       try {
-        // Process Radarr refreshes in batches
+        // First, fix file languages for all movies (uses cached TMDB data)
+        console.log(`[Mass Refresh] Fixing file languages for ${radarrIdsToRefresh.length} movie(s)...`);
+        for (const radarrId of radarrIdsToRefresh) {
+          try {
+            await fixRadarrFileLanguage(radarrId);
+          } catch (error) {
+            console.error(`[Mass Refresh] Failed to fix language for Radarr movie ${radarrId}:`, error);
+            // Continue with other movies
+          }
+        }
+        
+        // Then, process Radarr refreshes in batches
         const radarrBatchSize = 10;
         for (let i = 0; i < radarrIdsToRefresh.length; i += radarrBatchSize) {
           const batch = radarrIdsToRefresh.slice(i, i + radarrBatchSize);
@@ -1327,6 +1347,65 @@ router.get('/history/:historyId', (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Get history error:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get history' });
+  }
+});
+
+/**
+ * Debug endpoint to check movie file data
+ * GET /data-hygiene/debug-movie/:radarrId
+ */
+router.get('/debug-movie/:radarrId', async (req: Request, res: Response) => {
+  try {
+    const radarrId = parseInt(req.params.radarrId, 10);
+    if (isNaN(radarrId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    }
+
+    // Get from local DB
+    const radarrMovie = db.prepare('SELECT * FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as any;
+    if (!radarrMovie) {
+      return res.status(404).json({ success: false, error: 'Movie not found in local database' });
+    }
+
+    // Get TMDB data from cache
+    const tmdbData = db.prepare('SELECT original_language FROM tmdb_movie_cache WHERE tmdb_id = ?').get(radarrMovie.tmdb_id) as { original_language: string | null } | undefined;
+
+    // Parse movie file
+    let movieFile = null;
+    if (radarrMovie.movie_file) {
+      try {
+        movieFile = JSON.parse(radarrMovie.movie_file);
+      } catch (e) {
+        // Invalid JSON
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        radarr_id: radarrMovie.radarr_id,
+        tmdb_id: radarrMovie.tmdb_id,
+        title: radarrMovie.title,
+        original_language_from_radarr_movies: radarrMovie.original_language,
+        tmdb_original_language_from_cache: tmdbData?.original_language || null,
+        movie_file: {
+          id: movieFile?.id || null,
+          relativePath: movieFile?.relativePath || null,
+          current_language: movieFile?.language || null,
+          mediaInfo: {
+            audioLanguages: movieFile?.mediaInfo?.audioLanguages || null,
+            audioCodec: movieFile?.mediaInfo?.audioCodec || null,
+            videoCodec: movieFile?.mediaInfo?.videoCodec || null,
+          },
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Debug movie error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to debug movie',
+    });
   }
 });
 
