@@ -8,7 +8,9 @@ import {
   getFileNameMismatches,
   getLanguageMismatches,
   getDeletedTitles,
+  getPreservedHistory,
   DataHygieneMovie,
+  PreservedHistoryEntry,
 } from '../services/dataHygieneService';
 import { TMDBClient } from '../tmdb/client';
 import { RadarrClient } from '../radarr/client';
@@ -30,9 +32,36 @@ router.get('/', async (req: Request, res: Response) => {
     const search = (req.query.search as string) || '';
 
     let movies: DataHygieneMovie[] = [];
+    let preservedHistory: PreservedHistoryEntry[] = [];
     let total = 0;
 
     // Fetch data based on view type
+    if (view === 'preserved-history') {
+      preservedHistory = getPreservedHistory();
+      total = preservedHistory.length;
+
+      // Apply search filter if provided
+      if (search) {
+        const searchLower = search.toLowerCase();
+        preservedHistory = preservedHistory.filter(entry => 
+          (entry.title && entry.title.toLowerCase().includes(searchLower)) ||
+          (entry.tmdb_id && entry.tmdb_id.toString().includes(searchLower)) ||
+          entry.radarr_id.toString().includes(searchLower)
+        );
+      }
+
+      res.render('data-hygiene', {
+        currentPage: 'data-hygiene',
+        view,
+        preservedHistory,
+        total,
+        search,
+        filteredCount: preservedHistory.length,
+      });
+      return;
+    }
+
+    // Regular movie views
     switch (view) {
       case 'missing-imdb':
         movies = getMissingImdbMovies();
@@ -791,117 +820,32 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
 });
 
 /**
- * TEST ENDPOINT: Test Manual Import API format
- * This endpoint allows testing the Manual Import API with a real movie
- * to verify the exact format required by Radarr
- * 
- * Usage: POST /data-hygiene/test-manual-import/:radarrId
- * No body required - uses the current movie's file
- * 
- * This will attempt to import the existing file to the same movie (safe test)
+ * Get preserved history details by ID
  */
-router.post('/test-manual-import/:radarrId', async (req: Request, res: Response) => {
+router.get('/history/:historyId', (req: Request, res: Response) => {
   try {
-    const radarrId = parseInt(req.params.radarrId, 10);
-    if (isNaN(radarrId)) {
-      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    const historyId = parseInt(req.params.historyId, 10);
+    if (isNaN(historyId)) {
+      return res.status(400).json({ success: false, error: 'Invalid history ID' });
     }
 
-    const radarrClient = new RadarrClient();
-    
-    // Get current movie
-    const currentMovie = await radarrClient.getMovie(radarrId);
-    if (!currentMovie || !currentMovie.hasFile || !currentMovie.movieFile) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Movie not found or has no files' 
-      });
+    const row = db
+      .prepare('SELECT history_data FROM radarr_movie_history WHERE id = ?')
+      .get(historyId) as { history_data: string } | undefined;
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: 'History not found' });
     }
 
-    // Extract file info
-    const movieFile = currentMovie.movieFile;
-    const fullFilePath = `${currentMovie.path}/${movieFile.relativePath}`;
-    
-    // Get language
-    const storedMovie = db.prepare('SELECT original_language FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as { original_language: string | null } | undefined;
-    const languageName = storedMovie?.original_language || currentMovie.originalLanguage?.name || null;
-    const languages = convertLanguageToRadarrFormat(languageName);
-
-    // Test the Manual Import API: GET then POST
-    const fileFolder = currentMovie.path || path.dirname(fullFilePath);
-    let importFiles: any[] = [];
-    let importPayload: any[] = [];
-    
     try {
-      // Step 1: GET manual import files
-      console.log('=== MANUAL IMPORT TEST: GET ===');
-      console.log(`Folder: ${fileFolder}`);
-      
-      importFiles = await radarrClient.getManualImportFiles(fileFolder, false);
-      console.log(`Found ${importFiles.length} files in manual import listing`);
-      
-      // Step 2: Find our file
-      const fileToImport = importFiles.find((file: any) => file.path === fullFilePath);
-      if (!fileToImport) {
-        return res.status(404).json({
-          success: false,
-          error: `File not found in manual import listing: ${fullFilePath}`,
-          importFiles: importFiles.map((f: any) => ({ path: f.path, movie: f.movie?.title })),
-        });
-      }
-      
-      console.log('=== MANUAL IMPORT TEST: File Found ===');
-      console.log(JSON.stringify(fileToImport, null, 2));
-      
-      // Step 3: Prepare POST payload (update with current movie ID)
-      importPayload = [{
-        ...fileToImport,
-        movie: {
-          ...fileToImport.movie,
-          id: radarrId,
-        },
-        movieId: radarrId,
-        imported: true,
-      }];
-      
-      console.log('=== MANUAL IMPORT TEST: POST Payload ===');
-      console.log(JSON.stringify(importPayload, null, 2));
-      
-      // Step 4: POST manual import (this will re-import the file to the same movie - safe test)
-      const result = await radarrClient.manualImport(importPayload);
-
-      return res.json({
-        success: true,
-        message: 'Manual Import API test succeeded! Check Radarr to verify file linking.',
-        getResponse: importFiles,
-        postPayload: importPayload,
-        postResponse: result,
-        note: 'This was a test with the existing movie - the file should remain linked',
-      });
-    } catch (apiError: any) {
-      // Return the error details so we can see what went wrong
-      const errorResponse = apiError.response?.data || {};
-      return res.status(500).json({
-        success: false,
-        error: apiError.message,
-        errorDetails: {
-          status: apiError.response?.status,
-          statusText: apiError.response?.statusText,
-          data: errorResponse,
-          message: errorResponse.message || apiError.message,
-        },
-        getResponse: importFiles,
-        postPayload: importPayload,
-        note: 'Check the error details above to understand what format Radarr expects.',
-      });
+      const history = JSON.parse(row.history_data);
+      res.json({ success: true, history });
+    } catch (parseError) {
+      res.status(500).json({ success: false, error: 'Failed to parse history data' });
     }
   } catch (error: any) {
-    console.error('Test Manual Import error:', error);
-    res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to test Manual Import',
-      stack: error?.stack,
-    });
+    console.error('Get history error:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get history' });
   }
 });
 

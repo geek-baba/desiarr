@@ -437,6 +437,65 @@ export function getDeletedTitles(): DataHygieneMovie[] {
   }));
 }
 
+export interface PreservedHistoryEntry {
+  id: number;
+  radarr_id: number;
+  tmdb_id: number | null;
+  title: string | null;
+  preserved_at: string;
+  restored_to_radarr_id: number | null;
+  restored_at: string | null;
+  history_count: number;
+}
+
+/**
+ * Get all preserved movie history entries
+ */
+export function getPreservedHistory(): PreservedHistoryEntry[] {
+  const rows = db
+    .prepare(`
+      SELECT 
+        id,
+        radarr_id,
+        tmdb_id,
+        title,
+        preserved_at,
+        restored_to_radarr_id,
+        restored_at,
+        (SELECT COUNT(*) FROM json_each(history_data)) as history_count
+      FROM radarr_movie_history
+      ORDER BY preserved_at DESC
+    `)
+    .all() as any[];
+
+  // Parse history_data to get actual count
+  return rows.map(row => {
+    let historyCount = 0;
+    try {
+      const historyData = db
+        .prepare('SELECT history_data FROM radarr_movie_history WHERE id = ?')
+        .get(row.id) as { history_data: string } | undefined;
+      if (historyData) {
+        const parsed = JSON.parse(historyData.history_data);
+        historyCount = Array.isArray(parsed) ? parsed.length : 0;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+
+    return {
+      id: row.id,
+      radarr_id: row.radarr_id,
+      tmdb_id: row.tmdb_id,
+      title: row.title,
+      preserved_at: row.preserved_at,
+      restored_to_radarr_id: row.restored_to_radarr_id,
+      restored_at: row.restored_at,
+      history_count: historyCount,
+    };
+  });
+}
+
 /**
  * Normalize string for comparison (remove special chars, lowercase, trim)
  */

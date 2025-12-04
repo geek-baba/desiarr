@@ -72,6 +72,13 @@
         >
           Deleted Titles
         </a>
+        <a
+          href="/data-hygiene?view=preserved-history"
+          class="px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 <%= view === 'preserved-history' ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600' %>"
+          role="tab"
+        >
+          Preserved History
+        </a>
       </nav>
     </div>
 
@@ -87,7 +94,82 @@
 
     <!-- Content Area -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-      <% if (movies.length === 0) { %>
+      <% if (typeof view !== 'undefined' && view === 'preserved-history') { %>
+        <!-- Preserved History View -->
+        <% if (typeof preservedHistory !== 'undefined' && preservedHistory.length === 0) { %>
+          <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+            <p class="text-lg mb-2">No preserved history found</p>
+            <p class="text-sm">History is preserved when movies are replaced using the "Replace" feature.</p>
+          </div>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Title</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Radarr ID</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">TMDB ID</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">History Entries</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Preserved At</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Restored To</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <% if (typeof preservedHistory !== 'undefined') { preservedHistory.forEach(entry => { %>
+                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <%= entry.title || 'Unknown' %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <%= entry.radarr_id %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600">
+                      <% if (entry.tmdb_id) { %>
+                        <a href="https://www.themoviedb.org/movie/<%= entry.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
+                          <%= entry.tmdb_id %>
+                        </a>
+                      <% } else { %>
+                        -
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <span class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        <%= entry.history_count || 0 %>
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <span class="preserved-date" data-utc="<%= entry.preserved_at %>">Loading...</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                      <% if (entry.restored_to_radarr_id) { %>
+                        <span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          Radarr ID: <%= entry.restored_to_radarr_id %>
+                        </span>
+                        <% if (entry.restored_at) { %>
+                          <br>
+                          <span class="text-xs text-gray-500 restored-date" data-utc="<%= entry.restored_at %>">Loading...</span>
+                        <% } %>
+                      <% } else { %>
+                        <span class="text-gray-400">Not restored</span>
+                      <% } %>
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                      <button
+                        onclick="viewHistory(<%= entry.id %>, '<%= (entry.title || 'Unknown').replace(/'/g, "\\'") %>')"
+                        class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
+                        title="View full history details"
+                      >
+                        View History
+                      </button>
+                    </td>
+                  </tr>
+                <% }); } %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      <% } else if (typeof movies !== 'undefined' && movies.length === 0) { %>
         <div class="p-8 text-center text-gray-500 dark:text-gray-400">
           <p class="text-lg mb-2">No issues found!</p>
           <p class="text-sm">All movies in this category are clean.</p>
@@ -241,14 +323,6 @@
                             title="Replace TMDB ID (preserves files and history)"
                           >
                             Replace
-                          </button>
-                          <!-- Test Manual Import button (for testing API format) -->
-                          <button
-                            onclick="testManualImport(<%= movie.radarr_id %>, '<%= movie.title %>')"
-                            class="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors"
-                            title="Test Manual Import API format (safe - uses existing movie)"
-                          >
-                            Test Import
                           </button>
                         <% } %>
                         <button
@@ -433,6 +507,41 @@
       });
     }
 
+    // Format preserved/restored dates
+    document.querySelectorAll('.preserved-date, .restored-date').forEach(el => {
+      const utc = el.getAttribute('data-utc');
+      if (utc) {
+        try {
+          const date = new Date(utc);
+          el.textContent = date.toLocaleString();
+        } catch (e) {
+          el.textContent = utc;
+        }
+      }
+    });
+
+    async function viewHistory(historyId, title) {
+      try {
+        showToast('Loading history...', 'info');
+        const response = await fetch(`/data-hygiene/history/${historyId}`);
+        const data = await response.json();
+
+        if (data.success && data.history) {
+          // Display history in a modal or alert
+          const historyText = data.history.map((h: any, idx: number) => {
+            const date = new Date(h.date).toLocaleString();
+            return `${idx + 1}. ${h.eventType} - ${h.sourceTitle || 'N/A'}\n   Date: ${date}\n   Quality: ${h.quality?.quality?.name || 'N/A'}`;
+          }).join('\n\n');
+
+          alert(`History for "${title}":\n\n${historyText}\n\nTotal entries: ${data.history.length}`);
+        } else {
+          showToast('Error: ' + (data.error || 'Failed to load history'), 'error');
+        }
+      } catch (error: any) {
+        showToast('Error: ' + error.message, 'error');
+      }
+    }
+
     async function refreshTmdbData(tmdbId) {
       showConfirm('Refresh TMDB data for this movie?', async () => {
         try {
@@ -536,41 +645,6 @@
       );
     }
 
-    async function testManualImport(radarrId, title) {
-      showConfirm(
-        `Test Manual Import API for "${title}"?\n\nThis will test the Manual Import API format with the existing movie and file.\n\nThis is safe - it will attempt to import the file to the same movie (which should already be linked).\n\nCheck the browser console and server logs for the exact API payload and response.`,
-        async () => {
-          try {
-            showToast('Testing Manual Import API...', 'info');
-            const response = await fetch(`/data-hygiene/test-manual-import/${radarrId}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-
-            const data = await response.json();
-            
-            // Show detailed results
-            if (data.success) {
-              showToast('Manual Import test succeeded! Check console for details.', 'success', 10000);
-              console.log('=== MANUAL IMPORT TEST SUCCESS ===');
-              console.log('Payload sent:', data.payload);
-              console.log('Response:', data.response);
-              console.log('==================================');
-            } else {
-              showToast('Manual Import test failed. Check console for error details.', 'error', 10000);
-              console.error('=== MANUAL IMPORT TEST FAILED ===');
-              console.error('Payload sent:', data.payload);
-              console.error('Error:', data.error);
-              console.error('Error Details:', data.errorDetails);
-              console.error('==================================');
-            }
-          } catch (error) {
-            showToast('Error: ' + error.message, 'error');
-            console.error('Test Manual Import error:', error);
-          }
-        }
-      );
-    }
 
     async function replaceTmdbId(radarrId, title, currentTmdbId) {
       showPrompt(
