@@ -345,18 +345,23 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
     const expectedFileName = `${titleYearPart}${qualityPart}${imdbPart}${extPart}`;
 
     // Check if file name matches expected format
-    // We'll do a more flexible check: verify it starts with title+year and ends with imdb (if present)
+    // We'll do a more flexible check: verify it starts with title+year and ends with imdb+ext (if present)
     const fileNameLower = fileName.toLowerCase();
     const expectedStart = titleYearPart.toLowerCase();
     
     // Check if file starts with expected title+year
     const startsCorrectly = fileNameLower.startsWith(expectedStart);
     
-    // Check if file ends with IMDB ID (if TMDB IMDB ID is present)
+    // Check if file ends with IMDB ID + extension (if TMDB IMDB ID is present)
     let endsCorrectly = true;
     if (tmdbImdbId) {
-      const expectedImdbSuffix = `{imdb-${tmdbImdbId.toLowerCase()}}`;
+      const expectedImdbSuffix = fileExtension 
+        ? `{imdb-${tmdbImdbId.toLowerCase()}}.${fileExtension.toLowerCase()}`
+        : `{imdb-${tmdbImdbId.toLowerCase()}}`;
       endsCorrectly = fileNameLower.endsWith(expectedImdbSuffix.toLowerCase());
+    } else if (fileExtension) {
+      // If no IMDB ID, check if it ends with the extension
+      endsCorrectly = fileNameLower.endsWith(`.${fileExtension.toLowerCase()}`);
     }
     
     // If quality is specified, check if it's present in the filename
