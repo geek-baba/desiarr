@@ -102,12 +102,23 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
         const radarrClient = new RadarrClient();
         const movie = await radarrClient.getMovie(radarrId);
         if (movie && movie.movieFile) {
+          // If movieFile doesn't have full MediaInfo, fetch it separately
+          let movieFileData = movie.movieFile;
+          if (movieFileData.id && (!movieFileData.mediaInfo || !movieFileData.mediaInfo.audioLanguages)) {
+            console.log(`[Language Fix] Movie ${radarrId}: Fetching full file data to get MediaInfo...`);
+            const fullFileData = await radarrClient.getMovieFileById(movieFileData.id);
+            if (fullFileData) {
+              movieFileData = fullFileData;
+              console.log(`[Language Fix] Movie ${radarrId}: Got full file data with MediaInfo`);
+            }
+          }
+          
           radarrMovie = {
             radarr_id: movie.id!,
             tmdb_id: movie.tmdbId,
-            movie_file: JSON.stringify(movie.movieFile),
+            movie_file: JSON.stringify(movieFileData),
           };
-          console.log(`[Language Fix] Movie ${radarrId}: Fetched from Radarr API (TMDB ID: ${movie.tmdbId})`);
+          console.log(`[Language Fix] Movie ${radarrId}: Fetched from Radarr API (TMDB ID: ${movie.tmdbId}, File ID: ${movieFileData.id})`);
         } else {
           console.log(`[Language Fix] Movie ${radarrId}: Not found in Radarr API or has no file`);
           return false;
