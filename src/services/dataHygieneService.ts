@@ -292,11 +292,15 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
 
     // Extract actual file name and quality from movie_file JSON
     let fileName: string | undefined;
+    let fileExtension: string | undefined;
     let qualityTitle: string | undefined;
     try {
       const movieFile = JSON.parse(movie.movie_file);
       if (movieFile && movieFile.relativePath) {
         fileName = path.basename(movieFile.relativePath);
+        // Extract file extension
+        const extMatch = fileName.match(/\.([^.]+)$/);
+        fileExtension = extMatch ? extMatch[1] : undefined;
       }
       // Extract quality information from Radarr
       if (movieFile && movieFile.quality && movieFile.quality.quality) {
@@ -328,16 +332,17 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
     // Apply Radarr's CleanTitle logic to TMDB title
     const cleanTitle = getRadarrCleanTitle(tmdbTitle);
 
-    // Build expected file name: "{Movie CleanTitle} ({Release Year}) {Quality Title} - {imdb-{ImdbId}}"
-    // Example: "The Movie Title (2010) Bluray-1080p - {imdb-tt0066921}"
+    // Build expected file name: "{Movie CleanTitle} ({Release Year}) {Quality Title} - {imdb-{ImdbId}}.ext"
+    // Example: "The Movie Title (2010) Bluray-1080p - {imdb-tt0066921}.mkv"
     const titleYearPart = tmdbYear 
       ? `${cleanTitle} (${tmdbYear})`
       : cleanTitle;
     
     const qualityPart = qualityTitle ? ` ${qualityTitle}` : '';
     const imdbPart = tmdbImdbId ? ` - {imdb-${tmdbImdbId}}` : '';
+    const extPart = fileExtension ? `.${fileExtension}` : '';
     
-    const expectedFileName = `${titleYearPart}${qualityPart}${imdbPart}`;
+    const expectedFileName = `${titleYearPart}${qualityPart}${imdbPart}${extPart}`;
 
     // Check if file name matches expected format
     // We'll do a more flexible check: verify it starts with title+year and ends with imdb (if present)
