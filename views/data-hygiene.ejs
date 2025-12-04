@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+  
   <%- include('partials/app-sidebar', { currentPage: 'data-hygiene' }) %>
   
   <div class="lg:pl-64">
@@ -220,22 +223,13 @@
                       <% } %>
                     </td>
                     <td class="px-4 py-3 text-sm">
-                      <div class="flex gap-2">
-                        <button
-                          onclick="updateTmdbId(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.tmdb_id || 'null' %>)"
-                          class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
-                          title="Update TMDB ID for this movie"
-                        >
-                          Update TMDB ID
-                        </button>
-                        <button
-                          onclick="deleteMovie(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.has_file === 1 ? 'true' : 'false' %>)"
-                          class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
-                          title="Delete this movie from Radarr"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      <button
+                        onclick="deleteMovie(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.has_file === 1 ? 'true' : 'false' %>)"
+                        class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
+                        title="Delete this movie from Radarr"
+                      >
+                        Delete
+                      </button>
                     </td>
                   <% } %>
                 </tr>
@@ -248,29 +242,189 @@
     </main>
   </div>
 
+  <style>
+    .toast-enter {
+      animation: slideIn 0.3s forwards;
+    }
+    .toast-exit {
+      animation: slideOut 0.3s forwards;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+  </style>
+
   <script>
-    async function refreshTmdbData(tmdbId) {
-      if (!confirm('Refresh TMDB data for this movie?')) {
-        return;
-      }
+    // Toast notification function
+    function showToast(message, type = 'info', duration = 5000) {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      const bgColors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        warning: 'bg-yellow-500',
+        info: 'bg-blue-500'
+      };
+      
+      const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+      };
+      
+      toast.className = `${bgColors[type] || bgColors.info} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md toast-enter`;
+      toast.innerHTML = `
+        <span class="flex items-center gap-2">
+          <span class="text-lg font-bold">${icons[type] || icons.info}</span>
+          <span>${message}</span>
+        </span>
+        <button onclick="this.parentElement.remove()" class="ml-4 text-white hover:text-gray-200 font-bold text-xl">×</button>
+      `;
+      
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
 
-      try {
-        const response = await fetch(`/data-hygiene/refresh-tmdb/${tmdbId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          alert('TMDB data refreshed successfully! Please refresh the page to see updated data.');
-          window.location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Failed to refresh TMDB data'));
+    // Confirmation dialog function
+    function showConfirm(message, onConfirm, onCancel = null) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Confirm</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-6 whitespace-pre-line">${message}</p>
+          <div class="flex justify-end space-x-3">
+            <button class="cancel-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-colors">
+              Cancel
+            </button>
+            <button class="confirm-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors">
+              Confirm
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      const removeOverlay = () => {
+        overlay.remove();
+      };
+      
+      overlay.querySelector('.confirm-btn').addEventListener('click', () => {
+        removeOverlay();
+        if (onConfirm) onConfirm();
+      });
+      
+      overlay.querySelector('.cancel-btn').addEventListener('click', () => {
+        removeOverlay();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          removeOverlay();
+          if (onCancel) onCancel();
         }
-      } catch (error) {
-        alert('Error: ' + error.message);
-      }
+      });
+    }
+
+    // Prompt function (for TMDB ID input)
+    function showPrompt(message, defaultValue = '', onConfirm, onCancel = null) {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+      overlay.innerHTML = `
+        <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+          <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Input</h3>
+          <p class="text-gray-700 dark:text-gray-300 mb-4 whitespace-pre-line">${message}</p>
+          <input 
+            type="text" 
+            id="promptInput" 
+            value="${defaultValue}" 
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white mb-6"
+            placeholder="Enter value..."
+          />
+          <div class="flex justify-end space-x-3">
+            <button class="cancel-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-colors">
+              Cancel
+            </button>
+            <button class="confirm-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors">
+              OK
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(overlay);
+      
+      const input = overlay.querySelector('#promptInput');
+      input.focus();
+      input.select();
+      
+      const removeOverlay = () => {
+        overlay.remove();
+      };
+      
+      const handleConfirm = () => {
+        const value = input.value.trim();
+        removeOverlay();
+        if (onConfirm) onConfirm(value);
+      };
+      
+      overlay.querySelector('.confirm-btn').addEventListener('click', handleConfirm);
+      
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          handleConfirm();
+        }
+      });
+      
+      overlay.querySelector('.cancel-btn').addEventListener('click', () => {
+        removeOverlay();
+        if (onCancel) onCancel();
+      });
+      
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          removeOverlay();
+          if (onCancel) onCancel();
+        }
+      });
+    }
+
+    async function refreshTmdbData(tmdbId) {
+      showConfirm('Refresh TMDB data for this movie?', async () => {
+        try {
+          showToast('Refreshing TMDB data...', 'info');
+          const response = await fetch(`/data-hygiene/refresh-tmdb/${tmdbId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showToast('TMDB data refreshed successfully!', 'success');
+            setTimeout(() => window.location.reload(), 1500);
+          } else {
+            showToast('Error: ' + (data.error || 'Failed to refresh TMDB data'), 'error');
+          }
+        } catch (error) {
+          showToast('Error: ' + error.message, 'error');
+        }
+      });
     }
 
     async function deleteMovie(radarrId, title, hasFile) {
@@ -279,19 +433,20 @@
         ? `Delete "${title}" from Radarr?\n\nThis will:\n- Remove the movie from Radarr\n- Delete the movie file(s) from disk\n\nThis action cannot be undone.`
         : `Delete "${title}" from Radarr?\n\nThis will remove the movie from Radarr (no files will be deleted).\n\nThis action cannot be undone.`;
 
-      if (!confirm(message)) {
-        return;
-      }
+      showConfirm(message, () => {
+        if (deleteFiles) {
+          showConfirm('WARNING: This will delete the movie file(s) from disk. Are you absolutely sure?', async () => {
+            await performDelete(radarrId, deleteFiles);
+          });
+        } else {
+          performDelete(radarrId, deleteFiles);
+        }
+      });
+    }
 
-      const deleteFilesConfirm = deleteFiles
-        ? confirm('WARNING: This will delete the movie file(s) from disk. Are you absolutely sure?')
-        : true;
-
-      if (!deleteFilesConfirm) {
-        return;
-      }
-
+    async function performDelete(radarrId, deleteFiles) {
       try {
+        showToast('Deleting movie...', 'info');
         const response = await fetch(`/data-hygiene/delete-movie/${radarrId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -300,53 +455,20 @@
 
         const data = await response.json();
         if (data.success) {
-          alert('Movie deleted successfully');
-          location.reload();
+          showToast('Movie deleted successfully', 'success');
+          setTimeout(() => location.reload(), 1500);
         } else {
-          alert('Error: ' + (data.error || 'Failed to delete movie'));
+          showToast('Error: ' + (data.error || 'Failed to delete movie'), 'error');
         }
       } catch (error) {
-        alert('Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
       }
     }
 
-    async function updateTmdbId(radarrId, title, currentTmdbId) {
-      const newTmdbId = prompt(
-        `Update TMDB ID for "${title}"?\n\nCurrent TMDB ID: ${currentTmdbId || 'None'}\n\nEnter the new TMDB ID:`
-      );
-
-      if (!newTmdbId || newTmdbId.trim() === '') {
-        return;
-      }
-
-      const tmdbIdNum = parseInt(newTmdbId.trim(), 10);
-      if (isNaN(tmdbIdNum) || tmdbIdNum <= 0) {
-        alert('Invalid TMDB ID. Please enter a positive number.');
-        return;
-      }
-
-      if (!confirm(`Update TMDB ID from ${currentTmdbId || 'None'} to ${tmdbIdNum}?\n\nThis will update the movie in Radarr and trigger a refresh of TMDB data.`)) {
-        return;
-      }
-
-      try {
-        const response = await fetch(`/data-hygiene/update-tmdb-id/${radarrId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tmdbId: tmdbIdNum }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          alert('TMDB ID updated successfully');
-          location.reload();
-        } else {
-          alert('Error: ' + (data.error || 'Failed to update TMDB ID'));
-        }
-      } catch (error) {
-        alert('Error: ' + error.message);
-      }
-    }
+    // NOTE: Update TMDB ID functionality removed
+    // Radarr API does not support updating the TMDB ID of an existing movie.
+    // The only way to change a TMDB ID is to delete and re-add the movie,
+    // which is complex and risky. This feature is deferred.
   </script>
   <script src="/js/ui.js"></script>
 </body>
