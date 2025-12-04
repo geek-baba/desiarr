@@ -1710,19 +1710,19 @@ router.post('/fix-movie-language/:radarrId', async (req: Request, res: Response)
 
     const finalRadarrLanguage = currentMovie.originalLanguage?.name || null;
 
-    // Step 6: Update local database
+    // Step 5: Update local database
     const movieData = {
-      radarr_id: updatedMovie.id!,
-      tmdb_id: updatedMovie.tmdbId,
-      imdb_id: updatedMovie.imdbId || null,
-      title: updatedMovie.title,
-      year: updatedMovie.year || null,
-      path: updatedMovie.path || null,
-      has_file: updatedMovie.hasFile ? 1 : 0,
-      movie_file: updatedMovie.movieFile ? JSON.stringify(updatedMovie.movieFile) : null,
-      original_language: updatedMovie.originalLanguage?.name || null,
-      images: updatedMovie.images ? JSON.stringify(updatedMovie.images) : null,
-      date_added: (updatedMovie as any).added || (updatedMovie as any).dateAdded || updatedMovie.dateAdded || null,
+      radarr_id: currentMovie.id!,
+      tmdb_id: currentMovie.tmdbId,
+      imdb_id: currentMovie.imdbId || null,
+      title: currentMovie.title,
+      year: currentMovie.year || null,
+      path: currentMovie.path || null,
+      has_file: currentMovie.hasFile ? 1 : 0,
+      movie_file: currentMovie.movieFile ? JSON.stringify(currentMovie.movieFile) : null,
+      original_language: currentMovie.originalLanguage?.name || null,
+      images: currentMovie.images ? JSON.stringify(currentMovie.images) : null,
+      date_added: (currentMovie as any).added || (currentMovie as any).dateAdded || currentMovie.dateAdded || null,
       synced_at: new Date().toISOString(),
     };
 

@@ -131,12 +131,27 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             synced_at: new Date().toISOString(),
           };
 
+          // Log what Radarr API is returning for debugging
+          if (movie.id === 3384 || (movie.title && movie.title.toLowerCase().includes('aakhri'))) {
+            console.log(`[Radarr Sync] DEBUG Movie ${movie.id} (${movie.title}):`);
+            console.log(`  - Radarr API originalLanguage: ${JSON.stringify(movie.originalLanguage)}`);
+            console.log(`  - movieData.original_language: ${movieData.original_language}`);
+            console.log(`  - TMDB ID: ${movie.tmdbId}`);
+          }
+
           if (existing) {
             // Update existing (preserve date_added if not provided)
-            const existingMovie = db.prepare('SELECT date_added FROM radarr_movies WHERE radarr_id = ?').get(movie.id) as { date_added: string | null } | undefined;
+            const existingMovie = db.prepare('SELECT date_added, original_language FROM radarr_movies WHERE radarr_id = ?').get(movie.id) as { date_added: string | null; original_language: string | null } | undefined;
             const dateAdded = movieData.date_added || existingMovie?.date_added || null;
             
-            db.prepare(`
+            // Log language changes for debugging
+            const oldLanguage = existingMovie?.original_language || null;
+            const newLanguage = movieData.original_language || null;
+            if (oldLanguage !== newLanguage) {
+              console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Language changed from "${oldLanguage}" to "${newLanguage}"`);
+            }
+            
+            const updateStmt = db.prepare(`
               UPDATE radarr_movies SET
                 tmdb_id = ?,
                 imdb_id = ?,
@@ -150,7 +165,9 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
                 date_added = ?,
                 synced_at = ?
               WHERE radarr_id = ?
-            `).run(
+            `);
+            
+            const result = updateStmt.run(
               movieData.tmdb_id,
               movieData.imdb_id,
               movieData.title,
@@ -164,6 +181,12 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
               movieData.synced_at,
               movie.id
             );
+            
+            // Verify the update actually changed rows
+            if (result.changes === 0) {
+              console.warn(`[Radarr Sync] Movie ${movie.id} (${movie.title}): UPDATE statement affected 0 rows - this might indicate a problem`);
+            }
+            
             stats.updated++;
           } else {
             // Insert new
