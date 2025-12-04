@@ -149,6 +149,8 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             const newLanguage = movieData.original_language || null;
             if (oldLanguage !== newLanguage) {
               console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Language changed from "${oldLanguage}" to "${newLanguage}"`);
+            } else if (movie.id === 3384 || (movie.title && movie.title.toLowerCase().includes('aakhri'))) {
+              console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Language unchanged - DB="${oldLanguage}", Radarr="${newLanguage}"`);
             }
             
             const updateStmt = db.prepare(`
@@ -185,6 +187,11 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             // Verify the update actually changed rows
             if (result.changes === 0) {
               console.warn(`[Radarr Sync] Movie ${movie.id} (${movie.title}): UPDATE statement affected 0 rows - this might indicate a problem`);
+            } else if (movie.id === 3384 || (movie.title && movie.title.toLowerCase().includes('aakhri'))) {
+              console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): UPDATE successful - ${result.changes} row(s) changed`);
+              // Verify the update by reading back from DB
+              const verify = db.prepare('SELECT original_language FROM radarr_movies WHERE radarr_id = ?').get(movie.id) as { original_language: string | null } | undefined;
+              console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Verification - DB now has original_language="${verify?.original_language || 'NULL'}"`);
             }
             
             stats.updated++;
