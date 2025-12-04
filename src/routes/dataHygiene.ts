@@ -740,6 +740,13 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
         message: 'TMDB ID replaced successfully. File has been linked to the new movie entry.',
         newRadarrId: newMovieId,
       });
+    } catch (importError: any) {
+      console.error('Manual import failed:', importError);
+      return res.status(500).json({
+        success: false,
+        error: `Manual Import failed: ${importError.message}. The file may need to be manually imported in Radarr.`,
+      });
+    }
   } catch (error: any) {
     console.error('Replace TMDB ID error:', error);
     res.status(500).json({
