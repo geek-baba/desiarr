@@ -223,13 +223,35 @@
                       <% } %>
                     </td>
                     <td class="px-4 py-3 text-sm">
-                      <button
-                        onclick="deleteMovie(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.has_file === 1 ? 'true' : 'false' %>)"
-                        class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
-                        title="Delete this movie from Radarr"
-                      >
-                        Delete
-                      </button>
+                      <div class="flex gap-2">
+                        <% if (movie.has_file === 0) { %>
+                          <!-- Update button: Only for movies without files -->
+                          <button
+                            onclick="updateTmdbId(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.tmdb_id || 'null' %>)"
+                            class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors"
+                            title="Update TMDB ID (safe - no files to preserve)"
+                          >
+                            Update
+                          </button>
+                        <% } else { %>
+                          <!-- Replace button: Only for movies with files (placeholder) -->
+                          <button
+                            onclick="replaceTmdbId(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.tmdb_id || 'null' %>)"
+                            class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded transition-colors opacity-50 cursor-not-allowed"
+                            title="Replace TMDB ID (coming soon - requires file preservation logic)"
+                            disabled
+                          >
+                            Replace
+                          </button>
+                        <% } %>
+                        <button
+                          onclick="deleteMovie(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.has_file === 1 ? 'true' : 'false' %>)"
+                          class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors"
+                          title="Delete this movie from Radarr"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   <% } %>
                 </tr>
@@ -465,10 +487,51 @@
       }
     }
 
-    // NOTE: Update TMDB ID functionality removed
-    // Radarr API does not support updating the TMDB ID of an existing movie.
-    // The only way to change a TMDB ID is to delete and re-add the movie,
-    // which is complex and risky. This feature is deferred.
+    async function updateTmdbId(radarrId, title, currentTmdbId) {
+      showPrompt(
+        `Update TMDB ID for "${title}"?\n\nCurrent TMDB ID: ${currentTmdbId || 'None'}\n\nEnter the new TMDB ID:`,
+        '',
+        (newTmdbId) => {
+          if (!newTmdbId || newTmdbId.trim() === '') {
+            return;
+          }
+
+          const tmdbIdNum = parseInt(newTmdbId.trim(), 10);
+          if (isNaN(tmdbIdNum) || tmdbIdNum <= 0) {
+            showToast('Invalid TMDB ID. Please enter a positive number.', 'error');
+            return;
+          }
+
+          showConfirm(
+            `Update TMDB ID from ${currentTmdbId || 'None'} to ${tmdbIdNum}?\n\nThis will:\n- Delete the movie from Radarr (no files will be deleted)\n- Re-add the movie with the new TMDB ID\n\nThis is safe because the movie has no files.`,
+            async () => {
+              try {
+                showToast('Updating TMDB ID...', 'info');
+                const response = await fetch(`/data-hygiene/update-tmdb-id/${radarrId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tmdbId: tmdbIdNum }),
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                  showToast('TMDB ID updated successfully', 'success');
+                  setTimeout(() => location.reload(), 1500);
+                } else {
+                  showToast('Error: ' + (data.error || 'Failed to update TMDB ID'), 'error');
+                }
+              } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+              }
+            }
+          );
+        }
+      );
+    }
+
+    function replaceTmdbId(radarrId, title, currentTmdbId) {
+      showToast('Replace functionality is not yet implemented. This requires careful file preservation logic.', 'warning');
+    }
   </script>
   <script src="/js/ui.js"></script>
 </body>

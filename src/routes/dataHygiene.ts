@@ -272,15 +272,219 @@ router.post('/delete-movie/:radarrId', async (req: Request, res: Response) => {
 });
 
 /**
- * NOTE: Radarr API does NOT support updating the TMDB ID of an existing movie.
- * The only way to change a TMDB ID is to delete and re-add the movie.
- * This endpoint has been removed as it was attempting an unsupported operation.
- * 
- * If this functionality is needed in the future, it would require:
- * 1. Delete the movie from Radarr (with option to keep files)
- * 2. Add the movie back with the new TMDB ID
- * 3. This is complex and risky, so it's deferred for now
+ * Update TMDB ID for a movie without files
+ * This is safe because there are no files to preserve.
+ * Process: Delete movie → Lookup new TMDB ID → Re-add movie with same settings
  */
+router.post('/update-tmdb-id/:radarrId', async (req: Request, res: Response) => {
+  try {
+    const radarrId = parseInt(req.params.radarrId, 10);
+    if (isNaN(radarrId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    }
+
+    const { tmdbId } = req.body;
+    if (!tmdbId || isNaN(tmdbId) || tmdbId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid TMDB ID' });
+    }
+
+    const radarrClient = new RadarrClient();
+    
+    // Step 1: Get current movie to preserve settings (quality profile, root folder)
+    const currentMovie = await radarrClient.getMovie(radarrId);
+    if (!currentMovie) {
+      return res.status(404).json({ success: false, error: 'Movie not found in Radarr' });
+    }
+
+    // Verify movie has no files (safety check)
+    if (currentMovie.hasFile) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Cannot update TMDB ID for movies with files. Use Replace instead.' 
+      });
+    }
+
+    // Get quality profile and root folder
+    // Try to preserve root folder from current movie's path, otherwise use defaults
+    const qualityProfiles = await radarrClient.getQualityProfiles();
+    const rootFolders = await radarrClient.getRootFolders();
+    
+    // Extract root folder from current movie's path (e.g., /movies/bollywood/Movie Name -> /movies/bollywood)
+    // Or match to an existing root folder
+    let rootFolderPath = rootFolders[0]?.path || '/movies';
+    if (currentMovie.path) {
+      // Try to find which root folder this movie's path belongs to
+      const matchingFolder = rootFolders.find(folder => currentMovie.path?.startsWith(folder.path));
+      if (matchingFolder) {
+        rootFolderPath = matchingFolder.path;
+      } else {
+        // Extract parent directory from path as fallback
+        const pathParts = currentMovie.path.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          rootFolderPath = '/' + pathParts[0];
+        }
+      }
+    }
+    
+    // Use first quality profile as default (Radarr doesn't expose quality profile in movie object)
+    const qualityProfileId = qualityProfiles.length > 0 ? qualityProfiles[0].id : 1;
+
+    // Step 2: Delete the movie from Radarr (no files to delete)
+    await radarrClient.deleteMovie(radarrId, false, false);
+
+    // Step 3: Lookup the new movie by TMDB ID
+    const newMovie = await radarrClient.lookupMovieByTmdbId(tmdbId);
+    if (!newMovie) {
+      return res.status(404).json({ 
+        success: false, 
+        error: `Movie with TMDB ID ${tmdbId} not found in Radarr lookup` 
+      });
+    }
+
+    // Step 4: Re-add the movie with the new TMDB ID
+    const addedMovie = await radarrClient.addMovie(newMovie, qualityProfileId, rootFolderPath);
+
+    // Step 5: Update local database
+    db.prepare('DELETE FROM radarr_movies WHERE radarr_id = ?').run(radarrId);
+    
+    // The new movie will be picked up in the next Radarr sync, but we can also insert it now
+    const dateAdded = (addedMovie as any).added || (addedMovie as any).dateAdded || addedMovie.dateAdded || null;
+    db.prepare(`
+      INSERT INTO radarr_movies (
+        radarr_id, tmdb_id, imdb_id, title, year, path,
+        has_file, movie_file, original_language, images, date_added, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      addedMovie.id,
+      addedMovie.tmdbId,
+      addedMovie.imdbId || null,
+      addedMovie.title,
+      addedMovie.year || null,
+      addedMovie.path || null,
+      addedMovie.hasFile ? 1 : 0,
+      addedMovie.movieFile ? JSON.stringify(addedMovie.movieFile) : null,
+      addedMovie.originalLanguage?.name || null,
+      addedMovie.images ? JSON.stringify(addedMovie.images) : null,
+      dateAdded,
+      new Date().toISOString()
+    );
+
+    // Step 6: Refresh TMDB cache for the new TMDB ID
+    const tmdbClient = new TMDBClient();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+
+    if (tmdbApiKey) {
+      tmdbClient.setApiKey(tmdbApiKey);
+      try {
+        const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+        if (tmdbMovie) {
+          const { derivePrimaryCountryFromMovie } = require('../utils/tmdbCountryDerivation');
+          const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
+
+          const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
+          
+          if (existing) {
+            db.prepare(`
+              UPDATE tmdb_movie_cache SET
+                title = ?, original_title = ?, original_language = ?, release_date = ?,
+                production_countries = ?, origin_country = ?, primary_country = ?, poster_path = ?,
+                backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+                genres = ?, production_companies = ?, spoken_languages = ?,
+                belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+                popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+                adult = ?, video = ?, homepage = ?,
+                last_updated_at = datetime('now'), is_deleted = 0
+              WHERE tmdb_id = ?
+            `).run(
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null,
+              tmdbId
+            );
+          } else {
+            db.prepare(`
+              INSERT INTO tmdb_movie_cache (
+                tmdb_id, title, original_title, original_language, release_date,
+                production_countries, origin_country, primary_country, poster_path, backdrop_path,
+                overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+                belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+                vote_count, status, adult, video, homepage,
+                synced_at, last_updated_at, is_deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+            `).run(
+              tmdbMovie.id,
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null
+            );
+          }
+        }
+      } catch (tmdbError) {
+        console.error('Failed to refresh TMDB data after update:', tmdbError);
+        // Continue anyway - the Radarr update succeeded
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'TMDB ID updated successfully',
+      newRadarrId: addedMovie.id,
+    });
+  } catch (error: any) {
+    console.error('Update TMDB ID error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to update TMDB ID',
+    });
+  }
+});
 
 export default router;
 
