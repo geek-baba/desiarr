@@ -58,6 +58,20 @@ router.get('/', async (req: Request, res: Response) => {
       if (movie.original_language) {
         enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
       }
+      
+      // Parse origin_country for display
+      if (movie.origin_country && movie.origin_country !== 'null' && movie.origin_country !== '[]') {
+        try {
+          const originCountry = JSON.parse(movie.origin_country);
+          if (Array.isArray(originCountry) && originCountry.length > 0) {
+            const { getCountryName } = require('../utils/countryMapping');
+            enriched.origin_country_display = originCountry.map((code: string) => getCountryName(code) || code).join(', ');
+          }
+        } catch (e) {
+          // Invalid JSON, ignore
+        }
+      }
+      
       // Parse JSON fields
       try {
         if (movie.genres) enriched.genres_parsed = JSON.parse(movie.genres);
