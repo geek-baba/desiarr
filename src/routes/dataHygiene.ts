@@ -25,6 +25,57 @@ import db from '../db';
 const router = Router();
 
 /**
+ * Normalize language name from MediaInfo to match Radarr's language names
+ * Handles variations like "Panjabi" -> "Punjabi", case differences, etc.
+ */
+function normalizeLanguageName(lang: string): string | null {
+  if (!lang) return null;
+  
+  const normalized = lang.trim();
+  const lower = normalized.toLowerCase();
+  
+  // Handle common variations
+  const languageMap: Record<string, string> = {
+    'panjabi': 'Punjabi',
+    'punjabi': 'Punjabi',
+    'hindi': 'Hindi',
+    'bengali': 'Bengali',
+    'marathi': 'Marathi',
+    'telugu': 'Telugu',
+    'tamil': 'Tamil',
+    'urdu': 'Urdu',
+    'gujarati': 'Gujarati',
+    'kannada': 'Kannada',
+    'malayalam': 'Malayalam',
+    'english': 'English',
+    'spanish': 'Spanish',
+    'french': 'French',
+    'german': 'German',
+    'italian': 'Italian',
+    'portuguese': 'Portuguese',
+    'russian': 'Russian',
+    'japanese': 'Japanese',
+    'korean': 'Korean',
+    'chinese': 'Chinese',
+    'arabic': 'Arabic',
+  };
+  
+  // Try direct lookup
+  if (languageMap[lower]) {
+    return languageMap[lower];
+  }
+  
+  // Try to match with getLanguageName (handles ISO codes)
+  const mappedName = getLanguageName(normalized);
+  if (mappedName) {
+    return mappedName;
+  }
+  
+  // Fallback: capitalize first letter
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+}
+
+/**
  * Main Data Hygiene page
  */
 router.get('/', async (req: Request, res: Response) => {
@@ -254,10 +305,59 @@ router.post('/refresh-tmdb/:tmdbId', async (req: Request, res: Response) => {
 
     // Trigger Radarr scan to pick up the updated TMDB data
     // Find the Radarr ID for this TMDB ID
-    const radarrMovie = db.prepare('SELECT radarr_id FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number } | undefined;
+    const radarrMovie = db.prepare('SELECT radarr_id, movie_file FROM radarr_movies WHERE tmdb_id = ?').get(tmdbId) as { radarr_id: number; movie_file: string | null } | undefined;
     if (radarrMovie) {
       try {
         const radarrClient = new RadarrClient();
+        
+        // Step 1: Fix file language if MediaInfo shows different language than Radarr
+        if (radarrMovie.movie_file) {
+          try {
+            const movieFile = JSON.parse(radarrMovie.movie_file) as any;
+            if (movieFile?.id && movieFile?.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
+              // Get primary audio language from MediaInfo (first in array)
+              const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
+              
+              // Normalize language name (handle variations like "Panjabi" vs "Punjabi")
+              const normalizedLang = normalizeLanguageName(mediaInfoLang);
+              
+              // Get current language from Radarr file
+              const currentLang = movieFile.language?.name || null;
+              
+              // If MediaInfo language differs from Radarr's stored language, fix it
+              if (normalizedLang && normalizedLang.toLowerCase() !== currentLang?.toLowerCase()) {
+                console.log(`[Language Fix] MediaInfo shows "${mediaInfoLang}" (normalized: "${normalizedLang}"), but Radarr has "${currentLang}". Updating...`);
+                
+                // Get full file data from Radarr
+                const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
+                if (fullFileData) {
+                  // Get available languages from Radarr
+                  const radarrLanguages = await radarrClient.getLanguages();
+                  const targetLang = radarrLanguages.find(
+                    lang => lang.name.toLowerCase() === normalizedLang.toLowerCase()
+                  );
+                  
+                  if (targetLang) {
+                    // Update file with correct language
+                    const updatedFile = {
+                      ...fullFileData,
+                      language: targetLang,
+                    };
+                    await radarrClient.updateMovieFile(movieFile.id, updatedFile);
+                    console.log(`[Language Fix] Successfully updated file language to "${targetLang.name}" (ID: ${targetLang.id})`);
+                  } else {
+                    console.warn(`[Language Fix] Language "${normalizedLang}" not found in Radarr's language list`);
+                  }
+                }
+              }
+            }
+          } catch (fileError: any) {
+            console.error('[Language Fix] Error fixing file language:', fileError?.message || fileError);
+            // Continue with refresh even if language fix fails
+          }
+        }
+        
+        // Step 2: Trigger Radarr refresh
         await radarrClient.refreshMovie(radarrMovie.radarr_id);
         // Wait a moment for Radarr to process
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -299,13 +399,61 @@ router.post('/scan-radarr/:radarrId', async (req: Request, res: Response) => {
 
     const radarrClient = new RadarrClient();
     
-    // Step 1: Trigger Radarr refresh
+    // Step 1: Fix file language if MediaInfo shows different language than Radarr
+    const radarrMovie = db.prepare('SELECT movie_file FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as { movie_file: string | null } | undefined;
+    if (radarrMovie?.movie_file) {
+      try {
+        const movieFile = JSON.parse(radarrMovie.movie_file) as any;
+        if (movieFile?.id && movieFile?.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
+          // Get primary audio language from MediaInfo (first in array)
+          const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
+          
+          // Normalize language name (handle variations like "Panjabi" vs "Punjabi")
+          const normalizedLang = normalizeLanguageName(mediaInfoLang);
+          
+          // Get current language from Radarr file
+          const currentLang = movieFile.language?.name || null;
+          
+          // If MediaInfo language differs from Radarr's stored language, fix it
+          if (normalizedLang && normalizedLang.toLowerCase() !== currentLang?.toLowerCase()) {
+            console.log(`[Language Fix] MediaInfo shows "${mediaInfoLang}" (normalized: "${normalizedLang}"), but Radarr has "${currentLang}". Updating...`);
+            
+            // Get full file data from Radarr
+            const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
+            if (fullFileData) {
+              // Get available languages from Radarr
+              const radarrLanguages = await radarrClient.getLanguages();
+              const targetLang = radarrLanguages.find(
+                lang => lang.name.toLowerCase() === normalizedLang.toLowerCase()
+              );
+              
+              if (targetLang) {
+                // Update file with correct language
+                const updatedFile = {
+                  ...fullFileData,
+                  language: targetLang,
+                };
+                await radarrClient.updateMovieFile(movieFile.id, updatedFile);
+                console.log(`[Language Fix] Successfully updated file language to "${targetLang.name}" (ID: ${targetLang.id})`);
+              } else {
+                console.warn(`[Language Fix] Language "${normalizedLang}" not found in Radarr's language list`);
+              }
+            }
+          }
+        }
+      } catch (fileError: any) {
+        console.error('[Language Fix] Error fixing file language:', fileError?.message || fileError);
+        // Continue with refresh even if language fix fails
+      }
+    }
+    
+    // Step 2: Trigger Radarr refresh
     await radarrClient.refreshMovie(radarrId);
     
-    // Step 2: Wait for Radarr to process (2-3 seconds)
+    // Step 3: Wait for Radarr to process (2-3 seconds)
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Step 3: Trigger Radarr sync to update local DB
+    // Step 4: Trigger Radarr sync to update local DB
     await syncRadarrMovies();
     
     res.json({

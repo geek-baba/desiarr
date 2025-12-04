@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '../config';
 import { settingsModel } from '../models/settings';
-import { RadarrMovie, RadarrLookupResult, RadarrMovieFile, RadarrHistory, RadarrQualityProfile, RadarrRootFolder } from './types';
+import { RadarrMovie, RadarrLookupResult, RadarrMovieFile, RadarrHistory, RadarrQualityProfile, RadarrRootFolder, RadarrLanguage } from './types';
 
 class RadarrClient {
   private client: AxiosInstance | null = null;
@@ -382,6 +382,51 @@ class RadarrClient {
       });
       
       throw new Error(`Failed to manual import files: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get all available languages from Radarr
+   * GET /api/v3/language
+   */
+  async getLanguages(): Promise<RadarrLanguage[]> {
+    try {
+      const response = await this.ensureClient().get<RadarrLanguage[]>('/language');
+      return response.data || [];
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr get languages error:', errorMessage);
+      return [];
+    }
+  }
+
+  /**
+   * Get movie file by file ID
+   * GET /api/v3/moviefile/{id}
+   */
+  async getMovieFileById(fileId: number): Promise<RadarrMovieFile | null> {
+    try {
+      const response = await this.ensureClient().get<RadarrMovieFile>(`/moviefile/${fileId}`);
+      return response.data || null;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr get movie file by ID error:', errorMessage);
+      return null;
+    }
+  }
+
+  /**
+   * Update movie file (e.g., to fix language)
+   * PUT /api/v3/moviefile/{id}
+   */
+  async updateMovieFile(fileId: number, fileData: RadarrMovieFile): Promise<RadarrMovieFile> {
+    try {
+      const response = await this.ensureClient().put<RadarrMovieFile>(`/moviefile/${fileId}`, fileData);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr update movie file error:', errorMessage, error?.response?.data);
+      throw new Error(`Failed to update movie file in Radarr: ${errorMessage}`);
     }
   }
 }

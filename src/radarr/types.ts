@@ -32,6 +32,10 @@ export interface RadarrMovieFile {
       source?: string;
     };
   };
+  language?: {
+    id: number;
+    name: string;
+  };
   mediaInfo?: {
     audioCodec?: string;
     audioChannels?: number;
@@ -90,5 +94,10 @@ export interface RadarrQualityProfile {
 export interface RadarrRootFolder {
   id: number;
   path: string;
+}
+
+export interface RadarrLanguage {
+  id: number;
+  name: string;
 }
 
