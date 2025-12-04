@@ -187,14 +187,56 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
     }
     
     // 4. If we have a target language and it's different, update Radarr
-    if (targetLanguage && targetLanguage.toLowerCase() !== currentLang?.toLowerCase()) {
+    if (!targetLanguage) {
+      console.log(`[Language Fix] Movie ${radarrId}: No target language determined, skipping update`);
+      return false;
+    }
+    
+    if (targetLanguage.toLowerCase() !== currentLang?.toLowerCase()) {
       const radarrClient = new RadarrClient();
       
       // Get Radarr languages list
       const radarrLanguages = await radarrClient.getLanguages();
-      const targetLangObj = radarrLanguages.find(
-        lang => lang.name.toLowerCase() === targetLanguage.toLowerCase()
+      
+      // Try exact match first
+      // At this point, targetLanguage is guaranteed to be non-null (checked above)
+      let targetLangObj = radarrLanguages.find(
+        lang => lang.name.toLowerCase() === targetLanguage!.toLowerCase()
       );
+      
+      // If not found, try alternative spellings/variations
+      if (!targetLangObj) {
+        // At this point, targetLanguage is guaranteed to be non-null (checked above)
+        const lowerTarget = targetLanguage!.toLowerCase();
+        // Handle Punjabi variations - Radarr might not have it
+        if (lowerTarget === 'punjabi' || lowerTarget === 'panjabi') {
+          // Check if Radarr has "Panjabi" (alternative spelling)
+          targetLangObj = radarrLanguages.find(
+            lang => lang.name.toLowerCase() === 'panjabi'
+          );
+          // If still not found, Radarr doesn't support Punjabi
+          // We'll use "Original" as a workaround since it's better than "English"
+          if (!targetLangObj) {
+            console.warn(`[Language Fix] Movie ${radarrId}: ❌ Language "Punjabi" not found in Radarr's language list`);
+            console.log(`[Language Fix] Movie ${radarrId}: Available Radarr languages: ${JSON.stringify(radarrLanguages.map(l => l.name))}`);
+            console.log(`[Language Fix] Movie ${radarrId}: ⚠️  Radarr does not support Punjabi. Using "Original" as fallback.`);
+            
+            // Use "Original" as fallback (better than leaving it as "English" or null)
+            targetLangObj = radarrLanguages.find(
+              lang => lang.name.toLowerCase() === 'original'
+            );
+            
+            if (!targetLangObj) {
+              console.error(`[Language Fix] Movie ${radarrId}: ❌ "Original" language also not found in Radarr!`);
+              return false;
+            }
+            
+            // Update targetLanguage to reflect we're using Original
+            targetLanguage = 'Original';
+            source += ' (fallback: Original)';
+          }
+        }
+      }
       
       if (targetLangObj) {
         console.log(`[Language Fix] Movie ${radarrId}: Found target language in Radarr: ${JSON.stringify(targetLangObj)}`);
@@ -207,7 +249,7 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
             ...fullFileData,
             language: targetLangObj,
           });
-          console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLanguage}" (source: ${source})`);
+          console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLangObj.name}" (source: ${source})`);
           return true;
         } else {
           console.warn(`[Language Fix] Movie ${radarrId}: ❌ Could not fetch full file data from Radarr`);
