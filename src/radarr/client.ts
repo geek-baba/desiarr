@@ -315,41 +315,37 @@ class RadarrClient {
    * Note: Manual Import does NOT move files - it just maps/links existing files to the movie.
    * Files stay in their current location. If rename/move is needed, trigger manual rename separately.
    */
-  async manualImport(params: {
-    movieId: number;
-    files: Array<{
-      path: string;
-      quality?: {
-        quality: {
-          id: number;
-          name: string;
-        };
-        revision?: {
-          version: number;
-          real: number;
-        };
-      };
-      languages?: Array<{
-        id: number;
-        name: string;
-      }>;
-    }>;
-    folder?: string;
-    importMode?: 'Auto' | 'Move' | 'Copy';
-  }): Promise<void> {
+  /**
+   * Get list of files available for manual import from a folder
+   * GET /api/v3/manualimport?folder=<folder>
+   */
+  async getManualImportFiles(folder: string, filterExistingFiles: boolean = true): Promise<any[]> {
     try {
-      const command = {
-        name: 'ManualImport',
-        movieId: params.movieId,
-        files: params.files,
-        ...(params.folder && { folder: params.folder }),
-        importMode: params.importMode || 'Auto',
-      };
+      const response = await this.ensureClient().get('/manualimport', {
+        params: {
+          folder: folder,
+          filterExistingFiles: filterExistingFiles,
+        },
+      });
+      return response.data || [];
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('[Radarr] Get Manual Import files error:', errorMessage);
+      throw new Error(`Failed to get manual import files: ${errorMessage}`);
+    }
+  }
 
+  /**
+   * Execute manual import of files
+   * POST /api/v3/manualimport
+   * Takes file objects from GET response, adds movieId and imported: true
+   */
+  async manualImport(files: any[]): Promise<void> {
+    try {
       // Log the exact payload we're sending for debugging
-      console.log('[Radarr Manual Import] Sending command:', JSON.stringify(command, null, 2));
+      console.log('[Radarr Manual Import] Sending POST request:', JSON.stringify(files, null, 2));
 
-      const response = await this.ensureClient().post('/command', command);
+      const response = await this.ensureClient().post('/manualimport', files);
       
       // Log the response
       console.log('[Radarr Manual Import] Response:', JSON.stringify(response.data, null, 2));
@@ -365,13 +361,7 @@ class RadarrClient {
         status: error?.response?.status,
         statusText: error?.response?.statusText,
         data: errorDetails,
-        requestPayload: {
-          name: 'ManualImport',
-          movieId: params.movieId,
-          files: params.files,
-          folder: params.folder,
-          importMode: params.importMode || 'Auto',
-        },
+        requestPayload: files,
       });
       
       throw new Error(`Failed to manual import files: ${errorMessage}`);

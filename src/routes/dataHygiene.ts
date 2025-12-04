@@ -572,48 +572,82 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
       });
     }
 
-    // Step 7: Use Manual Import to CREATE the new movie and import the file in one step
-    // Manual Import creates the movie entry if it doesn't exist
-    // Use movieId: 0 to indicate "create new movie" (Radarr will create it based on TMDB ID from file/folder)
-    let newMovieId: number;
+    // Step 7: Add new movie first (so it exists in Radarr)
+    const addedMovie = await radarrClient.addMovie(newMovie, qualityProfileId, rootFolderPath);
+    
+    // Step 7.5: Wait a moment for Radarr to process, then fetch the movie to get its ID
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    let newMovieId = addedMovie.id;
+    if (!newMovieId || newMovieId === 0) {
+      // Fetch by TMDB ID if ID not in response
+      const fetchedMovie = await radarrClient.getMovie(tmdbId);
+      if (!fetchedMovie || !fetchedMovie.id) {
+        return res.status(500).json({
+          success: false,
+          error: 'Movie was added but could not retrieve the new movie ID. Please check Radarr.',
+        });
+      }
+      newMovieId = fetchedMovie.id;
+    }
+    console.log(`[Replace] New movie added with ID: ${newMovieId}`);
+
+    // Step 8: Use Manual Import API (GET then POST) to link the existing file
+    // GET /api/v3/manualimport?folder=<folder> to get file listing
+    // POST /api/v3/manualimport with file data + movieId to import
     try {
       // Use the folder where the file actually exists (old movie's folder)
       const fileFolder = currentMovie.path || path.dirname(fullFilePath);
       
-      console.log(`[Replace] Calling Manual Import to create movie with TMDB ID ${tmdbId} and import file: ${fullFilePath}`);
+      console.log(`[Replace] Getting manual import files from folder: ${fileFolder}`);
       
-      // Manual Import with movieId: 0 should create a new movie
-      // The files array should include the TMDB ID information
-      await radarrClient.manualImport({
-        movieId: 0, // 0 indicates "create new movie" - Radarr will match by file/folder or we need to pass TMDB ID
-        files: [{
-          path: fullFilePath,
-          quality: qualityInfo,
-          languages: languages,
-          // Add TMDB ID to the file object if Radarr API supports it
-          // Otherwise, Radarr should match by folder name or we need a different approach
-        }],
-        folder: fileFolder,
-        importMode: 'Auto',
-      });
+      // Step 8.1: GET manual import files
+      const importFiles = await radarrClient.getManualImportFiles(fileFolder, false);
       
-      // Step 7.5: Wait a moment for Radarr to process, then fetch the newly created movie
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      const createdMovie = await radarrClient.getMovie(tmdbId);
-      if (!createdMovie || !createdMovie.id) {
-        return res.status(500).json({
+      // Step 8.2: Find our file in the response
+      const fileToImport = importFiles.find((file: any) => file.path === fullFilePath);
+      if (!fileToImport) {
+        return res.status(404).json({
           success: false,
-          error: 'Manual Import completed but could not retrieve the new movie ID. Please check Radarr.',
+          error: `File not found in manual import listing: ${fullFilePath}. The file may not be accessible or may have been moved.`,
         });
       }
-      newMovieId = createdMovie.id;
-      console.log(`[Replace] Movie created with ID: ${newMovieId}`);
       
-      // Step 8: Update local database
+      console.log(`[Replace] Found file in manual import listing:`, JSON.stringify(fileToImport, null, 2));
+      
+      // Step 8.3: Update file object with new movie ID and set imported flag
+      const importPayload = [{
+        ...fileToImport,
+        movie: {
+          ...fileToImport.movie,
+          id: newMovieId,
+          tmdbId: tmdbId,
+        },
+        movieId: newMovieId,
+        imported: true,
+      }];
+      
+      console.log(`[Replace] Posting manual import with movieId: ${newMovieId}`);
+      
+      // Step 8.4: POST manual import
+      await radarrClient.manualImport(importPayload);
+      
+      console.log(`[Replace] Manual import completed successfully`);
+      
+      // Step 8.5: Fetch the movie again to get updated file info after import
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const updatedMovie = await radarrClient.getMovie(newMovieId);
+      if (!updatedMovie) {
+        return res.status(500).json({
+          success: false,
+          error: 'Manual import completed but could not fetch updated movie data.',
+        });
+      }
+      
+      // Step 9: Update local database
       db.prepare('DELETE FROM radarr_movies WHERE radarr_id = ?').run(radarrId);
       
       // Insert new movie (will be synced properly on next sync, but we can insert now)
-      const dateAdded = createdMovie.added || createdMovie.dateAdded || null;
+      const dateAdded = updatedMovie.added || updatedMovie.dateAdded || addedMovie.added || addedMovie.dateAdded || null;
       db.prepare(`
         INSERT INTO radarr_movies (
           radarr_id, tmdb_id, imdb_id, title, year, path,
@@ -621,15 +655,15 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         newMovieId,
-        createdMovie.tmdbId,
-        createdMovie.imdbId || null,
-        createdMovie.title,
-        createdMovie.year || null,
-        createdMovie.path || null,
-        createdMovie.hasFile ? 1 : 0,
-        createdMovie.movieFile ? JSON.stringify(createdMovie.movieFile) : null,
-        createdMovie.originalLanguage?.name || null,
-        createdMovie.images ? JSON.stringify(createdMovie.images) : null,
+        updatedMovie.tmdbId || addedMovie.tmdbId,
+        updatedMovie.imdbId || addedMovie.imdbId || null,
+        updatedMovie.title || addedMovie.title,
+        updatedMovie.year || addedMovie.year || null,
+        updatedMovie.path || addedMovie.path || null,
+        updatedMovie.hasFile ? 1 : 0,
+        updatedMovie.movieFile ? JSON.stringify(updatedMovie.movieFile) : null,
+        updatedMovie.originalLanguage?.name || addedMovie.originalLanguage?.name || null,
+        updatedMovie.images ? JSON.stringify(updatedMovie.images) : null,
         dateAdded,
         new Date().toISOString()
       );
@@ -793,42 +827,55 @@ router.post('/test-manual-import/:radarrId', async (req: Request, res: Response)
     const languageName = storedMovie?.original_language || currentMovie.originalLanguage?.name || null;
     const languages = convertLanguageToRadarrFormat(languageName);
 
-    // Prepare Manual Import payload (exact format we'll send)
-    const manualImportPayload = {
-      name: 'ManualImport',
-      movieId: radarrId, // Use current movie ID for testing (safe - file is already linked)
-      files: [{
-        path: fullFilePath,
-        quality: movieFile.quality || undefined,
-        languages: languages.length > 0 ? languages : undefined,
-      }],
-      folder: currentMovie.path,
-      importMode: 'Auto' as const,
-    };
-
-    // Log the payload we're about to send
-    console.log('=== MANUAL IMPORT TEST PAYLOAD ===');
-    console.log(JSON.stringify(manualImportPayload, null, 2));
-    console.log('==================================');
-
-    // Try the API call
+    // Test the Manual Import API: GET then POST
+    const fileFolder = currentMovie.path || path.dirname(fullFilePath);
+    let importFiles: any[] = [];
+    let importPayload: any[] = [];
+    
     try {
-      const result = await radarrClient.manualImport({
+      // Step 1: GET manual import files
+      console.log('=== MANUAL IMPORT TEST: GET ===');
+      console.log(`Folder: ${fileFolder}`);
+      
+      importFiles = await radarrClient.getManualImportFiles(fileFolder, false);
+      console.log(`Found ${importFiles.length} files in manual import listing`);
+      
+      // Step 2: Find our file
+      const fileToImport = importFiles.find((file: any) => file.path === fullFilePath);
+      if (!fileToImport) {
+        return res.status(404).json({
+          success: false,
+          error: `File not found in manual import listing: ${fullFilePath}`,
+          importFiles: importFiles.map((f: any) => ({ path: f.path, movie: f.movie?.title })),
+        });
+      }
+      
+      console.log('=== MANUAL IMPORT TEST: File Found ===');
+      console.log(JSON.stringify(fileToImport, null, 2));
+      
+      // Step 3: Prepare POST payload (update with current movie ID)
+      importPayload = [{
+        ...fileToImport,
+        movie: {
+          ...fileToImport.movie,
+          id: radarrId,
+        },
         movieId: radarrId,
-        files: [{
-          path: fullFilePath,
-          quality: movieFile.quality,
-          languages: languages,
-        }],
-        folder: currentMovie.path,
-        importMode: 'Auto',
-      });
+        imported: true,
+      }];
+      
+      console.log('=== MANUAL IMPORT TEST: POST Payload ===');
+      console.log(JSON.stringify(importPayload, null, 2));
+      
+      // Step 4: POST manual import (this will re-import the file to the same movie - safe test)
+      const result = await radarrClient.manualImport(importPayload);
 
       return res.json({
         success: true,
-        message: 'Manual Import API call succeeded! Check Radarr to verify file linking.',
-        payload: manualImportPayload,
-        response: result,
+        message: 'Manual Import API test succeeded! Check Radarr to verify file linking.',
+        getResponse: importFiles,
+        postPayload: importPayload,
+        postResponse: result,
         note: 'This was a test with the existing movie - the file should remain linked',
       });
     } catch (apiError: any) {
@@ -843,8 +890,9 @@ router.post('/test-manual-import/:radarrId', async (req: Request, res: Response)
           data: errorResponse,
           message: errorResponse.message || apiError.message,
         },
-        payload: manualImportPayload,
-        note: 'Check the error details above to understand what format Radarr expects. The payload shows what we sent.',
+        getResponse: importFiles,
+        postPayload: importPayload,
+        note: 'Check the error details above to understand what format Radarr expects.',
       });
     }
   } catch (error: any) {
