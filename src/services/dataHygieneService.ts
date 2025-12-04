@@ -195,7 +195,7 @@ export function getFileNames(): DataHygieneMovie[] {
  * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
 export function getFolderNameMismatches(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
+  // JOIN with TMDB cache to get TMDB title and release_date (for year)
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -207,10 +207,11 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        t.title as tmdb_title
+        t.title as tmdb_title,
+        t.release_date as tmdb_release_date
       FROM radarr_movies r
-      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
-      WHERE r.path IS NOT NULL AND r.tmdb_id IS NOT NULL
+      INNER JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
+      WHERE r.path IS NOT NULL AND r.tmdb_id IS NOT NULL AND t.title IS NOT NULL
       ORDER BY r.title
     `)
     .all() as any[];
@@ -218,26 +219,25 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
   const mismatches: DataHygieneMovie[] = [];
 
   for (const movie of rows) {
-    if (!movie.path || !movie.tmdb_id) continue;
+    if (!movie.path || !movie.tmdb_id || !movie.tmdb_title) continue;
 
-    // Extract folder name from path
-    const folderName = path.basename(movie.path);
+    // Extract actual folder name from Radarr path
+    const actualFolderName = path.basename(movie.path);
 
-    // Use cached TMDB title, fallback to Radarr title
-    const tmdbTitle = movie.tmdb_title || movie.title;
-    // Use Radarr year as fallback (TMDB year would require API call)
-    const tmdbYear = movie.year;
+    // Use TMDB as source of truth
+    const tmdbTitle = movie.tmdb_title;
+    // Extract year from TMDB release_date, fallback to Radarr year
+    const tmdbYear = extractYearFromReleaseDate(movie.tmdb_release_date) || movie.year;
 
-    if (!tmdbTitle) continue;
+    // Apply Radarr's CleanTitle logic to TMDB title
+    const cleanTitle = getRadarrCleanTitle(tmdbTitle);
 
-    // Expected folder name format: "Movie Title (Year)"
+    // Generate expected folder name: "{Movie CleanTitle} ({Release Year})"
     const expectedFolderName = tmdbYear 
-      ? `${normalizeForComparison(tmdbTitle)} (${tmdbYear})`
-      : normalizeForComparison(tmdbTitle);
+      ? `${cleanTitle} (${tmdbYear})`
+      : cleanTitle;
 
-    const actualFolderName = normalizeForComparison(folderName);
-
-    // Exact match comparison
+    // Exact match comparison (case-sensitive, as Radarr uses exact format)
     if (actualFolderName !== expectedFolderName) {
       mismatches.push({
         radarr_id: movie.radarr_id,
@@ -248,8 +248,8 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
         path: movie.path,
         movie_file: movie.movie_file,
         original_language: movie.original_language,
-        folder_name: folderName,
-        expected_folder_name: tmdbYear ? `${tmdbTitle} (${tmdbYear})` : tmdbTitle,
+        folder_name: actualFolderName,
+        expected_folder_name: expectedFolderName,
         tmdb_title: tmdbTitle,
       });
     }
@@ -263,7 +263,7 @@ export function getFolderNameMismatches(): DataHygieneMovie[] {
  * Uses cached TMDB data and radarr_movies.year as fallback - no API calls
  */
 export function getFileNameMismatches(): DataHygieneMovie[] {
-  // Use LEFT JOIN to get TMDB data from tmdb_movie_cache
+  // JOIN with TMDB cache to get TMDB title, release_date (for year), and IMDB ID
   const rows = db
     .prepare(`
       SELECT DISTINCT
@@ -275,10 +275,12 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
         r.path,
         r.movie_file,
         r.original_language,
-        t.title as tmdb_title
+        t.title as tmdb_title,
+        t.release_date as tmdb_release_date,
+        t.imdb_id as tmdb_imdb_id
       FROM radarr_movies r
-      LEFT JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
-      WHERE r.has_file = 1 AND r.movie_file IS NOT NULL AND r.tmdb_id IS NOT NULL
+      INNER JOIN tmdb_movie_cache t ON r.tmdb_id = t.tmdb_id AND t.is_deleted = 0
+      WHERE r.has_file = 1 AND r.movie_file IS NOT NULL AND r.tmdb_id IS NOT NULL AND t.title IS NOT NULL
       ORDER BY r.title
     `)
     .all() as any[];
@@ -286,14 +288,29 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
   const mismatches: DataHygieneMovie[] = [];
 
   for (const movie of rows) {
-    if (!movie.movie_file || !movie.tmdb_id) continue;
+    if (!movie.movie_file || !movie.tmdb_id || !movie.tmdb_title) continue;
 
-    // Extract file name from movie_file JSON
+    // Extract actual file name and quality from movie_file JSON
     let fileName: string | undefined;
+    let qualityTitle: string | undefined;
     try {
       const movieFile = JSON.parse(movie.movie_file);
       if (movieFile && movieFile.relativePath) {
         fileName = path.basename(movieFile.relativePath);
+      }
+      // Extract quality information from Radarr
+      if (movieFile && movieFile.quality && movieFile.quality.quality) {
+        const quality = movieFile.quality.quality;
+        // Format: "Source-Resolution" (e.g., "Bluray-1080p", "WEB-DL-720p")
+        const source = quality.source || '';
+        const resolution = quality.resolution || '';
+        if (source && resolution) {
+          qualityTitle = `${source}-${resolution}`;
+        } else if (source) {
+          qualityTitle = source;
+        } else if (resolution) {
+          qualityTitle = resolution;
+        }
       }
     } catch (error) {
       continue; // Invalid JSON, skip
@@ -301,22 +318,50 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
 
     if (!fileName) continue;
 
-    // Use cached TMDB title, fallback to Radarr title
-    const tmdbTitle = movie.tmdb_title || movie.title;
-    // Use Radarr year as fallback (TMDB year would require API call)
-    const tmdbYear = movie.year;
+    // Use TMDB as source of truth
+    const tmdbTitle = movie.tmdb_title;
+    // Extract year from TMDB release_date, fallback to Radarr year
+    const tmdbYear = extractYearFromReleaseDate(movie.tmdb_release_date) || movie.year;
+    // Use TMDB IMDB ID, fallback to Radarr IMDB ID
+    const tmdbImdbId = movie.tmdb_imdb_id || movie.imdb_id;
 
-    if (!tmdbTitle) continue;
+    // Apply Radarr's CleanTitle logic to TMDB title
+    const cleanTitle = getRadarrCleanTitle(tmdbTitle);
 
-    // Expected file name should contain TMDB title and year
-    const normalizedTmdbTitle = normalizeForComparison(tmdbTitle);
-    const normalizedFileName = normalizeForComparison(fileName);
+    // Build expected file name: "{Movie CleanTitle} ({Release Year}) {Quality Title} - {imdb-{ImdbId}}"
+    // Example: "The Movie Title (2010) Bluray-1080p - {imdb-tt0066921}"
+    const titleYearPart = tmdbYear 
+      ? `${cleanTitle} (${tmdbYear})`
+      : cleanTitle;
+    
+    const qualityPart = qualityTitle ? ` ${qualityTitle}` : '';
+    const imdbPart = tmdbImdbId ? ` - {imdb-${tmdbImdbId}}` : '';
+    
+    const expectedFileName = `${titleYearPart}${qualityPart}${imdbPart}`;
 
-    // Check if file name contains TMDB title and year
-    const hasTitle = normalizedFileName.includes(normalizedTmdbTitle);
-    const hasYear = tmdbYear ? normalizedFileName.includes(tmdbYear.toString()) : true;
+    // Check if file name matches expected format
+    // We'll do a more flexible check: verify it starts with title+year and ends with imdb (if present)
+    const fileNameLower = fileName.toLowerCase();
+    const expectedStart = titleYearPart.toLowerCase();
+    
+    // Check if file starts with expected title+year
+    const startsCorrectly = fileNameLower.startsWith(expectedStart);
+    
+    // Check if file ends with IMDB ID (if TMDB IMDB ID is present)
+    let endsCorrectly = true;
+    if (tmdbImdbId) {
+      const expectedImdbSuffix = `{imdb-${tmdbImdbId.toLowerCase()}}`;
+      endsCorrectly = fileNameLower.endsWith(expectedImdbSuffix.toLowerCase());
+    }
+    
+    // If quality is specified, check if it's present in the filename
+    let hasQuality = true;
+    if (qualityTitle) {
+      hasQuality = fileNameLower.includes(qualityTitle.toLowerCase());
+    }
 
-    if (!hasTitle || !hasYear) {
+    // If any part doesn't match, it's a mismatch
+    if (!startsCorrectly || !endsCorrectly || !hasQuality) {
       mismatches.push({
         radarr_id: movie.radarr_id,
         tmdb_id: movie.tmdb_id,
@@ -327,7 +372,7 @@ export function getFileNameMismatches(): DataHygieneMovie[] {
         movie_file: movie.movie_file,
         original_language: movie.original_language,
         file_name: fileName,
-        expected_file_name: tmdbYear ? `${tmdbTitle} (${tmdbYear})` : tmdbTitle,
+        expected_file_name: expectedFileName,
         tmdb_title: tmdbTitle,
       });
     }
@@ -497,7 +542,42 @@ export function getPreservedHistory(): PreservedHistoryEntry[] {
 }
 
 /**
+ * Generate Radarr's "CleanTitle" format
+ * Radarr sanitizes titles by removing/replacing certain characters:
+ * - Removes: colons (:), slashes (/), backslashes (\), question marks (?), asterisks (*), pipes (|), quotes ("), less/greater than (< >)
+ * - Replaces: periods (.) with spaces
+ * - Preserves: spaces, hyphens, apostrophes, parentheses, brackets, numbers, letters
+ * 
+ * This matches Radarr's CleanTitle logic used for folder/file naming
+ */
+function getRadarrCleanTitle(title: string): string {
+  return title
+    .replace(/:/g, '')      // Remove colons
+    .replace(/\//g, '')      // Remove forward slashes
+    .replace(/\\/g, '')      // Remove backslashes
+    .replace(/\?/g, '')      // Remove question marks
+    .replace(/\*/g, '')      // Remove asterisks
+    .replace(/\|/g, '')       // Remove pipes
+    .replace(/"/g, '')       // Remove double quotes
+    .replace(/</g, '')        // Remove less than
+    .replace(/>/g, '')        // Remove greater than
+    .replace(/\./g, ' ')     // Replace periods with spaces
+    .replace(/\s+/g, ' ')     // Normalize whitespace
+    .trim();
+}
+
+/**
+ * Extract year from TMDB release_date (format: YYYY-MM-DD or YYYY)
+ */
+function extractYearFromReleaseDate(releaseDate: string | null): number | null {
+  if (!releaseDate) return null;
+  const yearMatch = releaseDate.match(/^(\d{4})/);
+  return yearMatch ? parseInt(yearMatch[1], 10) : null;
+}
+
+/**
  * Normalize string for comparison (remove special chars, lowercase, trim)
+ * Used for fuzzy matching, not for exact Radarr format validation
  */
 function normalizeForComparison(str: string): string {
   return str
