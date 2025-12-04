@@ -53,7 +53,7 @@ router.get('/', async (req: Request, res: Response) => {
     const movies = db.prepare(query).all(params) as any[];
 
     // Enrich with language names
-    const enrichedMovies = movies.map(movie => {
+    const enrichedMovies = movies.map((movie, index) => {
       const enriched = { ...movie };
       if (movie.original_language) {
         enriched.original_language_display = getLanguageName(movie.original_language) || movie.original_language;
@@ -74,8 +74,8 @@ router.get('/', async (req: Request, res: Response) => {
       }
       
       // Debug: log first few movies to see what we have
-      if (enrichedMovies.length < 3) {
-        console.log(`[TMDB Data] Movie ${movie.tmdb_id}: origin_country="${movie.origin_country}", origin_country_display="${enriched.origin_country_display || 'NOT SET'}"`);
+      if (index < 3) {
+        console.log(`[TMDB Data] Movie ${movie.tmdb_id} (${movie.title?.substring(0, 30)}): origin_country="${movie.origin_country}", origin_country_display="${enriched.origin_country_display || 'NOT SET'}"`);
       }
       
       // Parse JSON fields
