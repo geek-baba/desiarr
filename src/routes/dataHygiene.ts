@@ -243,13 +243,24 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
         // Get full file data from Radarr
         const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
         if (fullFileData) {
-          console.log(`[Language Fix] Movie ${radarrId}: Got full file data, updating language...`);
+          console.log(`[Language Fix] Movie ${radarrId}: Got full file data, current language before update: ${JSON.stringify(fullFileData.language)}`);
+          console.log(`[Language Fix] Movie ${radarrId}: Updating language to: ${JSON.stringify(targetLangObj)}`);
+          
           // Update file with correct language
-          await radarrClient.updateMovieFile(movieFile.id, {
+          const updatedFile = await radarrClient.updateMovieFile(movieFile.id, {
             ...fullFileData,
             language: targetLangObj,
           });
+          
+          console.log(`[Language Fix] Movie ${radarrId}: Radarr API returned updated file, language after update: ${JSON.stringify(updatedFile.language)}`);
           console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLangObj.name}" (source: ${source})`);
+          
+          // Verify the update by fetching the file again
+          const verifyFile = await radarrClient.getMovieFileById(movieFile.id);
+          if (verifyFile) {
+            console.log(`[Language Fix] Movie ${radarrId}: Verification - Current language in Radarr: ${JSON.stringify(verifyFile.language)}`);
+          }
+          
           return true;
         } else {
           console.warn(`[Language Fix] Movie ${radarrId}: ❌ Could not fetch full file data from Radarr`);

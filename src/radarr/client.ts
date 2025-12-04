@@ -421,7 +421,23 @@ class RadarrClient {
    */
   async updateMovieFile(fileId: number, fileData: RadarrMovieFile): Promise<RadarrMovieFile> {
     try {
+      // Log the exact payload we're sending
+      console.log(`[Radarr API] Updating movie file ${fileId} with payload:`, JSON.stringify({
+        id: fileData.id,
+        language: fileData.language,
+        relativePath: fileData.relativePath,
+        // Only log a few key fields to avoid spam
+      }, null, 2));
+      
       const response = await this.ensureClient().put<RadarrMovieFile>(`/moviefile/${fileId}`, fileData);
+      
+      // Log the response to see what Radarr returned
+      console.log(`[Radarr API] Update response for file ${fileId}:`, JSON.stringify({
+        id: response.data.id,
+        language: response.data.language,
+        relativePath: response.data.relativePath,
+      }, null, 2));
+      
       return response.data;
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
