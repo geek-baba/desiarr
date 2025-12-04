@@ -87,20 +87,47 @@ function normalizeLanguageName(lang: string): string | null {
  */
 async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
   try {
+    console.log(`[Language Fix] Starting fix for movie ${radarrId}...`);
+    
     // 1. Get movie from local DB
-    const radarrMovie = db.prepare('SELECT radarr_id, tmdb_id, movie_file FROM radarr_movies WHERE radarr_id = ?')
+    let radarrMovie = db.prepare('SELECT radarr_id, tmdb_id, movie_file FROM radarr_movies WHERE radarr_id = ?')
       .get(radarrId) as { radarr_id: number; tmdb_id: number; movie_file: string | null } | undefined;
     
-    if (!radarrMovie || !radarrMovie.movie_file) {
+    // If not in local DB, try fetching from Radarr API
+    if (!radarrMovie) {
+      console.log(`[Language Fix] Movie ${radarrId}: Not in local DB, fetching from Radarr API...`);
+      try {
+        const radarrClient = new RadarrClient();
+        const movie = await radarrClient.getMovie(radarrId);
+        if (movie && movie.movieFile) {
+          radarrMovie = {
+            radarr_id: movie.id!,
+            tmdb_id: movie.tmdbId,
+            movie_file: JSON.stringify(movie.movieFile),
+          };
+          console.log(`[Language Fix] Movie ${radarrId}: Fetched from Radarr API (TMDB ID: ${movie.tmdbId})`);
+        } else {
+          console.log(`[Language Fix] Movie ${radarrId}: Not found in Radarr API or has no file`);
+          return false;
+        }
+      } catch (apiError: any) {
+        console.error(`[Language Fix] Movie ${radarrId}: Failed to fetch from Radarr API:`, apiError?.message || apiError);
+        return false;
+      }
+    }
+    
+    if (!radarrMovie.movie_file) {
       console.log(`[Language Fix] Movie ${radarrId}: No file to update`);
       return false; // No file to update
     }
     
     const movieFile = JSON.parse(radarrMovie.movie_file) as any;
     if (!movieFile?.id) {
-      console.log(`[Language Fix] Movie ${radarrId}: No file ID`);
+      console.log(`[Language Fix] Movie ${radarrId}: No file ID in movie file data`);
       return false;
     }
+    
+    console.log(`[Language Fix] Movie ${radarrId}: File ID ${movieFile.id}, current language: ${movieFile.language?.name || 'NOT SET'}`);
     
     const currentLang = movieFile.language?.name || null;
     let targetLanguage: string | null = null;
@@ -111,8 +138,10 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
       const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
       targetLanguage = normalizeLanguageName(mediaInfoLang);
       source = `MediaInfo ("${mediaInfoLang}")`;
+      console.log(`[Language Fix] Movie ${radarrId}: Found MediaInfo audioLanguages: ${JSON.stringify(movieFile.mediaInfo.audioLanguages)}`);
       console.log(`[Language Fix] Movie ${radarrId}: Using ${source} → "${targetLanguage}"`);
-    }
+    } else {
+      console.log(`[Language Fix] Movie ${radarrId}: No MediaInfo audioLanguages found`);
     // 3. PRIORITY 2: Fallback to TMDB original_language (from cached DB, no API call)
     else {
       const tmdbData = db.prepare('SELECT original_language FROM tmdb_movie_cache WHERE tmdb_id = ?')
@@ -145,21 +174,24 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
       );
       
       if (targetLangObj) {
+        console.log(`[Language Fix] Movie ${radarrId}: Found target language in Radarr: ${JSON.stringify(targetLangObj)}`);
         // Get full file data from Radarr
         const fullFileData = await radarrClient.getMovieFileById(movieFile.id);
         if (fullFileData) {
+          console.log(`[Language Fix] Movie ${radarrId}: Got full file data, updating language...`);
           // Update file with correct language
           await radarrClient.updateMovieFile(movieFile.id, {
             ...fullFileData,
             language: targetLangObj,
           });
-          console.log(`[Language Fix] Movie ${radarrId}: Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLanguage}" (source: ${source})`);
+          console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLanguage}" (source: ${source})`);
           return true;
         } else {
-          console.warn(`[Language Fix] Movie ${radarrId}: Could not fetch full file data from Radarr`);
+          console.warn(`[Language Fix] Movie ${radarrId}: ❌ Could not fetch full file data from Radarr`);
         }
       } else {
-        console.warn(`[Language Fix] Movie ${radarrId}: Language "${targetLanguage}" not found in Radarr's language list`);
+        console.warn(`[Language Fix] Movie ${radarrId}: ❌ Language "${targetLanguage}" not found in Radarr's language list`);
+        console.log(`[Language Fix] Movie ${radarrId}: Available Radarr languages: ${JSON.stringify(radarrLanguages.map(l => l.name))}`);
       }
     } else {
       if (targetLanguage) {
@@ -1362,9 +1394,38 @@ router.get('/debug-movie/:radarrId', async (req: Request, res: Response) => {
     }
 
     // Get from local DB
-    const radarrMovie = db.prepare('SELECT * FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as any;
+    let radarrMovie = db.prepare('SELECT * FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as any;
+    let fromRadarrApi = false;
+    
+    // If not in local DB, fetch from Radarr API
     if (!radarrMovie) {
-      return res.status(404).json({ success: false, error: 'Movie not found in local database' });
+      try {
+        const radarrClient = new RadarrClient();
+        const movie = await radarrClient.getMovie(radarrId);
+        if (movie) {
+          fromRadarrApi = true;
+          radarrMovie = {
+            radarr_id: movie.id,
+            tmdb_id: movie.tmdbId,
+            title: movie.title,
+            original_language: movie.originalLanguage?.name || null,
+            movie_file: movie.movieFile ? JSON.stringify(movie.movieFile) : null,
+          };
+        } else {
+          return res.status(404).json({ 
+            success: false, 
+            error: 'Movie not found in local database or Radarr API',
+            suggestion: 'Try syncing Radarr movies first from Settings or Data Hygiene page'
+          });
+        }
+      } catch (apiError: any) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Movie not found in local database and failed to fetch from Radarr API',
+          radarrError: apiError?.message || 'Unknown error',
+          suggestion: 'Try syncing Radarr movies first from Settings or Data Hygiene page'
+        });
+      }
     }
 
     // Get TMDB data from cache
@@ -1396,8 +1457,10 @@ router.get('/debug-movie/:radarrId', async (req: Request, res: Response) => {
             audioLanguages: movieFile?.mediaInfo?.audioLanguages || null,
             audioCodec: movieFile?.mediaInfo?.audioCodec || null,
             videoCodec: movieFile?.mediaInfo?.videoCodec || null,
+            audioChannels: movieFile?.mediaInfo?.audioChannels || null,
           },
         },
+        source: fromRadarrApi ? 'Radarr API (not in local DB)' : 'Local database',
       },
     });
   } catch (error: any) {
