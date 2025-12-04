@@ -253,7 +253,58 @@ class RadarrClient {
       return null;
     }
   }
+
+  /**
+   * Delete a movie from Radarr
+   * @param movieId Radarr movie ID
+   * @param deleteFiles Whether to delete movie files from disk (default: false)
+   * @param addImportExclusion Whether to add to import exclusion list (default: false)
+   */
+  async deleteMovie(movieId: number, deleteFiles: boolean = false, addImportExclusion: boolean = false): Promise<void> {
+    try {
+      await this.ensureClient().delete(`/movie/${movieId}`, {
+        params: {
+          deleteFiles,
+          addImportExclusion,
+        },
+      });
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr delete movie error:', errorMessage, error?.response?.data);
+      throw new Error(`Failed to delete movie from Radarr: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Update an existing movie in Radarr
+   * @param movieId Radarr movie ID
+   * @param updates Partial movie object with fields to update (e.g., { tmdbId: 12345 })
+   */
+  async updateMovie(movieId: number, updates: Partial<RadarrMovie>): Promise<RadarrMovie> {
+    try {
+      // First, get the current movie to merge with updates
+      const currentMovie = await this.getMovie(movieId);
+      if (!currentMovie) {
+        throw new Error(`Movie with ID ${movieId} not found in Radarr`);
+      }
+
+      // Merge current movie with updates
+      const updatedMovie = {
+        ...currentMovie,
+        ...updates,
+        id: movieId, // Ensure ID is set
+      };
+
+      const response = await this.ensureClient().put<RadarrMovie>(`/movie/${movieId}`, updatedMovie);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Radarr update movie error:', errorMessage, error?.response?.data);
+      throw new Error(`Failed to update movie in Radarr: ${errorMessage}`);
+    }
+  }
 }
 
+export { RadarrClient };
 export default new RadarrClient();
 

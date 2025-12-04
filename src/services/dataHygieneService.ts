@@ -28,6 +28,7 @@ function getTmdbDataFromCache(tmdbId: number): { title: string | null; original_
 
 export interface DataHygieneMovie {
   radarr_id: number;
+  has_file?: number; // 0 or 1
   tmdb_id: number | null;
   imdb_id: string | null;
   title: string;
@@ -413,6 +414,7 @@ export function getDeletedTitles(): DataHygieneMovie[] {
         r.year,
         r.path,
         r.movie_file,
+        r.has_file,
         r.original_language,
         t.synced_at as deleted_synced_at
       FROM radarr_movies r
@@ -430,6 +432,7 @@ export function getDeletedTitles(): DataHygieneMovie[] {
     year: movie.year,
     path: movie.path,
     movie_file: movie.movie_file,
+    has_file: movie.has_file || 0,
     original_language: movie.original_language,
   }));
 }
