@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
 import {
   getMissingImdbMovies,
   getNonIndianMovies,
@@ -578,6 +579,10 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
     // Note: Manual Import just maps/links the file, doesn't move it
     // File stays in old location, but is linked to new movie
     try {
+      // Use the folder where the file actually exists (old movie's folder)
+      // Not the new movie's folder, since the file hasn't moved
+      const fileFolder = currentMovie.path || path.dirname(fullFilePath);
+      
       await radarrClient.manualImport({
         movieId: addedMovie.id!,
         files: [{
@@ -585,7 +590,7 @@ router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) =>
           quality: qualityInfo,
           languages: languages,
         }],
-        folder: addedMovie.path, // Movie folder path (Radarr may auto-detect, but we provide it)
+        folder: fileFolder, // Folder where file actually exists (old movie's folder)
         importMode: 'Auto', // Radarr will decide (usually just links, doesn't move)
       });
     } catch (importError: any) {
