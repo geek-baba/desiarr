@@ -215,25 +215,25 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
             lang => lang.name.toLowerCase() === 'panjabi'
           );
           // If still not found, Radarr doesn't support Punjabi
-          // We'll use "Original" as a workaround since it's better than "English"
+          // We'll use "Unknown" as a fallback since it's better than "English" and is available in UI
           if (!targetLangObj) {
             console.warn(`[Language Fix] Movie ${radarrId}: ❌ Language "Punjabi" not found in Radarr's language list`);
             console.log(`[Language Fix] Movie ${radarrId}: Available Radarr languages: ${JSON.stringify(radarrLanguages.map(l => l.name))}`);
-            console.log(`[Language Fix] Movie ${radarrId}: ⚠️  Radarr does not support Punjabi. Using "Original" as fallback.`);
+            console.log(`[Language Fix] Movie ${radarrId}: ⚠️  Radarr does not support Punjabi. Using "Unknown" as fallback.`);
             
-            // Use "Original" as fallback (better than leaving it as "English" or null)
+            // Use "Unknown" as fallback (better than leaving it as "English" and is available in UI)
             targetLangObj = radarrLanguages.find(
-              lang => lang.name.toLowerCase() === 'original'
+              lang => lang.name.toLowerCase() === 'unknown'
             );
             
             if (!targetLangObj) {
-              console.error(`[Language Fix] Movie ${radarrId}: ❌ "Original" language also not found in Radarr!`);
+              console.error(`[Language Fix] Movie ${radarrId}: ❌ "Unknown" language also not found in Radarr!`);
               return false;
             }
             
-            // Update targetLanguage to reflect we're using Original
-            targetLanguage = 'Original';
-            source += ' (fallback: Original)';
+            // Update targetLanguage to reflect we're using Unknown
+            targetLanguage = 'Unknown';
+            source += ' (fallback: Unknown - Punjabi not supported)';
           }
         }
       }
