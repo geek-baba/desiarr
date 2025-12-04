@@ -34,10 +34,12 @@ function normalizeLanguageName(lang: string): string | null {
   const normalized = lang.trim();
   const lower = normalized.toLowerCase();
   
-  // Handle common variations
+  // Handle common variations and ISO codes
   const languageMap: Record<string, string> = {
+    'pan': 'Punjabi', // ISO 639-2 code for Punjabi
     'panjabi': 'Punjabi',
     'punjabi': 'Punjabi',
+    'hi': 'Hindi', // ISO 639-1 code
     'hindi': 'Hindi',
     'bengali': 'Bengali',
     'marathi': 'Marathi',
@@ -134,8 +136,18 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
     let source = '';
     
     // 2. PRIORITY 1: Use MediaInfo audioLanguages if available
-    if (movieFile.mediaInfo?.audioLanguages && movieFile.mediaInfo.audioLanguages.length > 0) {
-      const mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
+    // Note: MediaInfo may return audioLanguages as a string or array
+    let mediaInfoLang: string | null = null;
+    if (movieFile.mediaInfo?.audioLanguages) {
+      if (Array.isArray(movieFile.mediaInfo.audioLanguages) && movieFile.mediaInfo.audioLanguages.length > 0) {
+        mediaInfoLang = movieFile.mediaInfo.audioLanguages[0];
+      } else if (typeof movieFile.mediaInfo.audioLanguages === 'string') {
+        // Handle case where MediaInfo returns a single string (e.g., "pan" for Punjabi)
+        mediaInfoLang = movieFile.mediaInfo.audioLanguages;
+      }
+    }
+    
+    if (mediaInfoLang) {
       targetLanguage = normalizeLanguageName(mediaInfoLang);
       source = `MediaInfo ("${mediaInfoLang}")`;
       console.log(`[Language Fix] Movie ${radarrId}: Found MediaInfo audioLanguages: ${JSON.stringify(movieFile.mediaInfo.audioLanguages)}`);

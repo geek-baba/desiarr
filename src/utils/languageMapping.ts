@@ -6,8 +6,10 @@
 // Major Indian languages (ISO 639-1 codes)
 export const MAJOR_INDIAN_LANGUAGES = new Set(['hi', 'bn', 'mr', 'te', 'ta', 'ur', 'gu', 'kn', 'ml', 'pa']);
 
-// ISO 639-1 to full language name mapping
+// ISO 639-1 (2-letter) and ISO 639-2 (3-letter) to full language name mapping
+// MediaInfo uses ISO 639-2 codes (e.g., "pan" for Punjabi)
 export const LANGUAGE_NAMES: Record<string, string> = {
+  // ISO 639-1 codes (2-letter)
   'hi': 'Hindi',
   'bn': 'Bengali',
   'mr': 'Marathi',
@@ -29,6 +31,28 @@ export const LANGUAGE_NAMES: Record<string, string> = {
   'ko': 'Korean',
   'zh': 'Chinese',
   'ar': 'Arabic',
+  // ISO 639-2 codes (3-letter) - MediaInfo uses these
+  'pan': 'Punjabi', // ISO 639-2 code for Punjabi (MediaInfo standard)
+  'hin': 'Hindi',
+  'ben': 'Bengali',
+  'mar': 'Marathi',
+  'tel': 'Telugu',
+  'tam': 'Tamil',
+  'urd': 'Urdu',
+  'guj': 'Gujarati',
+  'kan': 'Kannada',
+  'mal': 'Malayalam',
+  'eng': 'English',
+  'spa': 'Spanish',
+  'fra': 'French',
+  'deu': 'German',
+  'ita': 'Italian',
+  'por': 'Portuguese',
+  'rus': 'Russian',
+  'jpn': 'Japanese',
+  'kor': 'Korean',
+  'zho': 'Chinese',
+  'ara': 'Arabic',
 };
 
 // Full language name to ISO code mapping (for Radarr which stores full names)
