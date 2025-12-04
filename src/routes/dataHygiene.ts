@@ -88,8 +88,8 @@ function normalizeLanguageName(lang: string): string | null {
  * @returns true if language was updated, false otherwise
  */
 async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
+  console.log(`[Language Fix] ========== STARTING LANGUAGE FIX FOR MOVIE ${radarrId} ==========`);
   try {
-    console.log(`[Language Fix] Starting fix for movie ${radarrId}...`);
     
     // 1. Get movie from local DB
     let radarrMovie = db.prepare('SELECT radarr_id, tmdb_id, movie_file FROM radarr_movies WHERE radarr_id = ?')
@@ -211,10 +211,14 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
       }
     }
     
+    console.log(`[Language Fix] Movie ${radarrId}: No language update needed or update failed`);
     return false;
   } catch (error: any) {
-    console.error(`[Language Fix] Movie ${radarrId}: Error fixing file language:`, error?.message || error);
+    console.error(`[Language Fix] Movie ${radarrId}: ❌ ERROR fixing file language:`, error?.message || error);
+    console.error(`[Language Fix] Movie ${radarrId}: Error stack:`, error?.stack);
     return false;
+  } finally {
+    console.log(`[Language Fix] ========== COMPLETED LANGUAGE FIX FOR MOVIE ${radarrId} ==========`);
   }
 }
 
@@ -495,10 +499,13 @@ router.post('/scan-radarr/:radarrId', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
     }
 
+    console.log(`[Scan Radarr] ========== SCAN REQUEST FOR MOVIE ${radarrId} ==========`);
     const radarrClient = new RadarrClient();
     
     // Step 1: Fix file language using MediaInfo or cached TMDB data
-    await fixRadarrFileLanguage(radarrId);
+    console.log(`[Scan Radarr] Movie ${radarrId}: Calling fixRadarrFileLanguage...`);
+    const languageFixed = await fixRadarrFileLanguage(radarrId);
+    console.log(`[Scan Radarr] Movie ${radarrId}: Language fix result: ${languageFixed ? 'SUCCESS' : 'NO UPDATE NEEDED OR FAILED'}`);
     
     // Step 2: Trigger Radarr refresh
     await radarrClient.refreshMovie(radarrId);
