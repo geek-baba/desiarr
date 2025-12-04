@@ -2,6 +2,7 @@ import db from '../db';
 import radarrClient from '../radarr/client';
 import { RadarrMovie } from '../radarr/types';
 import { syncProgress } from './syncProgress';
+import { getLanguageName, isIndianLanguage } from '../utils/languageMapping';
 
 export interface RadarrSyncStats {
   totalMovies: number;
@@ -116,6 +117,47 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
           // Radarr API returns 'added' field (not 'dateAdded'), handle both for compatibility
           const dateAdded = (movie as any).added || (movie as any).dateAdded || movie.dateAdded || null;
           
+          // Check if Radarr has wrong language compared to TMDB
+          let finalLanguage = movie.originalLanguage?.name || null;
+          let languageFixedInRadarr = false;
+          
+          if (movie.tmdbId && finalLanguage) {
+            const tmdbData = db.prepare('SELECT original_language FROM tmdb_movie_cache WHERE tmdb_id = ?')
+              .get(movie.tmdbId) as { original_language: string | null } | undefined;
+            
+            if (tmdbData?.original_language && isIndianLanguage(tmdbData.original_language)) {
+              const tmdbLanguageName = getLanguageName(tmdbData.original_language);
+              
+              // If Radarr has wrong language and TMDB has correct Indian language, fix it
+              if (tmdbLanguageName && tmdbLanguageName !== finalLanguage) {
+                console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Radarr has "${finalLanguage}" but TMDB has "${tmdbLanguageName}" - fixing in Radarr...`);
+                
+                try {
+                  // Get correct language from Radarr's language list
+                  const radarrLanguages = await radarrClient.getLanguages();
+                  const correctLanguage = radarrLanguages.find(
+                    lang => lang.name.toLowerCase() === tmdbLanguageName.toLowerCase()
+                  );
+                  
+                  if (correctLanguage) {
+                    // Update Radarr's originalLanguage directly via API
+                    await radarrClient.updateMovie(movie.id, {
+                      originalLanguage: correctLanguage,
+                    });
+                    
+                    console.log(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Successfully updated Radarr originalLanguage to "${tmdbLanguageName}"`);
+                    finalLanguage = tmdbLanguageName;
+                    languageFixedInRadarr = true;
+                  } else {
+                    console.warn(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Language "${tmdbLanguageName}" not found in Radarr's language list, cannot fix`);
+                  }
+                } catch (updateError: any) {
+                  console.error(`[Radarr Sync] Movie ${movie.id} (${movie.title}): Failed to update Radarr language:`, updateError?.message || updateError);
+                }
+              }
+            }
+          }
+          
           const movieData = {
             radarr_id: movie.id,
             tmdb_id: movie.tmdbId,
@@ -125,7 +167,7 @@ export async function syncRadarrMovies(): Promise<RadarrSyncStats> {
             path: movie.path || null,
             has_file: movie.hasFile ? 1 : 0,
             movie_file: movie.movieFile ? JSON.stringify(movie.movieFile) : null,
-            original_language: movie.originalLanguage?.name || null,
+            original_language: finalLanguage, // Use corrected language if we fixed it
             images: movie.images ? JSON.stringify(movie.images) : null,
             date_added: dateAdded,
             synced_at: new Date().toISOString(),
