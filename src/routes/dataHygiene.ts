@@ -140,10 +140,10 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
       source = `MediaInfo ("${mediaInfoLang}")`;
       console.log(`[Language Fix] Movie ${radarrId}: Found MediaInfo audioLanguages: ${JSON.stringify(movieFile.mediaInfo.audioLanguages)}`);
       console.log(`[Language Fix] Movie ${radarrId}: Using ${source} → "${targetLanguage}"`);
-    } else {
-      console.log(`[Language Fix] Movie ${radarrId}: No MediaInfo audioLanguages found`);
+    }
     // 3. PRIORITY 2: Fallback to TMDB original_language (from cached DB, no API call)
     else {
+      console.log(`[Language Fix] Movie ${radarrId}: No MediaInfo audioLanguages found`);
       const tmdbData = db.prepare('SELECT original_language FROM tmdb_movie_cache WHERE tmdb_id = ?')
         .get(radarrMovie.tmdb_id) as { original_language: string | null } | undefined;
       
