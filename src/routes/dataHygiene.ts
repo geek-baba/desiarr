@@ -253,7 +253,15 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
           });
           
           console.log(`[Language Fix] Movie ${radarrId}: Radarr API returned updated file, language after update: ${JSON.stringify(updatedFile.language)}`);
-          console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLangObj.name}" (source: ${source})`);
+          
+          // Refresh the movie in Radarr to ensure UI updates
+          try {
+            console.log(`[Language Fix] Movie ${radarrId}: Refreshing movie in Radarr to update UI...`);
+            await radarrClient.refreshMovie(radarrId);
+            console.log(`[Language Fix] Movie ${radarrId}: Movie refresh triggered`);
+          } catch (refreshError: any) {
+            console.warn(`[Language Fix] Movie ${radarrId}: Failed to refresh movie (non-fatal):`, refreshError?.message || refreshError);
+          }
           
           // Verify the update by fetching the file again
           const verifyFile = await radarrClient.getMovieFileById(movieFile.id);
@@ -261,6 +269,7 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
             console.log(`[Language Fix] Movie ${radarrId}: Verification - Current language in Radarr: ${JSON.stringify(verifyFile.language)}`);
           }
           
+          console.log(`[Language Fix] Movie ${radarrId}: ✅ Successfully updated from "${currentLang || 'NOT SET'}" to "${targetLangObj.name}" (source: ${source})`);
           return true;
         } else {
           console.warn(`[Language Fix] Movie ${radarrId}: ❌ Could not fetch full file data from Radarr`);
