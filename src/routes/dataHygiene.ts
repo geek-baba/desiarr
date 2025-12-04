@@ -121,7 +121,7 @@ async function fixRadarrFileLanguage(radarrId: number): Promise<boolean> {
       if (tmdbData?.original_language) {
         // Only use if it's an Indian language
         if (isIndianLanguage(tmdbData.original_language)) {
-          targetLanguage = getLanguageName(tmdbData.original_language); // Convert "pa" → "Punjabi"
+          targetLanguage = getLanguageName(tmdbData.original_language) || null; // Convert "pa" → "Punjabi"
           source = `TMDB cache ("${tmdbData.original_language}")`;
           console.log(`[Language Fix] Movie ${radarrId}: Using ${source} → "${targetLanguage}"`);
         } else {
