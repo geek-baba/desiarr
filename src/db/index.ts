@@ -227,6 +227,20 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_tmdb_cache_tmdb_id ON tmdb_movie_cache(tmdb_id);
   CREATE INDEX IF NOT EXISTS idx_tmdb_cache_synced_at ON tmdb_movie_cache(synced_at);
+
+  CREATE TABLE IF NOT EXISTS radarr_movie_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    radarr_id INTEGER NOT NULL,
+    tmdb_id INTEGER,
+    title TEXT,
+    history_data TEXT NOT NULL,
+    preserved_at TEXT NOT NULL DEFAULT (datetime('now')),
+    restored_to_radarr_id INTEGER,
+    restored_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_history_radarr_id ON radarr_movie_history(radarr_id);
+  CREATE INDEX IF NOT EXISTS idx_history_tmdb_id ON radarr_movie_history(tmdb_id);
 `);
 
 // Add poster_url column if it doesn't exist (migration)

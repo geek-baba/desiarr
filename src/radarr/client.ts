@@ -303,6 +303,80 @@ class RadarrClient {
       throw new Error(`Failed to update movie in Radarr: ${errorMessage}`);
     }
   }
+
+  /**
+   * Manual Import - Link existing files to a movie
+   * @param params Manual import parameters
+   * @param params.movieId The movie ID to import files to
+   * @param params.files Array of file objects with path, quality, and languages
+   * @param params.folder The movie folder path (optional, Radarr may auto-detect)
+   * @param params.importMode Import mode: "Auto", "Move", or "Copy" (default: "Auto")
+   * 
+   * Note: Manual Import does NOT move files - it just maps/links existing files to the movie.
+   * Files stay in their current location. If rename/move is needed, trigger manual rename separately.
+   */
+  async manualImport(params: {
+    movieId: number;
+    files: Array<{
+      path: string;
+      quality?: {
+        quality: {
+          id: number;
+          name: string;
+        };
+        revision?: {
+          version: number;
+          real: number;
+        };
+      };
+      languages?: Array<{
+        id: number;
+        name: string;
+      }>;
+    }>;
+    folder?: string;
+    importMode?: 'Auto' | 'Move' | 'Copy';
+  }): Promise<void> {
+    try {
+      const command = {
+        name: 'ManualImport',
+        movieId: params.movieId,
+        files: params.files,
+        ...(params.folder && { folder: params.folder }),
+        importMode: params.importMode || 'Auto',
+      };
+
+      // Log the exact payload we're sending for debugging
+      console.log('[Radarr Manual Import] Sending command:', JSON.stringify(command, null, 2));
+
+      const response = await this.ensureClient().post('/command', command);
+      
+      // Log the response
+      console.log('[Radarr Manual Import] Response:', JSON.stringify(response.data, null, 2));
+      
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      const errorDetails = error?.response?.data;
+      
+      // Log full error details for debugging
+      console.error('[Radarr Manual Import] Full error:', {
+        message: errorMessage,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        data: errorDetails,
+        requestPayload: {
+          name: 'ManualImport',
+          movieId: params.movieId,
+          files: params.files,
+          folder: params.folder,
+          importMode: params.importMode || 'Auto',
+        },
+      });
+      
+      throw new Error(`Failed to manual import files: ${errorMessage}`);
+    }
+  }
 }
 
 export { RadarrClient };

@@ -14,6 +14,8 @@ import { RadarrClient } from '../radarr/client';
 import { settingsModel } from '../models/settings';
 import { getLanguageName } from '../utils/languageMapping';
 import { derivePrimaryCountryFromMovie } from '../utils/tmdbCountryDerivation';
+import { preserveMovieHistory } from '../services/movieHistoryPreservation';
+import { convertLanguageToRadarrFormat } from '../utils/radarrLanguageHelper';
 import db from '../db';
 
 const router = Router();
@@ -482,6 +484,358 @@ router.post('/update-tmdb-id/:radarrId', async (req: Request, res: Response) => 
     res.status(500).json({
       success: false,
       error: error?.message || 'Failed to update TMDB ID',
+    });
+  }
+});
+
+/**
+ * Replace TMDB ID for a movie with files
+ * Process: Preserve history → Delete movie (keep files) → Add new movie → Manual Import existing file
+ */
+router.post('/replace-tmdb-id/:radarrId', async (req: Request, res: Response) => {
+  try {
+    const radarrId = parseInt(req.params.radarrId, 10);
+    if (isNaN(radarrId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    }
+
+    const { tmdbId } = req.body;
+    if (!tmdbId || isNaN(tmdbId) || tmdbId <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid TMDB ID' });
+    }
+
+    const radarrClient = new RadarrClient();
+    
+    // Step 1: Get current movie to preserve settings and file info
+    const currentMovie = await radarrClient.getMovie(radarrId);
+    if (!currentMovie) {
+      return res.status(404).json({ success: false, error: 'Movie not found in Radarr' });
+    }
+
+    // Verify movie has files (safety check)
+    if (!currentMovie.hasFile || !currentMovie.movieFile) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Movie has no files. Use Update instead of Replace.' 
+      });
+    }
+
+    // Step 2: Preserve history before deletion
+    try {
+      await preserveMovieHistory(radarrId);
+    } catch (historyError) {
+      console.error('Failed to preserve history (continuing anyway):', historyError);
+      // Continue - history preservation failure shouldn't block the operation
+    }
+
+    // Step 3: Extract file information
+    const movieFile = currentMovie.movieFile!;
+    const fullFilePath = `${currentMovie.path}/${movieFile.relativePath}`;
+    
+    // Extract quality info from movieFile (Radarr will auto-detect, but we can provide it)
+    const qualityInfo = movieFile.quality || undefined;
+    
+    // Get language from stored original_language in our DB
+    const storedMovie = db.prepare('SELECT original_language FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as { original_language: string | null } | undefined;
+    const languageName = storedMovie?.original_language || currentMovie.originalLanguage?.name || null;
+    const languages = convertLanguageToRadarrFormat(languageName);
+
+    // Step 4: Extract root folder from current movie path
+    const qualityProfiles = await radarrClient.getQualityProfiles();
+    const rootFolders = await radarrClient.getRootFolders();
+    
+    let rootFolderPath = rootFolders[0]?.path || '/movies';
+    if (currentMovie.path) {
+      const matchingFolder = rootFolders.find(folder => currentMovie.path?.startsWith(folder.path));
+      if (matchingFolder) {
+        rootFolderPath = matchingFolder.path;
+      } else {
+        const pathParts = currentMovie.path.split('/').filter(p => p);
+        if (pathParts.length > 1) {
+          rootFolderPath = '/' + pathParts[0];
+        }
+      }
+    }
+    
+    const qualityProfileId = qualityProfiles.length > 0 ? qualityProfiles[0].id : 1;
+
+    // Step 5: Delete movie (preserve files)
+    await radarrClient.deleteMovie(radarrId, false, false);
+
+    // Step 6: Lookup new movie by new TMDB ID
+    const newMovie = await radarrClient.lookupMovieByTmdbId(tmdbId);
+    if (!newMovie) {
+      return res.status(404).json({ 
+        success: false, 
+        error: `Movie with TMDB ID ${tmdbId} not found in Radarr lookup` 
+      });
+    }
+
+    // Step 7: Add new movie with preserved settings
+    const addedMovie = await radarrClient.addMovie(newMovie, qualityProfileId, rootFolderPath);
+
+    // Step 8: Manual Import existing file to new movie
+    // Note: Manual Import just maps/links the file, doesn't move it
+    // File stays in old location, but is linked to new movie
+    try {
+      await radarrClient.manualImport({
+        movieId: addedMovie.id!,
+        files: [{
+          path: fullFilePath,
+          quality: qualityInfo,
+          languages: languages,
+        }],
+        folder: addedMovie.path, // Movie folder path (Radarr may auto-detect, but we provide it)
+        importMode: 'Auto', // Radarr will decide (usually just links, doesn't move)
+      });
+    } catch (importError: any) {
+      console.error('Manual import failed:', importError);
+      // If manual import fails, the movie is still added but file isn't linked
+      // We should still update our DB and let user know
+      return res.status(500).json({
+        success: false,
+        error: `Movie added but file import failed: ${importError.message}. You may need to manually import the file in Radarr.`,
+        newRadarrId: addedMovie.id,
+      });
+    }
+
+    // Step 9: Update local database
+    db.prepare('DELETE FROM radarr_movies WHERE radarr_id = ?').run(radarrId);
+    
+    // Insert new movie (will be synced properly on next sync, but we can insert now)
+    const dateAdded = (addedMovie as any).added || (addedMovie as any).dateAdded || addedMovie.dateAdded || null;
+    db.prepare(`
+      INSERT INTO radarr_movies (
+        radarr_id, tmdb_id, imdb_id, title, year, path,
+        has_file, movie_file, original_language, images, date_added, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      addedMovie.id,
+      addedMovie.tmdbId,
+      addedMovie.imdbId || null,
+      addedMovie.title,
+      addedMovie.year || null,
+      addedMovie.path || null,
+      addedMovie.hasFile ? 1 : 0,
+      addedMovie.movieFile ? JSON.stringify(addedMovie.movieFile) : null,
+      addedMovie.originalLanguage?.name || null,
+      addedMovie.images ? JSON.stringify(addedMovie.images) : null,
+      dateAdded,
+      new Date().toISOString()
+    );
+
+    // Step 10: Refresh TMDB cache for new TMDB ID
+    const tmdbClient = new TMDBClient();
+    const allSettings = settingsModel.getAll();
+    const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
+
+    if (tmdbApiKey) {
+      tmdbClient.setApiKey(tmdbApiKey);
+      try {
+        const tmdbMovie = await tmdbClient.getMovie(tmdbId);
+        if (tmdbMovie) {
+          const primaryCountry = derivePrimaryCountryFromMovie(tmdbMovie);
+          const existing = db.prepare('SELECT tmdb_id FROM tmdb_movie_cache WHERE tmdb_id = ?').get(tmdbId);
+          
+          if (existing) {
+            db.prepare(`
+              UPDATE tmdb_movie_cache SET
+                title = ?, original_title = ?, original_language = ?, release_date = ?,
+                production_countries = ?, origin_country = ?, primary_country = ?, poster_path = ?,
+                backdrop_path = ?, overview = ?, tagline = ?, imdb_id = ?,
+                genres = ?, production_companies = ?, spoken_languages = ?,
+                belongs_to_collection = ?, budget = ?, revenue = ?, runtime = ?,
+                popularity = ?, vote_average = ?, vote_count = ?, status = ?,
+                adult = ?, video = ?, homepage = ?,
+                last_updated_at = datetime('now'), is_deleted = 0
+              WHERE tmdb_id = ?
+            `).run(
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null,
+              tmdbId
+            );
+          } else {
+            db.prepare(`
+              INSERT INTO tmdb_movie_cache (
+                tmdb_id, title, original_title, original_language, release_date,
+                production_countries, origin_country, primary_country, poster_path, backdrop_path,
+                overview, tagline, imdb_id, genres, production_companies, spoken_languages,
+                belongs_to_collection, budget, revenue, runtime, popularity, vote_average,
+                vote_count, status, adult, video, homepage,
+                synced_at, last_updated_at, is_deleted
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'), 0)
+            `).run(
+              tmdbMovie.id,
+              tmdbMovie.title || null,
+              tmdbMovie.original_title || null,
+              tmdbMovie.original_language || null,
+              tmdbMovie.release_date || null,
+              tmdbMovie.production_countries ? JSON.stringify(tmdbMovie.production_countries) : null,
+              tmdbMovie.origin_country ? JSON.stringify(tmdbMovie.origin_country) : null,
+              primaryCountry,
+              tmdbMovie.poster_path || null,
+              tmdbMovie.backdrop_path || null,
+              tmdbMovie.overview || null,
+              tmdbMovie.tagline || null,
+              tmdbMovie.imdb_id || null,
+              tmdbMovie.genres ? JSON.stringify(tmdbMovie.genres) : null,
+              tmdbMovie.production_companies ? JSON.stringify(tmdbMovie.production_companies) : null,
+              tmdbMovie.spoken_languages ? JSON.stringify(tmdbMovie.spoken_languages) : null,
+              tmdbMovie.belongs_to_collection ? JSON.stringify(tmdbMovie.belongs_to_collection) : null,
+              tmdbMovie.budget || null,
+              tmdbMovie.revenue || null,
+              tmdbMovie.runtime || null,
+              tmdbMovie.popularity || null,
+              tmdbMovie.vote_average || null,
+              tmdbMovie.vote_count || null,
+              tmdbMovie.status || null,
+              tmdbMovie.adult ? 1 : 0,
+              tmdbMovie.video ? 1 : 0,
+              tmdbMovie.homepage || null
+            );
+          }
+        }
+      } catch (tmdbError) {
+        console.error('Failed to refresh TMDB data after replace:', tmdbError);
+        // Continue anyway - the Radarr operation succeeded
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'TMDB ID replaced successfully. File has been linked to the new movie entry.',
+      newRadarrId: addedMovie.id,
+    });
+  } catch (error: any) {
+    console.error('Replace TMDB ID error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to replace TMDB ID',
+    });
+  }
+});
+
+/**
+ * TEST ENDPOINT: Test Manual Import API format
+ * This endpoint allows testing the Manual Import API with a real movie
+ * to verify the exact format required by Radarr
+ * 
+ * Usage: POST /data-hygiene/test-manual-import/:radarrId
+ * No body required - uses the current movie's file
+ * 
+ * This will attempt to import the existing file to the same movie (safe test)
+ */
+router.post('/test-manual-import/:radarrId', async (req: Request, res: Response) => {
+  try {
+    const radarrId = parseInt(req.params.radarrId, 10);
+    if (isNaN(radarrId)) {
+      return res.status(400).json({ success: false, error: 'Invalid Radarr ID' });
+    }
+
+    const radarrClient = new RadarrClient();
+    
+    // Get current movie
+    const currentMovie = await radarrClient.getMovie(radarrId);
+    if (!currentMovie || !currentMovie.hasFile || !currentMovie.movieFile) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Movie not found or has no files' 
+      });
+    }
+
+    // Extract file info
+    const movieFile = currentMovie.movieFile;
+    const fullFilePath = `${currentMovie.path}/${movieFile.relativePath}`;
+    
+    // Get language
+    const storedMovie = db.prepare('SELECT original_language FROM radarr_movies WHERE radarr_id = ?').get(radarrId) as { original_language: string | null } | undefined;
+    const languageName = storedMovie?.original_language || currentMovie.originalLanguage?.name || null;
+    const languages = convertLanguageToRadarrFormat(languageName);
+
+    // Prepare Manual Import payload (exact format we'll send)
+    const manualImportPayload = {
+      name: 'ManualImport',
+      movieId: radarrId, // Use current movie ID for testing (safe - file is already linked)
+      files: [{
+        path: fullFilePath,
+        quality: movieFile.quality || undefined,
+        languages: languages.length > 0 ? languages : undefined,
+      }],
+      folder: currentMovie.path,
+      importMode: 'Auto' as const,
+    };
+
+    // Log the payload we're about to send
+    console.log('=== MANUAL IMPORT TEST PAYLOAD ===');
+    console.log(JSON.stringify(manualImportPayload, null, 2));
+    console.log('==================================');
+
+    // Try the API call
+    try {
+      const result = await radarrClient.manualImport({
+        movieId: radarrId,
+        files: [{
+          path: fullFilePath,
+          quality: movieFile.quality,
+          languages: languages,
+        }],
+        folder: currentMovie.path,
+        importMode: 'Auto',
+      });
+
+      return res.json({
+        success: true,
+        message: 'Manual Import API call succeeded! Check Radarr to verify file linking.',
+        payload: manualImportPayload,
+        response: result,
+        note: 'This was a test with the existing movie - the file should remain linked',
+      });
+    } catch (apiError: any) {
+      // Return the error details so we can see what went wrong
+      const errorResponse = apiError.response?.data || {};
+      return res.status(500).json({
+        success: false,
+        error: apiError.message,
+        errorDetails: {
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+          data: errorResponse,
+          message: errorResponse.message || apiError.message,
+        },
+        payload: manualImportPayload,
+        note: 'Check the error details above to understand what format Radarr expects. The payload shows what we sent.',
+      });
+    }
+  } catch (error: any) {
+    console.error('Test Manual Import error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to test Manual Import',
+      stack: error?.stack,
     });
   }
 });

@@ -234,14 +234,21 @@
                             Update
                           </button>
                         <% } else { %>
-                          <!-- Replace button: Only for movies with files (placeholder) -->
+                          <!-- Replace button: Only for movies with files -->
                           <button
                             onclick="replaceTmdbId(<%= movie.radarr_id %>, '<%= movie.title %>', <%= movie.tmdb_id || 'null' %>)"
-                            class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded transition-colors opacity-50 cursor-not-allowed"
-                            title="Replace TMDB ID (coming soon - requires file preservation logic)"
-                            disabled
+                            class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded transition-colors"
+                            title="Replace TMDB ID (preserves files and history)"
                           >
                             Replace
+                          </button>
+                          <!-- Test Manual Import button (for testing API format) -->
+                          <button
+                            onclick="testManualImport(<%= movie.radarr_id %>, '<%= movie.title %>')"
+                            class="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white text-xs rounded transition-colors"
+                            title="Test Manual Import API format (safe - uses existing movie)"
+                          >
+                            Test Import
                           </button>
                         <% } %>
                         <button
@@ -529,8 +536,82 @@
       );
     }
 
-    function replaceTmdbId(radarrId, title, currentTmdbId) {
-      showToast('Replace functionality is not yet implemented. This requires careful file preservation logic.', 'warning');
+    async function testManualImport(radarrId, title) {
+      showConfirm(
+        `Test Manual Import API for "${title}"?\n\nThis will test the Manual Import API format with the existing movie and file.\n\nThis is safe - it will attempt to import the file to the same movie (which should already be linked).\n\nCheck the browser console and server logs for the exact API payload and response.`,
+        async () => {
+          try {
+            showToast('Testing Manual Import API...', 'info');
+            const response = await fetch(`/data-hygiene/test-manual-import/${radarrId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+
+            const data = await response.json();
+            
+            // Show detailed results
+            if (data.success) {
+              showToast('Manual Import test succeeded! Check console for details.', 'success', 10000);
+              console.log('=== MANUAL IMPORT TEST SUCCESS ===');
+              console.log('Payload sent:', data.payload);
+              console.log('Response:', data.response);
+              console.log('==================================');
+            } else {
+              showToast('Manual Import test failed. Check console for error details.', 'error', 10000);
+              console.error('=== MANUAL IMPORT TEST FAILED ===');
+              console.error('Payload sent:', data.payload);
+              console.error('Error:', data.error);
+              console.error('Error Details:', data.errorDetails);
+              console.error('==================================');
+            }
+          } catch (error) {
+            showToast('Error: ' + error.message, 'error');
+            console.error('Test Manual Import error:', error);
+          }
+        }
+      );
+    }
+
+    async function replaceTmdbId(radarrId, title, currentTmdbId) {
+      showPrompt(
+        `Replace TMDB ID for "${title}"?\n\nCurrent TMDB ID: ${currentTmdbId || 'None'}\n\nEnter the new TMDB ID:`,
+        '',
+        (newTmdbId) => {
+          if (!newTmdbId || newTmdbId.trim() === '') {
+            return;
+          }
+
+          const tmdbIdNum = parseInt(newTmdbId.trim(), 10);
+          if (isNaN(tmdbIdNum) || tmdbIdNum <= 0) {
+            showToast('Invalid TMDB ID. Please enter a positive number.', 'error');
+            return;
+          }
+
+          showConfirm(
+            `Replace TMDB ID from ${currentTmdbId || 'None'} to ${tmdbIdNum}?\n\nThis will:\n- Preserve download history\n- Delete the movie from Radarr (files will remain)\n- Add the movie with the new TMDB ID\n- Link the existing file to the new movie entry\n\nNote: The file will stay in its current location and be linked to the new movie.`,
+            async () => {
+              try {
+                showToast('Replacing TMDB ID...', 'info');
+                const response = await fetch(`/data-hygiene/replace-tmdb-id/${radarrId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tmdbId: tmdbIdNum }),
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                  showToast('TMDB ID replaced successfully. File linked to new movie entry.', 'success');
+                  setTimeout(() => location.reload(), 1500);
+                } else {
+                  showToast('Error: ' + (data.error || 'Failed to replace TMDB ID'), 'error');
+                }
+              } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+              }
+            }
+          );
+        }
+      );
     }
   </script>
   <script src="/js/ui.js"></script>
