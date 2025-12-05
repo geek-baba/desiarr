@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Debug - desiarr</title>
-  <%- include('partials/app-shell') %>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css">
   <style>
     .comparison-table {
       width: 100%;
@@ -15,25 +16,43 @@
     .comparison-table td {
       padding: 0.75rem;
       text-align: left;
-      border: 1px solid var(--border);
+      border: 1px solid #E5E7EB;
+    }
+    .dark .comparison-table th,
+    .dark .comparison-table td {
+      border-color: #1E293B;
     }
     .comparison-table th {
-      background-color: var(--surface);
+      background-color: #FFFFFF;
       font-weight: 600;
       position: sticky;
       top: 0;
       z-index: 10;
     }
+    .dark .comparison-table th {
+      background-color: #0F172A;
+    }
     .comparison-table tr:hover {
-      background-color: var(--surface);
+      background-color: #F9FAFB;
+    }
+    .dark .comparison-table tr:hover {
+      background-color: #0B1220;
     }
     .mismatch {
       background-color: #fef3c7 !important;
       color: #92400e;
     }
+    .dark .mismatch {
+      background-color: #78350f !important;
+      color: #fbbf24;
+    }
     .match {
       background-color: #d1fae5 !important;
       color: #065f46;
+    }
+    .dark .match {
+      background-color: #064e3b !important;
+      color: #6ee7b7;
     }
     .missing {
       color: #9ca3af;
@@ -41,17 +60,20 @@
     }
     .source-column {
       font-weight: 600;
-      background-color: var(--surface) !important;
+      background-color: #F3F4F6 !important;
+    }
+    .dark .source-column {
+      background-color: #1E293B !important;
     }
   </style>
 </head>
-<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen">
   <%- include('partials/app-sidebar', { currentPage: 'debug' }) %>
   
   <div class="lg:pl-64">
     <%- include('partials/app-header') %>
     
-    <main class="p-4 lg:p-6">
+    <main class="p-4 lg:p-6 bg-gray-100 dark:bg-gray-900">
       <div class="mb-6">
         <h1 class="text-3xl font-bold mb-2">Debug Movie Data</h1>
         <p class="text-gray-600 dark:text-gray-400">Compare movie data from Radarr API, TMDB API, and local database</p>
