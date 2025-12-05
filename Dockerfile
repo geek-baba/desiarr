@@ -1,8 +1,9 @@
 FROM node:22-alpine
 
 # Install build dependencies for better-sqlite3
-# Update package index first, then install dependencies
-RUN apk update && apk add --no-cache python3 make g++
+# Split commands to avoid busybox trigger issues on ARM64
+RUN apk update
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
