@@ -9,6 +9,7 @@ import dataRouter from './routes/data';
 import tmdbDataRouter from './routes/tmdbData';
 import dataHygieneRouter from './routes/dataHygiene';
 import logsRouter from './routes/logs';
+import debugRouter from './routes/debug';
 import { settingsModel } from './models/settings';
 import { syncRadarrMovies } from './services/radarrSync';
 import { syncSonarrShows } from './services/sonarrSync';
@@ -55,6 +56,7 @@ app.use('/data', dataRouter);
 app.use('/tmdb-data', tmdbDataRouter);
 app.use('/data-hygiene', dataHygieneRouter);
 app.use('/api/logs', logsRouter);
+app.use('/debug', debugRouter);
 
 // Redirect /logs to /data/logs for convenience
 app.get('/logs', (req, res) => {

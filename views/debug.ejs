@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug - desiarr</title>
+  <%- include('partials/app-shell') %>
+  <style>
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .comparison-table th,
+    .comparison-table td {
+      padding: 0.75rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .comparison-table th {
+      background-color: var(--surface);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .comparison-table tr:hover {
+      background-color: var(--surface);
+    }
+    .mismatch {
+      background-color: #fef3c7 !important;
+      color: #92400e;
+    }
+    .match {
+      background-color: #d1fae5 !important;
+      color: #065f46;
+    }
+    .missing {
+      color: #9ca3af;
+      font-style: italic;
+    }
+    .source-column {
+      font-weight: 600;
+      background-color: var(--surface) !important;
+    }
+  </style>
+</head>
+<body class="bg-[var(--bg)] text-[var(--text)] min-h-screen">
+  <%- include('partials/app-sidebar', { currentPage: 'debug' }) %>
+  
+  <div class="lg:pl-64">
+    <%- include('partials/app-header') %>
+    
+    <main class="p-4 lg:p-6">
+      <div class="mb-6">
+        <h1 class="text-3xl font-bold mb-2">Debug Movie Data</h1>
+        <p class="text-gray-600 dark:text-gray-400">Compare movie data from Radarr API, TMDB API, and local database</p>
+      </div>
+
+      <!-- Search Form -->
+      <div class="bg-[var(--surface)] rounded-lg shadow p-6 mb-6">
+        <form id="debugForm" class="flex gap-4 items-end">
+          <div class="flex-1">
+            <label for="tmdbId" class="block text-sm font-medium mb-2">TMDB ID</label>
+            <input 
+              type="number" 
+              id="tmdbId" 
+              name="tmdbId" 
+              value="<%= tmdbId || '' %>"
+              placeholder="Enter TMDB ID (e.g., 522387)"
+              class="w-full px-4 py-2 border border-[var(--border)] rounded-lg bg-[var(--bg)] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Fetch Data
+          </button>
+        </form>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="hidden text-center py-8">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">Fetching data...</p>
+      </div>
+
+      <!-- Error State -->
+      <div id="error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+        <p class="text-red-800 dark:text-red-200" id="errorMessage"></p>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="hidden">
+        <!-- Summary -->
+        <div class="bg-[var(--surface)] rounded-lg shadow p-6 mb-6">
+          <h2 class="text-xl font-bold mb-4">Summary</h2>
+          <div id="summary" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Summary will be populated by JavaScript -->
+          </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="bg-[var(--surface)] rounded-lg shadow p-6 overflow-x-auto">
+          <h2 class="text-xl font-bold mb-4">Data Comparison</h2>
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th class="source-column">Field</th>
+                <th>Radarr API</th>
+                <th>TMDB API</th>
+                <th>Local DB (Radarr)</th>
+                <th>Local DB (TMDB Cache)</th>
+              </tr>
+            </thead>
+            <tbody id="comparisonBody">
+              <!-- Table will be populated by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.getElementById('debugForm');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const errorMessage = document.getElementById('errorMessage');
+    const results = document.getElementById('results');
+    const summary = document.getElementById('summary');
+    const comparisonBody = document.getElementById('comparisonBody');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const tmdbId = document.getElementById('tmdbId').value;
+      
+      if (!tmdbId) {
+        showError('Please enter a TMDB ID');
+        return;
+      }
+
+      // Update URL without reload
+      window.history.pushState({}, '', `/debug?tmdbId=${tmdbId}`);
+
+      loading.classList.remove('hidden');
+      error.classList.add('hidden');
+      results.classList.add('hidden');
+
+      try {
+        const response = await fetch(`/debug/api/movie?tmdbId=${tmdbId}`);
+        const data = await response.json();
+
+        if (!data.success) {
+          showError(data.error || 'Failed to fetch data');
+          return;
+        }
+
+        displayResults(data);
+      } catch (err) {
+        showError(err.message || 'Failed to fetch data');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    });
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      error.classList.remove('hidden');
+    }
+
+    function displayResults(data) {
+      // Display summary
+      const sources = [
+        { name: 'Radarr API', data: data.radarr, color: 'blue' },
+        { name: 'TMDB API', data: data.tmdb, color: 'green' },
+        { name: 'Local DB', data: data.localDb, color: 'purple' },
+      ];
+
+      summary.innerHTML = sources.map(source => {
+        const colorClasses = {
+          blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200',
+          green: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200',
+          purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200',
+        };
+        const classes = colorClasses[source.color] || colorClasses.blue;
+        return `
+          <div class="${classes} border rounded-lg p-4">
+            <h3 class="font-semibold mb-2">${source.name}</h3>
+            <p class="text-sm ${source.data ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}">
+              ${source.data ? '✓ Data available' : '✗ No data'}
+            </p>
+          </div>
+        `;
+      }).join('');
+
+      // Build comparison table
+      const fields = [
+        { key: 'title', label: 'Title' },
+        { key: 'originalTitle', label: 'Original Title' },
+        { key: 'year', label: 'Year' },
+        { key: 'tmdbId', label: 'TMDB ID' },
+        { key: 'imdbId', label: 'IMDB ID' },
+        { key: 'originalLanguage', label: 'Original Language' },
+        { key: 'originalLanguageName', label: 'Original Language (Name)' },
+        { key: 'releaseDate', label: 'Release Date' },
+        { key: 'path', label: 'Path' },
+        { key: 'hasFile', label: 'Has File' },
+        { key: 'fileLanguage', label: 'File Language' },
+        { key: 'mediaInfoAudioLanguages', label: 'MediaInfo Audio Languages' },
+      ];
+
+      comparisonBody.innerHTML = fields.map(field => {
+        const values = [
+          getValue(data.radarr, field.key),
+          getValue(data.tmdb, field.key),
+          getValue(data.localDb?.radarr, field.key),
+          getValue(data.localDb?.tmdb, field.key),
+        ];
+
+        // Check for mismatches
+        const nonNullValues = values.filter(v => v !== null && v !== undefined && v !== '');
+        const uniqueValues = [...new Set(nonNullValues.map(v => String(v).toLowerCase()))];
+        const hasMismatch = uniqueValues.length > 1;
+        const allMatch = uniqueValues.length === 1 && nonNullValues.length > 1;
+
+        return `
+          <tr>
+            <td class="source-column">${field.label}</td>
+            ${values.map((val, idx) => {
+              let className = '';
+              if (val === null || val === undefined || val === '') {
+                className = 'missing';
+              } else if (hasMismatch) {
+                className = 'mismatch';
+              } else if (allMatch) {
+                className = 'match';
+              }
+              return `<td class="${className}">${formatValue(val)}</td>`;
+            }).join('')}
+          </tr>
+        `;
+      }).join('');
+
+      // Show errors if any
+      if (data.errors && data.errors.length > 0) {
+        const errorRow = `
+          <tr>
+            <td class="source-column" colspan="5">
+              <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-2">
+                <strong>Errors:</strong> ${data.errors.join(', ')}
+              </div>
+            </td>
+          </tr>
+        `;
+        comparisonBody.innerHTML += errorRow;
+      }
+
+      results.classList.remove('hidden');
+    }
+
+    function getValue(obj, key) {
+      if (!obj) return null;
+      return obj[key] !== undefined ? obj[key] : null;
+    }
+
+    function formatValue(value) {
+      if (value === null || value === undefined || value === '') {
+        return '<span class="text-gray-400">—</span>';
+      }
+      if (typeof value === 'boolean') {
+        return value ? '✓' : '✗';
+      }
+      if (typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      return String(value);
+    }
+
+    // Auto-fetch if TMDB ID is in URL
+    <% if (tmdbId) { %>
+      window.addEventListener('DOMContentLoaded', () => {
+        form.dispatchEvent(new Event('submit'));
+      });
+    <% } %>
+  </script>
+</body>
+</html>
+
