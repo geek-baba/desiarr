@@ -1,7 +1,8 @@
 FROM node:22-alpine
 
 # Install build dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
+# Update package index first, then install dependencies
+RUN apk update && apk add --no-cache python3 make g++
 
 WORKDIR /app
 
