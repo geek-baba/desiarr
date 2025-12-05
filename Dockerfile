@@ -1,9 +1,9 @@
 FROM node:22-alpine
 
 # Install build dependencies for better-sqlite3
-# Split commands to avoid busybox trigger issues on ARM64
-RUN apk update
-RUN apk add --no-cache python3 make g++
+# Workaround for busybox trigger error on ARM64: install busybox first, then other packages
+RUN apk update && apk add --no-cache --virtual .build-deps python3 make g++ || \
+    (apk add --no-cache busybox && apk add --no-cache python3 make g++)
 
 WORKDIR /app
 
