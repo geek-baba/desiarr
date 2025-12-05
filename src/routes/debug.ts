@@ -59,8 +59,26 @@ router.get('/api/movie', async (req: Request, res: Response) => {
         radarrMovie = await radarrClient.getMovie(localRadarrMovie.radarr_id);
       }
       
-      // If not found, try searching all movies (fallback)
+      // If not found, try to get by TMDB ID using Radarr's lookup
+      // Note: getMovie() tries Radarr ID first, then falls back to TMDB ID lookup
+      // But we need to be careful - if tmdbId is a small number, it might be mistaken for Radarr ID
+      if (!radarrMovie && tmdbId > 1000) {
+        // Only try direct lookup if TMDB ID is large enough to not be confused with Radarr ID
+        try {
+          const lookupResult = await radarrClient.getMovie(tmdbId);
+          // Verify it's the right movie
+          if (lookupResult && lookupResult.tmdbId === tmdbId) {
+            radarrMovie = lookupResult;
+          }
+        } catch (error) {
+          // getMovie failed, will try getAllMovies as last resort below
+        }
+      }
+      
+      // Last resort: search all movies (slow but comprehensive)
+      // Only do this if we still don't have the movie
       if (!radarrMovie) {
+        console.log(`[Debug] Movie ${tmdbId} not found via direct lookup, searching all movies...`);
         const radarrMovies = await radarrClient.getAllMovies();
         radarrMovie = radarrMovies.find(m => m.tmdbId === tmdbId) || null;
       }
