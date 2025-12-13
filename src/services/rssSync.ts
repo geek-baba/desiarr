@@ -114,6 +114,13 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
             const parsed = parseRSSItem(item as any, feed.id!, feed.name);
             const guid = parsed.guid || parsed.link || '';
             
+            // Check if this GUID is in the ignored/blacklist
+            const { ignoredRssItemsModel } = require('../models/ignoredRssItems');
+            if (ignoredRssItemsModel.isIgnored(guid)) {
+              console.log(`    ⏭ Skipping ignored RSS item: "${parsed.title}" (GUID: ${guid})`);
+              continue; // Skip this item entirely
+            }
+            
             // Check if item already exists in database
             const existingItem = db
               .prepare('SELECT tmdb_id, imdb_id, clean_title, year FROM rss_feed_items WHERE guid = ?')

@@ -2205,5 +2205,73 @@ router.post('/rss/re-categorize/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Delete RSS item and prevent re-adding
+router.post('/rss/:id/delete-and-ignore', async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.id, 10);
+    if (!itemId || isNaN(itemId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid RSS item ID'
+      });
+    }
+
+    // Get the RSS item
+    const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        error: 'RSS item not found'
+      });
+    }
+
+    const guid = item.guid;
+    const title = item.title;
+
+    // Use transaction to ensure atomicity
+    const transaction = db.transaction(() => {
+      // 1. Delete from rss_feed_items
+      db.prepare('DELETE FROM rss_feed_items WHERE id = ?').run(itemId);
+      
+      // 2. Delete from movie_releases (if exists)
+      const movieDeleted = db.prepare('DELETE FROM movie_releases WHERE guid = ?').run(guid);
+      
+      // 3. Delete from tv_releases (if exists)
+      const tvDeleted = db.prepare('DELETE FROM tv_releases WHERE guid = ?').run(guid);
+      
+      // 4. Add to ignored_rss_items blacklist
+      const { ignoredRssItemsModel } = require('../models/ignoredRssItems');
+      ignoredRssItemsModel.add(guid, title, 'Deleted by user');
+      
+      return {
+        movieDeleted: movieDeleted.changes,
+        tvDeleted: tvDeleted.changes,
+      };
+    });
+
+    const result = transaction();
+
+    console.log(`Deleted RSS item ${itemId} (GUID: ${guid}) and added to blacklist. Movie releases deleted: ${result.movieDeleted}, TV releases deleted: ${result.tvDeleted}`);
+
+    res.json({
+      success: true,
+      message: `RSS item deleted and added to ignore list. This item will not be re-added during future RSS syncs.`,
+      deleted: {
+        rssItem: true,
+        movieReleases: result.movieDeleted,
+        tvReleases: result.tvDeleted,
+      },
+      guid,
+      title,
+    });
+  } catch (error: any) {
+    console.error('Delete and ignore RSS item error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete and ignore item: ' + (error?.message || 'Unknown error')
+    });
+  }
+});
+
 export default router;
 

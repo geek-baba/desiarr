@@ -258,13 +258,22 @@
                   </div>
                 </td>
                 <td class="px-4 py-3 text-sm">
-                  <button 
-                    id="matchBtn<%= item.id %>"
-                    onclick="matchItem(<%= item.id %>)" 
-                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-                  >
-                    Match
-                  </button>
+                  <div class="flex gap-2">
+                    <button 
+                      id="matchBtn<%= item.id %>"
+                      onclick="matchItem(<%= item.id %>)" 
+                      class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+                    >
+                      Match
+                    </button>
+                    <button 
+                      onclick="deleteAndIgnoreItem(<%= item.id %>)" 
+                      class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
+                      title="Delete this RSS item and prevent it from being re-added"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             <% }); %>
@@ -990,6 +999,54 @@
     let currentMatchItemData = null;
     let currentSearchResults = [];
     let selectedMatch = null;
+
+    async function deleteAndIgnoreItem(itemId) {
+      // Find the row by finding the button's parent row
+      const button = document.querySelector(`button[onclick="deleteAndIgnoreItem(${itemId})"]`);
+      const itemRow = button?.closest('tr');
+      const itemTitle = itemRow?.querySelector('td:nth-child(3) a')?.textContent?.trim() || itemRow?.querySelector('td:nth-child(3)')?.textContent?.trim() || 'this item';
+      
+      showConfirm(
+        `Are you sure you want to delete "${itemTitle}"?<br><br>This will:<br>• Delete the RSS item<br>• Delete any associated movie/TV releases<br>• Prevent this item from being re-added during future RSS syncs`,
+        async () => {
+          try {
+            const response = await fetch(`/data/rss/${itemId}/delete-and-ignore`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+              showToast(`Item deleted and added to ignore list. It will not be re-added during future syncs.`, 'success');
+              // Remove the row from the table
+              if (itemRow) {
+                itemRow.style.opacity = '0.5';
+                itemRow.style.transition = 'opacity 0.3s';
+                setTimeout(() => {
+                  itemRow.remove();
+                  // If table is empty, reload page
+                  const tbody = document.querySelector('tbody');
+                  if (tbody && tbody.children.length === 0) {
+                    setTimeout(() => window.location.reload(), 1000);
+                  }
+                }, 300);
+              } else {
+                // Fallback: reload page after a short delay
+                setTimeout(() => window.location.reload(), 1000);
+              }
+            } else {
+              showToast('Error: ' + (data.error || 'Unknown error'), 'error');
+            }
+          } catch (error) {
+            console.error('[DELETE] Exception during delete:', error);
+            showToast('Error: ' + (error.message || 'Unknown error'), 'error');
+          }
+        }
+      );
+    }
 
     async function matchItem(itemId) {
       console.log('[matchItem] Called with itemId:', itemId);
