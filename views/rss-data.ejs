@@ -1355,11 +1355,19 @@
       button.textContent = 'Applying...';
       
       try {
-        const res = await fetch(`/data/rss/match/${currentMatchItemId}`, {
+        console.log('[MATCH] Frontend: Calling applySelectedMatch with:', {
+          itemId: currentMatchItemId,
+          matchParams: matchParams,
+          selectedMatch: selectedMatch
+        });
+        const url = `/data/rss/match/${currentMatchItemId}`;
+        console.log('[MATCH] Frontend: Fetching URL:', url);
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(matchParams),
         });
+        console.log('[MATCH] Frontend: Response status:', res.status, res.statusText);
         
         if (!res.ok) {
           const errorText = await res.text();
