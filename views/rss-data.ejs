@@ -1347,12 +1347,19 @@
         if (selectedMatch.year) matchParams['year'] = selectedMatch.year;
       }
       
-      // Hide modal and show loading
-      hideMatchModal();
+      // Get button reference BEFORE hiding modal (button might be in table, not modal)
       const button = document.getElementById(`matchBtn${currentMatchItemId}`);
-      const originalText = button.textContent;
-      button.disabled = true;
-      button.textContent = 'Applying...';
+      let originalText = '';
+      if (button) {
+        originalText = button.textContent || '';
+        button.disabled = true;
+        button.textContent = 'Applying...';
+      } else {
+        console.warn('[MATCH] Frontend: Button not found:', `matchBtn${currentMatchItemId}`, '- continuing anyway');
+      }
+      
+      // Hide modal after getting button reference
+      hideMatchModal();
       
       try {
         console.log('[MATCH] Frontend: Calling applySelectedMatch with:', {
@@ -1375,6 +1382,7 @@
         }
         
         const data = await res.json();
+        console.log('[MATCH] Frontend: Response data:', data);
         
         if (data.success) {
           const results = [];
@@ -1387,10 +1395,12 @@
           throw new Error(data.error || 'Unknown error');
         }
       } catch (error) {
-        console.error('[MATCH] Error:', error);
+        console.error('[MATCH] Frontend Error:', error);
         showToast('Error: ' + (error.message || 'Unknown error'), 'error');
-        button.disabled = false;
-        button.textContent = originalText;
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
       }
     }
 
