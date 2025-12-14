@@ -1879,11 +1879,30 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     }
 
     // Update the database with found IDs
+    // Use the same approach as the override endpoint for consistency
     const updates: string[] = [];
     const updateValues: any[] = [];
     
     // Track if we're setting IDs manually (from user selection or manual input)
     const isManualUpdate = userTmdbId !== null || userImdbId !== null;
+    
+    // If user provided TMDB ID, fetch full movie details to get IMDB ID (like override endpoint does)
+    if (userTmdbId !== null && tmdbApiKey) {
+      try {
+        console.log(`  [MATCH] Fetching full TMDB movie details for ID ${userTmdbId} (like override endpoint)`);
+        const tmdbMovie = await tmdbClient.getMovie(userTmdbId);
+        if (tmdbMovie) {
+          tmdbId = tmdbMovie.id;
+          // Extract IMDB ID from TMDB movie (same as override endpoint)
+          if (tmdbMovie.imdb_id) {
+            imdbId = tmdbMovie.imdb_id;
+            console.log(`  [MATCH] Extracted IMDB ID ${imdbId} from TMDB movie ${tmdbId}`);
+          }
+        }
+      } catch (error) {
+        console.log(`  [MATCH] ⚠ Failed to fetch TMDB movie details:`, error);
+      }
+    }
     
     // Normalize database values for comparison (handle null, undefined, and type mismatches)
     const currentTmdbId = item.tmdb_id !== null && item.tmdb_id !== undefined ? Number(item.tmdb_id) : null;
@@ -1893,7 +1912,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     
     console.log(`  [MATCH] Comparing IDs - Current: TMDB=${currentTmdbId}, IMDB=${currentImdbId}, New: TMDB=${newTmdbId}, IMDB=${newImdbId}`);
     
-    // Update TMDB ID if changed or if user explicitly provided it
+    // Update TMDB ID if changed or if user explicitly provided it (same logic as override endpoint)
     if (newTmdbId !== currentTmdbId) {
       updates.push('tmdb_id = ?');
       updateValues.push(newTmdbId);
@@ -1909,7 +1928,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       console.log(`  [MATCH] Will mark TMDB ID as manual (value unchanged)`);
     }
     
-    // Update IMDB ID if changed or if user explicitly provided it
+    // Update IMDB ID if changed or if user explicitly provided it (same logic as override endpoint)
     if (newImdbId !== currentImdbId) {
       updates.push('imdb_id = ?');
       updateValues.push(newImdbId);
@@ -1934,15 +1953,21 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       updateValues.push(year);
     }
     
+    // Use the same UPDATE format as override endpoint for consistency
     if (updates.length > 0) {
       updateValues.push(itemId);
-      db.prepare(`
+      const stmt = db.prepare(`
         UPDATE rss_feed_items 
         SET ${updates.join(', ')}, updated_at = datetime('now')
         WHERE id = ?
-      `).run(...updateValues);
+      `);
+      const result = stmt.run(...updateValues);
       
-      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}, Manual=${isManualUpdate}`);
+      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${newTmdbId || 'null'}, IMDB=${newImdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}, Manual=${isManualUpdate}, Changes=${result.changes}`);
+      
+      // Verify the update by fetching the item again
+      const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+      console.log(`  [MATCH] Verified update - TMDB: ${updatedItem?.tmdb_id || 'null'}, IMDB: ${updatedItem?.imdb_id || 'null'}, Manual flags: TMDB=${updatedItem?.tmdb_id_manual || 0}, IMDB=${updatedItem?.imdb_id_manual || 0}`);
     } else {
       console.log(`  ℹ No changes needed for RSS item ${itemId}`);
     }
@@ -1970,21 +1995,49 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
 
     console.log(`  [MATCH] Final result: TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}, Title="${cleanTitle || 'none'}", Year=${year || 'none'}`);
     
+    // Fetch the updated item to ensure we return the actual database values (like override endpoint does)
+    const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, clean_title, year FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    const finalTmdbId = updatedItem?.tmdb_id || tmdbId;
+    const finalImdbId = updatedItem?.imdb_id || imdbId;
+    const finalTitle = updatedItem?.clean_title || cleanTitle;
+    const finalYear = updatedItem?.year || year;
+    
+    // Get movie/show title for response (like override endpoint does)
+    let tmdbTitle: string | undefined;
+    if (finalTmdbId && tmdbApiKey) {
+      try {
+        if (feedType === 'tv') {
+          const tmdbShow = await tmdbClient.getTvShow(finalTmdbId);
+          tmdbTitle = tmdbShow?.name;
+        } else {
+          const tmdbMovie = await tmdbClient.getMovie(finalTmdbId);
+          tmdbTitle = tmdbMovie?.title;
+        }
+      } catch (error) {
+        // Ignore - title is optional
+      }
+    }
+    
     const response: any = {
       success: true, 
-      message: 'Match and enrichment completed',
-      tmdbId,
-      imdbId,
-      title: cleanTitle,
-      year: year,
+      message: `Match applied${finalTmdbId ? ` - TMDB: ${finalTmdbId}` : ''}${finalImdbId ? `, IMDB: ${finalImdbId}` : ''}`,
+      tmdbId: finalTmdbId ? Number(finalTmdbId) : null,
+      imdbId: finalImdbId || null,
+      title: finalTitle,
+      year: finalYear,
     };
+    
+    if (tmdbTitle) {
+      response.tmdbTitle = tmdbTitle;
+    }
+    
     if (feedType === 'tv' && tvdbId !== null) {
       response.tvdbId = tvdbId;
       response.showName = showName;
       response.season = season;
     }
     
-    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId}`);
+    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId} - Returning: TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}`);
     res.json(response);
   } catch (error: any) {
     console.error(`  [MATCH] ✗ Match RSS item error for item ${itemId}:`, error);
