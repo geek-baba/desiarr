@@ -1495,7 +1495,9 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
 
-    console.log(`Manual match triggered for RSS item: "${item.title}" (ID: ${itemId})`);
+    console.log(`[MATCH] ===== Manual match triggered for RSS item: "${item.title}" (ID: ${itemId}) =====`);
+    console.log(`[MATCH] Request body:`, JSON.stringify(req.body, null, 2));
+    console.log(`[MATCH] Current item state - TMDB: ${item.tmdb_id || 'null'}, IMDB: ${item.imdb_id || 'null'}`);
 
     // Get match parameters from request body (if provided from dialog)
     const matchParams = (req.body as Record<string, any>) || {};
@@ -1508,7 +1510,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
     const userSeason: number | null = typeof matchParams.season === 'number' ? matchParams.season : (typeof matchParams.season === 'string' && matchParams.season.trim() ? parseInt(matchParams.season, 10) || null : null);
     
-    console.log(`  [MATCH] Received match params: tmdbId=${userTmdbId}, imdbId=${userImdbId}, title=${userTitle}, year=${userYear}`);
+    console.log(`[MATCH] Parsed match params: tmdbId=${userTmdbId} (type: ${typeof userTmdbId}), imdbId=${userImdbId} (type: ${typeof userImdbId}), title=${userTitle}, year=${userYear}`);
 
     // Get API keys
     const allSettings = settingsModel.getAll();
@@ -1909,22 +1911,30 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     
     // Use the EXACT same UPDATE format as override endpoint (line 800-804)
     // Override endpoint: SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?
-    db.prepare(`
+    console.log(`[MATCH] Executing UPDATE with values: tmdb_id=${finalTmdbId}, imdb_id=${finalImdbId}, tmdb_id_manual=1, imdb_id_manual=${finalImdbId ? 1 : 0}, itemId=${itemId}`);
+    
+    const updateStmt = db.prepare(`
       UPDATE rss_feed_items 
       SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?, updated_at = datetime('now')
       WHERE id = ?
-    `).run(
+    `);
+    const updateResult = updateStmt.run(
       finalTmdbId,
       finalImdbId,
       finalImdbId ? 1 : 0,  // imdb_id_manual (same as override endpoint)
       itemId
     );
     
-    console.log(`  ✓ Updated RSS item ${itemId} using override endpoint format: TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}`);
+    console.log(`[MATCH] UPDATE executed - changes: ${updateResult.changes}, lastInsertRowid: ${updateResult.lastInsertRowid}`);
+    console.log(`[MATCH] ✓ Updated RSS item ${itemId} using override endpoint format: TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}`);
     
     // Verify the update by fetching the item again (like we do in override endpoint)
     const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-    console.log(`  [MATCH] Verified update - TMDB: ${updatedItem?.tmdb_id || 'null'}, IMDB: ${updatedItem?.imdb_id || 'null'}, Manual flags: TMDB=${updatedItem?.tmdb_id_manual || 0}, IMDB=${updatedItem?.imdb_id_manual || 0}`);
+    console.log(`[MATCH] Verified update - TMDB: ${updatedItem?.tmdb_id || 'null'}, IMDB: ${updatedItem?.imdb_id || 'null'}, Manual flags: TMDB=${updatedItem?.tmdb_id_manual || 0}, IMDB=${updatedItem?.imdb_id_manual || 0}`);
+    
+    if (updateResult.changes === 0) {
+      console.error(`[MATCH] ⚠️ WARNING: UPDATE affected 0 rows! Item ${itemId} may not exist or UPDATE failed silently.`);
+    }
     
     // Update clean_title and year if provided (separate update to match override pattern)
     if (cleanTitle && cleanTitle !== item.clean_title) {
