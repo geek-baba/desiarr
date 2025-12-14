@@ -1879,21 +1879,17 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     }
 
     // Update the database with found IDs
-    // Use the same approach as the override endpoint for consistency
-    const updates: string[] = [];
-    const updateValues: any[] = [];
-    
-    // Track if we're setting IDs manually (from user selection or manual input)
+    // Use EXACTLY the same approach as the override endpoint for consistency
     const isManualUpdate = userTmdbId !== null || userImdbId !== null;
     
-    // If user provided TMDB ID, fetch full movie details to get IMDB ID (like override endpoint does)
+    // If user provided TMDB ID, fetch full movie details to get IMDB ID (EXACTLY like override endpoint does)
     if (userTmdbId !== null && tmdbApiKey) {
       try {
         console.log(`  [MATCH] Fetching full TMDB movie details for ID ${userTmdbId} (like override endpoint)`);
         const tmdbMovie = await tmdbClient.getMovie(userTmdbId);
         if (tmdbMovie) {
           tmdbId = tmdbMovie.id;
-          // Extract IMDB ID from TMDB movie (same as override endpoint)
+          // Extract IMDB ID from TMDB movie (EXACTLY like override endpoint)
           if (tmdbMovie.imdb_id) {
             imdbId = tmdbMovie.imdb_id;
             console.log(`  [MATCH] Extracted IMDB ID ${imdbId} from TMDB movie ${tmdbId}`);
@@ -1904,72 +1900,48 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       }
     }
     
-    // Normalize database values for comparison (handle null, undefined, and type mismatches)
-    const currentTmdbId = item.tmdb_id !== null && item.tmdb_id !== undefined ? Number(item.tmdb_id) : null;
-    const currentImdbId = item.imdb_id !== null && item.imdb_id !== undefined ? String(item.imdb_id).trim() : null;
-    const newTmdbId = tmdbId !== null && tmdbId !== undefined ? Number(tmdbId) : null;
-    const newImdbId = imdbId !== null && imdbId !== undefined ? String(imdbId).trim() : null;
+    // Use EXACTLY the same UPDATE statement format as override endpoint
+    // Override endpoint uses: SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?, updated_at = datetime('now')
+    const finalTmdbId = tmdbId !== null && tmdbId !== undefined ? Number(tmdbId) : null;
+    const finalImdbId = imdbId !== null && imdbId !== undefined ? String(imdbId).trim() : null;
     
-    console.log(`  [MATCH] Comparing IDs - Current: TMDB=${currentTmdbId}, IMDB=${currentImdbId}, New: TMDB=${newTmdbId}, IMDB=${newImdbId}`);
+    console.log(`  [MATCH] Updating RSS item ${itemId} with TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}, Manual=${isManualUpdate}`);
     
-    // Update TMDB ID if changed or if user explicitly provided it (same logic as override endpoint)
-    if (newTmdbId !== currentTmdbId) {
-      updates.push('tmdb_id = ?');
-      updateValues.push(newTmdbId);
-      if (isManualUpdate) {
-        updates.push('tmdb_id_manual = ?');
-        updateValues.push(1);
-      }
-      console.log(`  [MATCH] Will update TMDB ID: ${currentTmdbId} -> ${newTmdbId}`);
-    } else if (isManualUpdate && userTmdbId !== null && newTmdbId === currentTmdbId) {
-      // Even if value is same, mark as manual if user explicitly provided it
-      updates.push('tmdb_id_manual = ?');
-      updateValues.push(1);
-      console.log(`  [MATCH] Will mark TMDB ID as manual (value unchanged)`);
-    }
+    // Use the EXACT same UPDATE format as override endpoint (line 800-804)
+    db.prepare(`
+      UPDATE rss_feed_items 
+      SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = ?, imdb_id_manual = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      finalTmdbId,
+      finalImdbId,
+      isManualUpdate && finalTmdbId ? 1 : 0,  // tmdb_id_manual
+      isManualUpdate && finalImdbId ? 1 : 0,  // imdb_id_manual
+      itemId
+    );
     
-    // Update IMDB ID if changed or if user explicitly provided it (same logic as override endpoint)
-    if (newImdbId !== currentImdbId) {
-      updates.push('imdb_id = ?');
-      updateValues.push(newImdbId);
-      if (isManualUpdate) {
-        updates.push('imdb_id_manual = ?');
-        updateValues.push(1);
-      }
-      console.log(`  [MATCH] Will update IMDB ID: ${currentImdbId || 'null'} -> ${newImdbId || 'null'}`);
-    } else if (isManualUpdate && userImdbId !== null && newImdbId === currentImdbId) {
-      // Even if value is same, mark as manual if user explicitly provided it
-      updates.push('imdb_id_manual = ?');
-      updateValues.push(1);
-      console.log(`  [MATCH] Will mark IMDB ID as manual (value unchanged)`);
-    }
+    console.log(`  ✓ Updated RSS item ${itemId} using override endpoint format: TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}`);
     
+    // Verify the update by fetching the item again (like we do in override endpoint)
+    const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    console.log(`  [MATCH] Verified update - TMDB: ${updatedItem?.tmdb_id || 'null'}, IMDB: ${updatedItem?.imdb_id || 'null'}, Manual flags: TMDB=${updatedItem?.tmdb_id_manual || 0}, IMDB=${updatedItem?.imdb_id_manual || 0}`);
+    
+    // Update clean_title and year if provided (separate update to match override pattern)
     if (cleanTitle && cleanTitle !== item.clean_title) {
-      updates.push('clean_title = ?');
-      updateValues.push(cleanTitle);
+      db.prepare(`
+        UPDATE rss_feed_items 
+        SET clean_title = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(cleanTitle, itemId);
+      console.log(`  [MATCH] Updated clean_title to "${cleanTitle}"`);
     }
     if (year !== null && year !== item.year) {
-      updates.push('year = ?');
-      updateValues.push(year);
-    }
-    
-    // Use the same UPDATE format as override endpoint for consistency
-    if (updates.length > 0) {
-      updateValues.push(itemId);
-      const stmt = db.prepare(`
+      db.prepare(`
         UPDATE rss_feed_items 
-        SET ${updates.join(', ')}, updated_at = datetime('now')
+        SET year = ?, updated_at = datetime('now')
         WHERE id = ?
-      `);
-      const result = stmt.run(...updateValues);
-      
-      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${newTmdbId || 'null'}, IMDB=${newImdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}, Manual=${isManualUpdate}, Changes=${result.changes}`);
-      
-      // Verify the update by fetching the item again
-      const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-      console.log(`  [MATCH] Verified update - TMDB: ${updatedItem?.tmdb_id || 'null'}, IMDB: ${updatedItem?.imdb_id || 'null'}, Manual flags: TMDB=${updatedItem?.tmdb_id_manual || 0}, IMDB=${updatedItem?.imdb_id_manual || 0}`);
-    } else {
-      console.log(`  ℹ No changes needed for RSS item ${itemId}`);
+      `).run(year, itemId);
+      console.log(`  [MATCH] Updated year to ${year}`);
     }
 
     // After enrichment, trigger matching engine for this specific item
