@@ -1485,13 +1485,21 @@ router.post('/rss/search/:id', async (req: Request, res: Response) => {
 
 // Match single RSS item
 router.post('/rss/match/:id', async (req: Request, res: Response) => {
+  console.log(`[MATCH] ===== ROUTE HIT: POST /data/rss/match/:id =====`);
+  console.log(`[MATCH] Request params:`, req.params);
+  console.log(`[MATCH] Request method:`, req.method);
+  console.log(`[MATCH] Request URL:`, req.url);
+  
   const itemId = parseInt(req.params.id, 10);
+  console.log(`[MATCH] Parsed itemId: ${itemId}`);
+  
   try {
     
     // Get the RSS item from database
     const item = db.prepare('SELECT * FROM rss_feed_items WHERE id = ?').get(itemId) as any;
     
     if (!item) {
+      console.log(`[MATCH] ERROR: RSS item ${itemId} not found in database`);
       return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
 
