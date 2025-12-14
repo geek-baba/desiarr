@@ -1414,11 +1414,42 @@ router.post('/rss/search/:id', async (req: Request, res: Response) => {
         searchYear = userYear;
         if (tmdbApiKey) {
           try {
-            const movies = await tmdbClient.searchMovies(userTitle, userYear || undefined, 10);
+            // Try the exact search first
+            let movies = await tmdbClient.searchMovies(userTitle, userYear || undefined, 10);
+            
+            // If no results and title ends with a number, try without the number
+            // (e.g., "Premachi Gosht 2" -> "Premachi Gosht" to match "Premachi Goshta 2")
+            if (movies.length === 0) {
+              const numberSuffixMatch = userTitle.match(/^(.+?)\s+(\d+)$/);
+              if (numberSuffixMatch) {
+                const titleWithoutNumber = numberSuffixMatch[1].trim();
+                console.log(`No results for "${userTitle}", trying without number: "${titleWithoutNumber}"`);
+                movies = await tmdbClient.searchMovies(titleWithoutNumber, userYear || undefined, 10);
+              }
+            }
+            
+            // Fetch full movie details for IMDB IDs (search API doesn't always include imdb_id)
+            const seenTmdbIds = new Set<number>();
             for (const movie of movies) {
+              // Avoid duplicates
+              if (seenTmdbIds.has(movie.id)) continue;
+              seenTmdbIds.add(movie.id);
+              
               // Use overview from search result (TMDB search API includes overview)
               const overview = movie.overview || null;
-              const imdbId = movie.imdb_id || null;
+              let imdbId = movie.imdb_id || null;
+              
+              // If IMDB ID not in search result, fetch full movie details
+              if (!imdbId) {
+                try {
+                  const fullMovie = await tmdbClient.getMovie(movie.id);
+                  if (fullMovie && fullMovie.imdb_id) {
+                    imdbId = fullMovie.imdb_id;
+                  }
+                } catch (error) {
+                  // Ignore - we'll just show the movie without IMDB ID
+                }
+              }
               
               candidates.push({
                 tmdbId: movie.id,
@@ -1842,14 +1873,35 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     const updates: string[] = [];
     const updateValues: any[] = [];
     
+    // Track if we're setting IDs manually (from user selection or manual input)
+    const isManualUpdate = userTmdbId !== null || userImdbId !== null;
+    
     if (tmdbId !== item.tmdb_id) {
       updates.push('tmdb_id = ?');
       updateValues.push(tmdbId);
+      if (isManualUpdate) {
+        updates.push('tmdb_id_manual = ?');
+        updateValues.push(1);
+      }
+    } else if (isManualUpdate && userTmdbId !== null && tmdbId === item.tmdb_id) {
+      // Even if value is same, mark as manual if user explicitly provided it
+      updates.push('tmdb_id_manual = ?');
+      updateValues.push(1);
     }
+    
     if (imdbId !== item.imdb_id) {
       updates.push('imdb_id = ?');
       updateValues.push(imdbId);
+      if (isManualUpdate) {
+        updates.push('imdb_id_manual = ?');
+        updateValues.push(1);
+      }
+    } else if (isManualUpdate && userImdbId !== null && imdbId === item.imdb_id) {
+      // Even if value is same, mark as manual if user explicitly provided it
+      updates.push('imdb_id_manual = ?');
+      updateValues.push(1);
     }
+    
     if (cleanTitle && cleanTitle !== item.clean_title) {
       updates.push('clean_title = ?');
       updateValues.push(cleanTitle);
@@ -1867,7 +1919,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         WHERE id = ?
       `).run(...updateValues);
       
-      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}`);
+      console.log(`  ✓ Updated RSS item ${itemId}: TMDB=${tmdbId || 'null'}, IMDB=${imdbId || 'null'}, Title="${cleanTitle || 'null'}", Year=${year || 'null'}, Manual=${isManualUpdate}`);
     } else {
       console.log(`  ℹ No changes needed for RSS item ${itemId}`);
     }
