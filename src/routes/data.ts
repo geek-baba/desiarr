@@ -1908,15 +1908,15 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     console.log(`  [MATCH] Updating RSS item ${itemId} with TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}, Manual=${isManualUpdate}`);
     
     // Use the EXACT same UPDATE format as override endpoint (line 800-804)
+    // Override endpoint: SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?
     db.prepare(`
       UPDATE rss_feed_items 
-      SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = ?, imdb_id_manual = ?, updated_at = datetime('now')
+      SET tmdb_id = ?, imdb_id = ?, tmdb_id_manual = 1, imdb_id_manual = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(
       finalTmdbId,
       finalImdbId,
-      isManualUpdate && finalTmdbId ? 1 : 0,  // tmdb_id_manual
-      isManualUpdate && finalImdbId ? 1 : 0,  // imdb_id_manual
+      finalImdbId ? 1 : 0,  // imdb_id_manual (same as override endpoint)
       itemId
     );
     
