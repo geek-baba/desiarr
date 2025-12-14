@@ -1500,12 +1500,15 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     // Get match parameters from request body (if provided from dialog)
     const matchParams = (req.body as Record<string, any>) || {};
     const userTitle: string | null = typeof matchParams.title === 'string' && matchParams.title.trim() ? matchParams.title.trim() : null;
-    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : null;
-    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : null;
+    const userYear: number | null = typeof matchParams.year === 'number' ? matchParams.year : (typeof matchParams.year === 'string' && matchParams.year.trim() ? parseInt(matchParams.year, 10) || null : null);
+    // Handle both number and string types for IDs (JSON might send numbers as strings)
+    const userTmdbId: number | null = typeof matchParams.tmdbId === 'number' ? matchParams.tmdbId : (typeof matchParams.tmdbId === 'string' && matchParams.tmdbId.trim() ? parseInt(matchParams.tmdbId, 10) || null : null);
     const userImdbId: string | null = typeof matchParams.imdbId === 'string' && matchParams.imdbId.trim() ? matchParams.imdbId.trim() : null;
-    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : null;
+    const userTvdbId: number | null = typeof matchParams.tvdbId === 'number' ? matchParams.tvdbId : (typeof matchParams.tvdbId === 'string' && matchParams.tvdbId.trim() ? parseInt(matchParams.tvdbId, 10) || null : null);
     const userShowName: string | null = typeof matchParams.showName === 'string' && matchParams.showName.trim() ? matchParams.showName.trim() : null;
-    const userSeason: number | null = typeof matchParams.season === 'number' ? matchParams.season : null;
+    const userSeason: number | null = typeof matchParams.season === 'number' ? matchParams.season : (typeof matchParams.season === 'string' && matchParams.season.trim() ? parseInt(matchParams.season, 10) || null : null);
+    
+    console.log(`  [MATCH] Received match params: tmdbId=${userTmdbId}, imdbId=${userImdbId}, title=${userTitle}, year=${userYear}`);
 
     // Get API keys
     const allSettings = settingsModel.getAll();
@@ -1610,7 +1613,13 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     }
 
     // Run enrichment logic (same as in rssSync.ts)
-    const needsEnrichment = !tmdbId || !imdbId;
+    // Skip enrichment if user explicitly provided IDs (they selected a match)
+    const skipEnrichment = (userTmdbId !== null || userImdbId !== null);
+    const needsEnrichment = !skipEnrichment && (!tmdbId || !imdbId);
+    
+    if (skipEnrichment) {
+      console.log(`  [MATCH] Skipping enrichment - user provided IDs directly`);
+    }
 
     if (needsEnrichment) {
       // Step 1: If we have IMDB ID but no TMDB ID
@@ -1876,30 +1885,44 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     // Track if we're setting IDs manually (from user selection or manual input)
     const isManualUpdate = userTmdbId !== null || userImdbId !== null;
     
-    if (tmdbId !== item.tmdb_id) {
+    // Normalize database values for comparison (handle null, undefined, and type mismatches)
+    const currentTmdbId = item.tmdb_id !== null && item.tmdb_id !== undefined ? Number(item.tmdb_id) : null;
+    const currentImdbId = item.imdb_id !== null && item.imdb_id !== undefined ? String(item.imdb_id).trim() : null;
+    const newTmdbId = tmdbId !== null && tmdbId !== undefined ? Number(tmdbId) : null;
+    const newImdbId = imdbId !== null && imdbId !== undefined ? String(imdbId).trim() : null;
+    
+    console.log(`  [MATCH] Comparing IDs - Current: TMDB=${currentTmdbId}, IMDB=${currentImdbId}, New: TMDB=${newTmdbId}, IMDB=${newImdbId}`);
+    
+    // Update TMDB ID if changed or if user explicitly provided it
+    if (newTmdbId !== currentTmdbId) {
       updates.push('tmdb_id = ?');
-      updateValues.push(tmdbId);
+      updateValues.push(newTmdbId);
       if (isManualUpdate) {
         updates.push('tmdb_id_manual = ?');
         updateValues.push(1);
       }
-    } else if (isManualUpdate && userTmdbId !== null && tmdbId === item.tmdb_id) {
+      console.log(`  [MATCH] Will update TMDB ID: ${currentTmdbId} -> ${newTmdbId}`);
+    } else if (isManualUpdate && userTmdbId !== null && newTmdbId === currentTmdbId) {
       // Even if value is same, mark as manual if user explicitly provided it
       updates.push('tmdb_id_manual = ?');
       updateValues.push(1);
+      console.log(`  [MATCH] Will mark TMDB ID as manual (value unchanged)`);
     }
     
-    if (imdbId !== item.imdb_id) {
+    // Update IMDB ID if changed or if user explicitly provided it
+    if (newImdbId !== currentImdbId) {
       updates.push('imdb_id = ?');
-      updateValues.push(imdbId);
+      updateValues.push(newImdbId);
       if (isManualUpdate) {
         updates.push('imdb_id_manual = ?');
         updateValues.push(1);
       }
-    } else if (isManualUpdate && userImdbId !== null && imdbId === item.imdb_id) {
+      console.log(`  [MATCH] Will update IMDB ID: ${currentImdbId || 'null'} -> ${newImdbId || 'null'}`);
+    } else if (isManualUpdate && userImdbId !== null && newImdbId === currentImdbId) {
       // Even if value is same, mark as manual if user explicitly provided it
       updates.push('imdb_id_manual = ?');
       updateValues.push(1);
+      console.log(`  [MATCH] Will mark IMDB ID as manual (value unchanged)`);
     }
     
     if (cleanTitle && cleanTitle !== item.clean_title) {
