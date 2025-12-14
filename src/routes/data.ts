@@ -1968,21 +1968,21 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     console.log(`  [MATCH] Final result: TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}, Title="${cleanTitle || 'none'}", Year=${year || 'none'}`);
     
     // Fetch the updated item to ensure we return the actual database values (like override endpoint does)
-    const updatedItem = db.prepare('SELECT tmdb_id, imdb_id, clean_title, year FROM rss_feed_items WHERE id = ?').get(itemId) as any;
-    const finalTmdbId = updatedItem?.tmdb_id || tmdbId;
-    const finalImdbId = updatedItem?.imdb_id || imdbId;
-    const finalTitle = updatedItem?.clean_title || cleanTitle;
-    const finalYear = updatedItem?.year || year;
+    const verifiedItem = db.prepare('SELECT tmdb_id, imdb_id, clean_title, year FROM rss_feed_items WHERE id = ?').get(itemId) as any;
+    const responseTmdbId = verifiedItem?.tmdb_id || finalTmdbId;
+    const responseImdbId = verifiedItem?.imdb_id || finalImdbId;
+    const responseTitle = verifiedItem?.clean_title || cleanTitle;
+    const responseYear = verifiedItem?.year || year;
     
     // Get movie/show title for response (like override endpoint does)
     let tmdbTitle: string | undefined;
-    if (finalTmdbId && tmdbApiKey) {
+    if (responseTmdbId && tmdbApiKey) {
       try {
         if (feedType === 'tv') {
-          const tmdbShow = await tmdbClient.getTvShow(finalTmdbId);
+          const tmdbShow = await tmdbClient.getTvShow(responseTmdbId);
           tmdbTitle = tmdbShow?.name;
         } else {
-          const tmdbMovie = await tmdbClient.getMovie(finalTmdbId);
+          const tmdbMovie = await tmdbClient.getMovie(responseTmdbId);
           tmdbTitle = tmdbMovie?.title;
         }
       } catch (error) {
@@ -1992,11 +1992,11 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
     
     const response: any = {
       success: true, 
-      message: `Match applied${finalTmdbId ? ` - TMDB: ${finalTmdbId}` : ''}${finalImdbId ? `, IMDB: ${finalImdbId}` : ''}`,
-      tmdbId: finalTmdbId ? Number(finalTmdbId) : null,
-      imdbId: finalImdbId || null,
-      title: finalTitle,
-      year: finalYear,
+      message: `Match applied${responseTmdbId ? ` - TMDB: ${responseTmdbId}` : ''}${responseImdbId ? `, IMDB: ${responseImdbId}` : ''}`,
+      tmdbId: responseTmdbId ? Number(responseTmdbId) : null,
+      imdbId: responseImdbId || null,
+      title: responseTitle,
+      year: responseYear,
     };
     
     if (tmdbTitle) {
@@ -2009,7 +2009,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       response.season = season;
     }
     
-    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId} - Returning: TMDB=${finalTmdbId || 'null'}, IMDB=${finalImdbId || 'null'}`);
+    console.log(`  [MATCH] ✓ Match endpoint completed successfully for item ${itemId} - Returning: TMDB=${responseTmdbId || 'null'}, IMDB=${responseImdbId || 'null'}`);
     res.json(response);
   } catch (error: any) {
     console.error(`  [MATCH] ✗ Match RSS item error for item ${itemId}:`, error);
