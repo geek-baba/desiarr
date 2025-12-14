@@ -1330,6 +1330,8 @@
         return;
       }
       
+      // Save itemId BEFORE hiding modal (hideMatchModal sets currentMatchItemId to null)
+      const itemId = currentMatchItemId;
       const isTv = currentMatchItemData?.feed_type === 'tv';
       
       // Build match parameters from selected match
@@ -1348,26 +1350,26 @@
       }
       
       // Get button reference BEFORE hiding modal (button might be in table, not modal)
-      const button = document.getElementById(`matchBtn${currentMatchItemId}`);
+      const button = document.getElementById(`matchBtn${itemId}`);
       let originalText = '';
       if (button) {
         originalText = button.textContent || '';
         button.disabled = true;
         button.textContent = 'Applying...';
       } else {
-        console.warn('[MATCH] Frontend: Button not found:', `matchBtn${currentMatchItemId}`, '- continuing anyway');
+        console.warn('[MATCH] Frontend: Button not found:', `matchBtn${itemId}`, '- continuing anyway');
       }
       
-      // Hide modal after getting button reference
+      // Hide modal after getting button reference and saving itemId
       hideMatchModal();
       
       try {
         console.log('[MATCH] Frontend: Calling applySelectedMatch with:', {
-          itemId: currentMatchItemId,
+          itemId: itemId,
           matchParams: matchParams,
           selectedMatch: selectedMatch
         });
-        const url = `/data/rss/match/${currentMatchItemId}`;
+        const url = `/data/rss/match/${itemId}`;
         console.log('[MATCH] Frontend: Fetching URL:', url);
         const res = await fetch(url, {
           method: 'POST',
