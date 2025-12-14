@@ -1962,25 +1962,28 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
       console.log(`  [MATCH] Updated year to ${year}`);
     }
 
-    // After enrichment, trigger matching engine for this specific item
-    try {
-      if (feedType === 'tv') {
-        console.log(`  [MATCH] Triggering TV matching engine for item ${itemId}...`);
-        // For TV, we need to run the TV matching engine
-        // It will process all items, but our enriched item will be included
-        const tvStats = await runTvMatchingEngine();
-        console.log(`  [MATCH] ✓ TV matching engine completed: ${tvStats.processed} processed, ${tvStats.newShows} new shows, ${tvStats.errors} errors`);
-      } else {
-        console.log(`  [MATCH] Triggering movie matching engine for item ${itemId}...`);
-        // For movies, run the movie matching engine
-        // It will process all items, but our enriched item will be included
-        const movieStats = await runMatchingEngine();
-        console.log(`  [MATCH] ✓ Movie matching engine completed: ${movieStats.processed} processed, ${movieStats.newReleases} new releases, ${movieStats.errors} errors`);
+    // Skip running matching engine for manual matches - user already selected the match
+    // The matching engine will pick up the updated IDs on its next scheduled run
+    // Running it here causes unnecessary delay (processes all RSS items)
+    if (isManualUpdate) {
+      console.log(`  [MATCH] Skipping matching engine for manual match - IDs already set, engine will process on next scheduled run`);
+    } else {
+      // Only run matching engine if this was an automatic enrichment (not manual)
+      try {
+        if (feedType === 'tv') {
+          console.log(`  [MATCH] Triggering TV matching engine for item ${itemId}...`);
+          const tvStats = await runTvMatchingEngine();
+          console.log(`  [MATCH] ✓ TV matching engine completed: ${tvStats.processed} processed, ${tvStats.newShows} new shows, ${tvStats.errors} errors`);
+        } else {
+          console.log(`  [MATCH] Triggering movie matching engine for item ${itemId}...`);
+          const movieStats = await runMatchingEngine();
+          console.log(`  [MATCH] ✓ Movie matching engine completed: ${movieStats.processed} processed, ${movieStats.newReleases} new releases, ${movieStats.errors} errors`);
+        }
+      } catch (matchError: any) {
+        console.error(`  [MATCH] ⚠ Matching engine error (enrichment still succeeded):`, matchError);
+        console.error(`  [MATCH] Error details:`, matchError?.message || matchError?.toString() || 'Unknown error');
+        // Don't fail the request if matching fails - enrichment succeeded
       }
-    } catch (matchError: any) {
-      console.error(`  [MATCH] ⚠ Matching engine error (enrichment still succeeded):`, matchError);
-      console.error(`  [MATCH] Error details:`, matchError?.message || matchError?.toString() || 'Unknown error');
-      // Don't fail the request if matching fails - enrichment succeeded
     }
 
     console.log(`  [MATCH] Final result: TMDB=${tmdbId || 'none'}, IMDB=${imdbId || 'none'}, TVDB=${tvdbId || 'none'}, Title="${cleanTitle || 'none'}", Year=${year || 'none'}`);
