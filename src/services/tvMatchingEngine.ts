@@ -398,6 +398,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // Check if already processed
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
+        // Preserve sonarr_series_id if it was manually set (show was added to Sonarr)
+        const preserveSonarrId = existingRelease && existingRelease.sonarr_series_id;
 
         // Parse show name and season from title (needed for both manual and auto paths)
         let { showName, season, year } = parseTvTitle(item.title);
@@ -589,6 +591,18 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         } else {
           // Check by IDs (for shows found via external APIs)
           sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season);
+          
+          // If we have a preserved sonarr_series_id but checkSonarrShow didn't find it
+          // (e.g., Sonarr sync hasn't run yet), preserve the existing ID
+          if (preserveSonarrId && !sonarrCheck.exists && existingRelease && existingRelease.sonarr_series_id) {
+            console.log(`    ⚠ Preserving sonarr_series_id ${existingRelease.sonarr_series_id} (show was manually added, Sonarr sync may not have run yet)`);
+            sonarrCheck = {
+              exists: true, // Treat as existing since it was manually added
+              sonarrSeriesId: existingRelease.sonarr_series_id,
+              sonarrSeriesTitle: existingRelease.sonarr_series_title || null,
+              seasonExists: true, // Assume season exists if manually added
+            };
+          }
         }
 
         // Determine status
@@ -621,6 +635,15 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const finalStatus = preserveStatus ? 'ADDED' : status;
 
         // Create or update tv_release
+        // Preserve sonarr_series_id if it was manually set (show was added to Sonarr)
+        // even if checkSonarrShow didn't find it (Sonarr sync may not have run yet)
+        const finalSonarrSeriesId: number | undefined = preserveSonarrId && existingRelease?.sonarr_series_id 
+          ? existingRelease.sonarr_series_id 
+          : (sonarrCheck.sonarrSeriesId ?? undefined);
+        const finalSonarrSeriesTitle: string | undefined = preserveSonarrId && existingRelease?.sonarr_series_title
+          ? existingRelease.sonarr_series_title
+          : (sonarrCheck.sonarrSeriesTitle ?? undefined);
+        
         const tvRelease: Omit<TvRelease, 'id'> = {
           guid: String(item.guid || ''),
           title: String(item.title || ''),
@@ -637,8 +660,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           imdb_id: enrichment.imdbId ?? undefined,
           tvdb_poster_url: enrichment.tvdbPosterUrl ?? undefined,
           tmdb_poster_url: enrichment.tmdbPosterUrl ?? undefined,
-          sonarr_series_id: sonarrCheck.sonarrSeriesId ?? undefined,
-          sonarr_series_title: sonarrCheck.sonarrSeriesTitle ?? undefined,
+          sonarr_series_id: finalSonarrSeriesId,
+          sonarr_series_title: finalSonarrSeriesTitle,
           status: finalStatus,
           last_checked_at: new Date().toISOString(),
           manually_ignored: showManuallyIgnored,
