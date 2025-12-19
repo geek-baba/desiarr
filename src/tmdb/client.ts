@@ -97,7 +97,7 @@ class TMDBClient {
     this.apiKey = apiKey;
   }
 
-  async searchMovie(query: string, year?: number): Promise<TMDBMovie | null> {
+  async searchMovie(query: string, year?: number, expectedLanguage?: string | null): Promise<TMDBMovie | null> {
     if (!this.apiKey) {
       console.log('TMDB API key not configured, skipping search');
       return null;
@@ -117,22 +117,48 @@ class TMDBClient {
       const response = await this.client.get<TMDBSearchResponse>('/search/movie', { params });
       
       if (response.data.results && response.data.results.length > 0) {
-        // If we have a year, prefer results that match the year exactly
+        // Import similarity utilities dynamically to avoid circular dependencies
+        const { scoreTmdbMatch } = await import('../utils/titleSimilarity');
+        
+        // If we have a year, filter and score results that match the year
         if (year) {
-          const yearMatch = response.data.results.find(movie => {
-            if (movie.release_date) {
-              const releaseYear = new Date(movie.release_date).getFullYear();
-              return releaseYear === year;
+          const yearMatches = response.data.results
+            .filter(movie => {
+              if (movie.release_date) {
+                const releaseYear = new Date(movie.release_date).getFullYear();
+                return releaseYear === year;
+              }
+              return false;
+            })
+            .map(movie => ({
+              movie,
+              score: scoreTmdbMatch(query, movie, expectedLanguage),
+            }))
+            .sort((a, b) => b.score - a.score); // Sort by score descending
+          
+          if (yearMatches.length > 0) {
+            const bestMatch = yearMatches[0];
+            console.log(`    Selected best match: "${bestMatch.movie.title}" (score: ${bestMatch.score.toFixed(3)}, language: ${bestMatch.movie.original_language || 'unknown'})`);
+            if (yearMatches.length > 1) {
+              console.log(`    Considered ${yearMatches.length} year-matching results`);
             }
-            return false;
-          });
-          if (yearMatch) {
-            return yearMatch;
+            return bestMatch.movie;
           }
         }
         
-        // Return first result
-        return response.data.results[0];
+        // If no year filter or no year matches, score all results
+        const scoredResults = response.data.results
+          .map(movie => ({
+            movie,
+            score: scoreTmdbMatch(query, movie, expectedLanguage),
+          }))
+          .sort((a, b) => b.score - a.score);
+        
+        if (scoredResults.length > 0) {
+          const bestMatch = scoredResults[0];
+          console.log(`    Selected best match: "${bestMatch.movie.title}" (score: ${bestMatch.score.toFixed(3)})`);
+          return bestMatch.movie;
+        }
       }
       
       return null;

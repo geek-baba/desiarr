@@ -358,7 +358,13 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         // Step 2: If we don't have TMDB ID but have a clean title, try TMDB API search FIRST (primary)
         if (!tmdbId && tmdbApiKey && item.clean_title) {
           try {
-            const tmdbMovie = await tmdbClient.searchMovie(item.clean_title, item.year || undefined);
+            // Extract language from RSS item if available
+            const expectedLanguage = getLanguageFromRssItem({
+              audio_languages: item.audio_languages,
+              title: item.title,
+            });
+            
+            const tmdbMovie = await tmdbClient.searchMovie(item.clean_title, item.year || undefined, expectedLanguage);
             if (tmdbMovie) {
               // Validate match
               let isValidMatch = true;

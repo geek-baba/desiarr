@@ -217,8 +217,15 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
               // Step 2: If we don't have TMDB ID but have clean title, try TMDB search FIRST (primary)
               if (!tmdbId && cleanTitle && tmdbApiKey) {
                 try {
-                  console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
-                  const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined);
+                  // Extract language from RSS item if available
+                  const expectedLanguage = getLanguageFromRssItem({
+                    audio_languages: parsed.audio_languages,
+                    title: parsed.title,
+                    description: originalItem.description || originalItem.content || '',
+                  });
+                  
+                  console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
+                  const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined, expectedLanguage);
                   if (tmdbMovie) {
                     console.log(`    TMDB search returned: "${tmdbMovie.title}" (ID: ${tmdbMovie.id}, Year: ${tmdbMovie.release_date ? new Date(tmdbMovie.release_date).getFullYear() : 'unknown'})`);
                     // Validate year match if we have a year
@@ -1031,8 +1038,14 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
           // Step 3: Try TMDB search
           if (!tmdbId && cleanTitle && tmdbApiKey) {
             try {
-              console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}`);
-              const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined);
+              // Extract language from RSS item if available
+              const expectedLanguage = getLanguageFromRssItem({
+                audio_languages: item.audio_languages,
+                title: item.title,
+              });
+              
+              console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
+              const tmdbMovie = await tmdbClient.searchMovie(cleanTitle, year || undefined, expectedLanguage);
               if (tmdbMovie) {
                 console.log(`    TMDB search returned: "${tmdbMovie.title}" (ID: ${tmdbMovie.id}, Year: ${tmdbMovie.release_date ? new Date(tmdbMovie.release_date).getFullYear() : 'unknown'})`);
                 let isValidMatch = true;
@@ -1064,8 +1077,14 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
           // Step 3b: Try normalized title
           if (!tmdbId && tmdbApiKey && parsed.normalized_title && parsed.normalized_title !== cleanTitle) {
             try {
-              console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}`);
-              const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined);
+              // Extract language from RSS item if available
+              const expectedLanguage = getLanguageFromRssItem({
+                audio_languages: item.audio_languages,
+                title: item.title,
+              });
+              
+              console.log(`    Searching TMDB (normalized) for: "${parsed.normalized_title}" ${year ? `(${year})` : ''}${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
+              const tmdbMovie = await tmdbClient.searchMovie(parsed.normalized_title, year || undefined, expectedLanguage);
               if (tmdbMovie) {
                 let isValidMatch = true;
                 if (year && tmdbMovie.release_date) {
