@@ -7,6 +7,7 @@ import imdbClient from '../imdb/client';
 import braveClient from '../brave/client';
 import { settingsModel } from '../models/settings';
 import { syncProgress } from './syncProgress';
+import { getLanguageFromRssItem } from '../utils/titleSimilarity';
 
 const parser = new Parser();
 
@@ -221,7 +222,7 @@ export async function syncRssFeeds(): Promise<RssSyncStats> {
                   const expectedLanguage = getLanguageFromRssItem({
                     audio_languages: parsed.audio_languages,
                     title: parsed.title,
-                    description: originalItem.description || originalItem.content || '',
+                    description: item.description || item.content || item.contentSnippet || '',
                   });
                   
                   console.log(`    Searching TMDB for: "${cleanTitle}" ${year ? `(${year})` : ''}${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
@@ -830,7 +831,7 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
     // Get all items missing TMDB or IMDB IDs, OR items with both IDs (to validate they match)
     // Exclude items with manually set IDs (they won't be overwritten)
     const itemsToEnrich = db.prepare(`
-      SELECT id, guid, title, clean_title, year, tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual, feed_id, feed_name, raw_data, link
+      SELECT id, guid, title, clean_title, year, tmdb_id, imdb_id, tmdb_id_manual, imdb_id_manual, feed_id, feed_name, raw_data, link, audio_languages
       FROM rss_feed_items
       WHERE (tmdb_id IS NULL OR imdb_id IS NULL OR (tmdb_id IS NOT NULL AND imdb_id IS NOT NULL))
         AND (tmdb_id_manual = 0 OR tmdb_id_manual IS NULL)
@@ -847,6 +848,7 @@ export async function backfillMissingIds(): Promise<{ processed: number; updated
       tmdb_id_manual: number | null;
       imdb_id_manual: number | null;
       feed_id: number;
+      audio_languages: string | null;
       feed_name: string;
       raw_data: string | null;
       link: string;
