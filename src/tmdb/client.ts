@@ -286,7 +286,7 @@ class TMDBClient {
     return `https://image.tmdb.org/t/p/w500${posterPath}`;
   }
 
-  async searchTv(query: string): Promise<any[] | null> {
+  async searchTv(query: string, expectedLanguage?: string | null): Promise<any | null> {
     if (!this.apiKey) {
       console.log('TMDB API key not configured, skipping TV search');
       return null;
@@ -301,7 +301,37 @@ class TMDBClient {
         },
       });
       
-      return response.data.results || [];
+      const results = response.data.results || [];
+      
+      if (results.length === 0) {
+        return null;
+      }
+      
+      // Import similarity utilities dynamically to avoid circular dependencies
+      const { scoreTmdbMatch } = await import('../utils/titleSimilarity');
+      
+      // Score all results and select the best match
+      const scoredResults = results
+        .map((show: any) => ({
+          show,
+          score: scoreTmdbMatch(query, {
+            title: show.name || '',
+            original_title: show.original_name || '',
+            original_language: show.original_language || '',
+          }, expectedLanguage),
+        }))
+        .sort((a: { show: any; score: number }, b: { show: any; score: number }) => b.score - a.score); // Sort by score descending
+      
+      if (scoredResults.length > 0) {
+        const bestMatch = scoredResults[0];
+        console.log(`    Selected best match: "${bestMatch.show.name}" (score: ${bestMatch.score.toFixed(3)}, language: ${bestMatch.show.original_language || 'unknown'})`);
+        if (scoredResults.length > 1) {
+          console.log(`    Considered ${scoredResults.length} results`);
+        }
+        return bestMatch.show;
+      }
+      
+      return null;
     } catch (error: any) {
       // Log search errors (usually not 404s, but network/rate limit issues)
       console.error('TMDB TV search error:', error?.response?.status || error?.message || error);

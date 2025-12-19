@@ -11,6 +11,7 @@ import { getSyncedSonarrShowByTvdbId, getSyncedSonarrShowBySonarrId, findSonarrS
 import { feedsModel } from '../models/feeds';
 import { syncProgress } from './syncProgress';
 import { ignoredShowsModel, buildShowKey } from '../models/ignoredShows';
+import { calculateTitleSimilarity, getLanguageFromRssItem } from '../utils/titleSimilarity';
 
 export interface TvMatchingStats {
   totalRssItems: number;
@@ -116,7 +117,8 @@ async function enrichTvShow(
   tvdbApiKey: string | undefined,
   tmdbApiKey: string | undefined,
   omdbApiKey: string | undefined,
-  braveApiKey: string | undefined
+  braveApiKey: string | undefined,
+  expectedLanguage?: string | null
 ): Promise<{
   tvdbId: number | null;
   tvdbSlug: string | null;
@@ -138,8 +140,26 @@ async function enrichTvShow(
       console.log(`    Searching TVDB for: "${showName}"`);
       const tvdbResults = await tvdbClient.searchSeries(showName);
       if (tvdbResults && tvdbResults.length > 0) {
-        // Take the first result (best match)
-        const tvdbShow = tvdbResults[0];
+        // Score all results by title similarity and select best match
+        const scoredResults = tvdbResults
+          .map((series: any) => {
+            const seriesName = series.name || series.title || '';
+            const similarity = calculateTitleSimilarity(showName, seriesName);
+            return {
+              series,
+              similarity,
+            };
+          })
+          .sort((a, b) => b.similarity - a.similarity); // Sort by similarity descending
+        
+        const bestMatch = scoredResults[0];
+        const tvdbShow = bestMatch.series;
+        
+        console.log(`    Selected best TVDB match: "${tvdbShow.name || tvdbShow.title}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
+        if (scoredResults.length > 1) {
+          console.log(`    Considered ${scoredResults.length} TVDB results`);
+        }
+        
         // TVDB v4 API uses 'tvdb_id' or 'id' field
         tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
         // Extract slug from search result (TVDB v4 API may include slug, nameSlug, or slug field)
@@ -202,25 +222,26 @@ async function enrichTvShow(
   }
 
   // Step 2: If TMDB ID not found, search TMDB directly
+  // Note: searchTv now returns a single best match (scored by similarity)
   if (!tmdbId && tmdbApiKey) {
     try {
-      console.log(`    Searching TMDB for: "${showName}"`);
-      const tmdbResults = await tmdbClient.searchTv(showName);
-      if (tmdbResults && tmdbResults.length > 0) {
-        tmdbId = tmdbResults[0].id;
-        console.log(`    ✓ Found TMDB ID: ${tmdbId}`);
+      console.log(`    Searching TMDB for: "${showName}"${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
+      const tmdbShow = await tmdbClient.searchTv(showName, expectedLanguage);
+      if (tmdbShow) {
+        tmdbId = tmdbShow.id;
+        console.log(`    ✓ Found TMDB ID: ${tmdbId} (${tmdbShow.name})`);
         
         // Get TMDB show details for poster and IMDB ID
         if (tmdbId) {
-          const tmdbShow = await tmdbClient.getTvShow(tmdbId);
-          if (tmdbShow) {
-          if (tmdbShow.poster_path) {
-            tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
-          }
-          if (tmdbShow.external_ids?.imdb_id) {
-            imdbId = tmdbShow.external_ids.imdb_id;
-            console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
-          }
+          const tmdbShowDetails = await tmdbClient.getTvShow(tmdbId);
+          if (tmdbShowDetails) {
+            if (tmdbShowDetails.poster_path) {
+              tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShowDetails.poster_path}`;
+            }
+            if (tmdbShowDetails.external_ids?.imdb_id) {
+              imdbId = tmdbShowDetails.external_ids.imdb_id;
+              console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
+            }
           }
         }
       }
@@ -571,13 +592,20 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
             
             // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
+            // Extract language from RSS item if available
+            const expectedLanguage = getLanguageFromRssItem({
+              audio_languages: item.audio_languages,
+              title: item.title,
+            });
+            
             enrichment = await enrichTvShow(
               showName,
               season,
               tvdbApiKey,
               tmdbApiKey,
               omdbApiKey,
-              braveApiKey
+              braveApiKey,
+              expectedLanguage
             );
           }
         }
