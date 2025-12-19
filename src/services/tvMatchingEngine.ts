@@ -179,7 +179,19 @@ async function enrichTvShow(
           const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
           if (tvdbExtended) {
             // Extract show title from TVDB extended info
-            tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || tvdbShow.name || tvdbShow.title || null;
+            // Prefer English translation if available, otherwise use original name
+            const nameTranslations = (tvdbExtended as any).nameTranslations || [];
+            const hasEnglishTranslation = nameTranslations.includes('eng');
+            
+            if (hasEnglishTranslation) {
+              // Try to get English translation - TVDB v4 may have translations endpoint
+              // For now, use TMDB title as fallback (will be set later if available)
+              // Keep original name as fallback
+              tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || tvdbShow.name || tvdbShow.title || null;
+            } else {
+              // No English translation, use original name
+              tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || tvdbShow.name || tvdbShow.title || null;
+            }
             
             // Extract slug from extended info if not found in search result
             if (!tvdbSlug) {
@@ -242,8 +254,13 @@ async function enrichTvShow(
         if (tmdbId) {
           const tmdbShowDetails = await tmdbClient.getTvShow(tmdbId);
           if (tmdbShowDetails) {
-            // Extract show title from TMDB
+            // Extract show title from TMDB (typically in English)
             tmdbTitle = tmdbShowDetails.name || null;
+            
+            // If we have TMDB title (English), prefer it over TVDB title (original language)
+            if (tmdbTitle && !tvdbTitle) {
+              tvdbTitle = tmdbTitle; // Use TMDB English title as TVDB title fallback
+            }
             
             if (tmdbShowDetails.poster_path) {
               tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShowDetails.poster_path}`;
@@ -513,7 +530,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             try {
               const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
               if (tvdbExtended) {
-                // Extract show title from TVDB extended info
+                // Extract show title from TVDB extended info (will prefer TMDB English title later if available)
                 enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || null;
                 enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
                 
@@ -566,8 +583,13 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             try {
               const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
               if (tmdbShow) {
-                // Extract show title from TMDB
+                // Extract show title from TMDB (typically in English)
                 enrichment.tmdbTitle = tmdbShow.name || null;
+                
+                // Prefer TMDB English title over TVDB original language title
+                if (enrichment.tmdbTitle && enrichment.tvdbTitle) {
+                  enrichment.tvdbTitle = enrichment.tmdbTitle; // Use English title
+                }
                 
                 if (tmdbShow.poster_path) {
                   enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
@@ -595,7 +617,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             enrichment = {
               tvdbId: sonarrShow.tvdb_id || null,
               tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
-              tvdbTitle: sonarrShow.title || null, // Use Sonarr title as TVDB title
+              tvdbTitle: sonarrShow.title || null, // Use Sonarr title as initial TVDB title
               tmdbId: sonarrShow.tmdb_id || null,
               tmdbTitle: null,
               imdbId: sonarrShow.imdb_id || null,
@@ -608,7 +630,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
               try {
                 const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
                 if (tvdbExtended) {
-                  // Update title from TVDB if available (more accurate than Sonarr title)
+                  // Update title from TVDB if available (will prefer TMDB English title later if available)
                   enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || enrichment.tvdbTitle;
                   enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
                 }
@@ -727,8 +749,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           ? existingRelease.sonarr_series_title
           : (sonarrCheck.sonarrSeriesTitle ?? undefined);
         
-        // Use actual show title from TVDB/TMDB if available, otherwise fallback to parsed showName
-        const actualShowName = enrichment.tvdbTitle || enrichment.tmdbTitle || showName;
+        // Use actual show title from TMDB (English) or TVDB, otherwise fallback to parsed showName
+        // Prefer TMDB title as it's typically in English, then TVDB title, then parsed showName
+        const actualShowName = enrichment.tmdbTitle || enrichment.tvdbTitle || showName;
         
         const tvRelease: Omit<TvRelease, 'id'> = {
           guid: String(item.guid || ''),

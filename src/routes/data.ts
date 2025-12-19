@@ -1636,11 +1636,74 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
 
     // Run enrichment logic (same as in rssSync.ts)
     // Skip enrichment if user explicitly provided IDs (they selected a match)
-    const skipEnrichment = (userTmdbId !== null || userImdbId !== null);
-    const needsEnrichment = !skipEnrichment && (!tmdbId || !imdbId);
+    const skipEnrichment = (userTmdbId !== null || userImdbId !== null || userTvdbId !== null);
+    const needsEnrichment = !skipEnrichment && ((feedType === 'tv' && !tvdbId) || (feedType === 'movie' && (!tmdbId || !imdbId)));
     
     if (skipEnrichment) {
       console.log(`  [MATCH] Skipping enrichment - user provided IDs directly`);
+    }
+
+    // For TV shows, search TVDB first if we don't have TVDB ID
+    if (feedType === 'tv' && !tvdbId && tvdbApiKey && showName && needsEnrichment) {
+      try {
+        console.log(`    Searching TVDB for: "${showName}"`);
+        tvdbClient.updateConfig();
+        const tvdbResults = await tvdbClient.searchSeries(showName);
+        if (tvdbResults && tvdbResults.length > 0) {
+          // Score results by title similarity
+          const { calculateTitleSimilarity } = await import('../utils/titleSimilarity');
+          const scoredResults = tvdbResults
+            .map((series: any) => {
+              const seriesName = series.name || series.title || '';
+              const similarity = calculateTitleSimilarity(showName, seriesName);
+              return { series, similarity };
+            })
+            .sort((a, b) => b.similarity - a.similarity);
+          
+          const bestMatch = scoredResults[0];
+          const tvdbShow = bestMatch.series;
+          tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
+          
+          if (tvdbId) {
+            console.log(`    ✓ Found TVDB ID: ${tvdbId} (${tvdbShow.name || tvdbShow.title})`);
+            
+            // Get extended info to extract TMDB/IMDB IDs
+            try {
+              const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
+              if (tvdbExtended) {
+                const remoteIds = (tvdbExtended as any).remoteIds || [];
+                const tmdbRemote = remoteIds.find((r: any) => 
+                  r.sourceName === 'TheMovieDB.com' || 
+                  r.sourceName === 'TheMovieDB' || 
+                  r.source_name === 'TheMovieDB.com' || 
+                  r.source_name === 'TheMovieDB' ||
+                  r.source === 'themoviedb'
+                );
+                const imdbRemote = remoteIds.find((r: any) => 
+                  r.sourceName === 'IMDB' || 
+                  r.source_name === 'IMDB' || 
+                  r.source === 'imdb'
+                );
+                
+                if (tmdbRemote && tmdbRemote.id && !tmdbId) {
+                  tmdbId = parseInt(tmdbRemote.id, 10);
+                  console.log(`    ✓ Found TMDB ID from TVDB: ${tmdbId}`);
+                }
+                if (imdbRemote && imdbRemote.id && !imdbId) {
+                  imdbId = String(imdbRemote.id);
+                  console.log(`    ✓ Found IMDB ID from TVDB: ${imdbId}`);
+                }
+              }
+            } catch (error) {
+              console.log(`    ⚠ Failed to fetch TVDB extended info:`, error);
+            }
+          }
+        } else {
+          console.log(`    ✗ TVDB search returned no results for "${showName}"`);
+        }
+      } catch (error: any) {
+        console.log(`    ✗ TVDB search failed:`, error?.message || error);
+      }
     }
 
     if (needsEnrichment) {
@@ -1872,6 +1935,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         // Fetch TVDB extended info to get slug and poster
         let tvdbSlug: string | null = null;
         let tvdbPosterUrl: string | null = null;
+        let showTitle: string | null = null;
         
         if (tvdbApiKey) {
           try {
@@ -1886,17 +1950,43 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
                   tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
                 }
               }
+              
+              // Get English title from TMDB if available, otherwise use TVDB title
+              if (tmdbId && tmdbApiKey) {
+                try {
+                  const tmdbShow = await tmdbClient.getTvShow(tmdbId);
+                  if (tmdbShow && tmdbShow.name) {
+                    showTitle = tmdbShow.name; // Prefer TMDB English title
+                  }
+                } catch (error) {
+                  // Ignore TMDB errors
+                }
+              }
+              
+              // Fallback to TVDB title if TMDB title not available
+              if (!showTitle) {
+                showTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || null;
+              }
             }
           } catch (error) {
             console.log(`  ⚠ Failed to fetch TVDB extended info:`, error);
           }
         }
         
-        db.prepare(`
-          UPDATE tv_releases 
-          SET tvdb_id = ?, tvdb_slug = ?, last_checked_at = datetime('now')
-          WHERE guid = ?
-        `).run(tvdbId, tvdbSlug, item.guid);
+        // Update TV release with TVDB ID, slug, and English title
+        if (showTitle) {
+          db.prepare(`
+            UPDATE tv_releases 
+            SET tvdb_id = ?, tvdb_slug = ?, show_name = ?, sonarr_series_title = ?, last_checked_at = datetime('now')
+            WHERE guid = ?
+          `).run(tvdbId, tvdbSlug, showTitle, showTitle, item.guid);
+        } else {
+          db.prepare(`
+            UPDATE tv_releases 
+            SET tvdb_id = ?, tvdb_slug = ?, last_checked_at = datetime('now')
+            WHERE guid = ?
+          `).run(tvdbId, tvdbSlug, item.guid);
+        }
       }
     }
 
