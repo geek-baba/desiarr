@@ -168,13 +168,20 @@ async function enrichTvShow(
             }
             
             // Extract TMDB and IMDB IDs from extended info
+            // TVDB v4 API uses sourceName field with values "TheMovieDB.com" and "IMDB"
             const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids;
             if (remoteIds && Array.isArray(remoteIds)) {
               const tmdbRemote = remoteIds.find((r: any) => 
-                r.sourceName === 'TheMovieDB' || r.source_name === 'TheMovieDB' || r.source === 'themoviedb'
+                r.sourceName === 'TheMovieDB.com' || 
+                r.sourceName === 'TheMovieDB' || 
+                r.source_name === 'TheMovieDB.com' || 
+                r.source_name === 'TheMovieDB' ||
+                r.source === 'themoviedb'
               );
               const imdbRemote = remoteIds.find((r: any) => 
-                r.sourceName === 'IMDB' || r.source_name === 'IMDB' || r.source === 'imdb'
+                r.sourceName === 'IMDB' || 
+                r.source_name === 'IMDB' || 
+                r.source === 'imdb'
               );
               
               if (tmdbRemote && tmdbRemote.id) {
@@ -469,22 +476,31 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
                 }
                 
                 // Extract TMDB/IMDB IDs from TVDB if not already set
+                // TVDB v4 API uses sourceName field with values "TheMovieDB.com" and "IMDB"
                 const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids;
                 if (remoteIds && Array.isArray(remoteIds)) {
                   if (!enrichment.tmdbId) {
                     const tmdbRemote = remoteIds.find((r: any) => 
-                      r.sourceName === 'TheMovieDB' || r.source_name === 'TheMovieDB' || r.source === 'themoviedb'
+                      r.sourceName === 'TheMovieDB.com' || 
+                      r.sourceName === 'TheMovieDB' || 
+                      r.source_name === 'TheMovieDB.com' || 
+                      r.source_name === 'TheMovieDB' ||
+                      r.source === 'themoviedb'
                     );
                     if (tmdbRemote && tmdbRemote.id) {
                       enrichment.tmdbId = parseInt(String(tmdbRemote.id), 10);
+                      console.log(`    ✓ Found TMDB ID from TVDB extended info: ${enrichment.tmdbId}`);
                     }
                   }
                   if (!enrichment.imdbId) {
                     const imdbRemote = remoteIds.find((r: any) => 
-                      r.sourceName === 'IMDB' || r.source_name === 'IMDB' || r.source === 'imdb'
+                      r.sourceName === 'IMDB' || 
+                      r.source_name === 'IMDB' || 
+                      r.source === 'imdb'
                     );
                     if (imdbRemote && imdbRemote.id) {
                       enrichment.imdbId = String(imdbRemote.id);
+                      console.log(`    ✓ Found IMDB ID from TVDB extended info: ${enrichment.imdbId}`);
                     }
                   }
                 }

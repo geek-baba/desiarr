@@ -905,9 +905,21 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
         }
         
         // TVDB v4 structure - check for remoteIds
+        // TVDB v4 API uses sourceName field with values "TheMovieDB.com" and "IMDB"
         const remoteIds = (tvdbExtended as any).remoteIds || [];
-        const tmdbRemote = remoteIds.find((r: any) => r.source === 'tmdb' || r.source === 'themoviedb');
-        const imdbRemote = remoteIds.find((r: any) => r.source === 'imdb');
+        const tmdbRemote = remoteIds.find((r: any) => 
+          r.sourceName === 'TheMovieDB.com' || 
+          r.sourceName === 'TheMovieDB' || 
+          r.source_name === 'TheMovieDB.com' || 
+          r.source_name === 'TheMovieDB' ||
+          r.source === 'tmdb' || 
+          r.source === 'themoviedb'
+        );
+        const imdbRemote = remoteIds.find((r: any) => 
+          r.sourceName === 'IMDB' || 
+          r.source_name === 'IMDB' || 
+          r.source === 'imdb'
+        );
         
         if (tmdbRemote && tmdbRemote.id) {
           tmdbId = parseInt(tmdbRemote.id, 10);
