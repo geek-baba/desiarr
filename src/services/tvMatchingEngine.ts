@@ -122,14 +122,18 @@ async function enrichTvShow(
 ): Promise<{
   tvdbId: number | null;
   tvdbSlug: string | null;
+  tvdbTitle: string | null;
   tmdbId: number | null;
+  tmdbTitle: string | null;
   imdbId: string | null;
   tvdbPosterUrl: string | null;
   tmdbPosterUrl: string | null;
 }> {
   let tvdbId: number | null = null;
   let tvdbSlug: string | null = null;
+  let tvdbTitle: string | null = null;
   let tmdbId: number | null = null;
+  let tmdbTitle: string | null = null;
   let imdbId: string | null = null;
   let tvdbPosterUrl: string | null = null;
   let tmdbPosterUrl: string | null = null;
@@ -174,6 +178,9 @@ async function enrichTvShow(
           // Get extended info for poster and other IDs
           const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
           if (tvdbExtended) {
+            // Extract show title from TVDB extended info
+            tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || tvdbShow.name || tvdbShow.title || null;
+            
             // Extract slug from extended info if not found in search result
             if (!tvdbSlug) {
               tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
@@ -235,6 +242,9 @@ async function enrichTvShow(
         if (tmdbId) {
           const tmdbShowDetails = await tmdbClient.getTvShow(tmdbId);
           if (tmdbShowDetails) {
+            // Extract show title from TMDB
+            tmdbTitle = tmdbShowDetails.name || null;
+            
             if (tmdbShowDetails.poster_path) {
               tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShowDetails.poster_path}`;
             }
@@ -273,6 +283,18 @@ async function enrichTvShow(
       if (braveResult) {
         tvdbId = braveResult;
         console.log(`    ✓ Found TVDB ID from Brave: ${tvdbId}`);
+        
+        // Fetch title from TVDB if we have API key
+        if (tvdbApiKey) {
+          try {
+            const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
+            if (tvdbExtended) {
+              tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || null;
+            }
+          } catch (error) {
+            // Ignore errors, title is optional
+          }
+        }
       }
     } catch (error: any) {
       console.log(`    ✗ Brave search failed:`, error?.message || error);
@@ -282,7 +304,9 @@ async function enrichTvShow(
   return {
     tvdbId,
     tvdbSlug,
+    tvdbTitle,
     tmdbId,
+    tmdbTitle,
     imdbId,
     tvdbPosterUrl,
     tmdbPosterUrl,
@@ -460,7 +484,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         let enrichment: {
           tvdbId: number | null;
           tvdbSlug: string | null;
+          tvdbTitle: string | null;
           tmdbId: number | null;
+          tmdbTitle: string | null;
           imdbId: string | null;
           tvdbPosterUrl: string | null;
           tmdbPosterUrl: string | null;
@@ -474,7 +500,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           enrichment = {
             tvdbId: hasManualTvdbId ? item.tvdb_id : null,
             tvdbSlug: null,
+            tvdbTitle: null,
             tmdbId: hasManualTmdbId ? item.tmdb_id : null,
+            tmdbTitle: null,
             imdbId: item.imdb_id || null,
             tvdbPosterUrl: null,
             tmdbPosterUrl: null,
@@ -485,6 +513,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             try {
               const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
               if (tvdbExtended) {
+                // Extract show title from TVDB extended info
+                enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || null;
                 enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
                 
                 // Extract poster URL
@@ -535,11 +565,16 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           if (enrichment.tmdbId && tmdbApiKey) {
             try {
               const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
-              if (tmdbShow && tmdbShow.poster_path) {
-                enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
-              }
-              if (tmdbShow && tmdbShow.external_ids?.imdb_id && !enrichment.imdbId) {
-                enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+              if (tmdbShow) {
+                // Extract show title from TMDB
+                enrichment.tmdbTitle = tmdbShow.name || null;
+                
+                if (tmdbShow.poster_path) {
+                  enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+                }
+                if (tmdbShow.external_ids?.imdb_id && !enrichment.imdbId) {
+                  enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+                }
               }
             } catch (error) {
               console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
@@ -560,17 +595,21 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             enrichment = {
               tvdbId: sonarrShow.tvdb_id || null,
               tvdbSlug: null, // Not available from Sonarr, will need to fetch from TVDB API if needed
+              tvdbTitle: sonarrShow.title || null, // Use Sonarr title as TVDB title
               tmdbId: sonarrShow.tmdb_id || null,
+              tmdbTitle: null,
               imdbId: sonarrShow.imdb_id || null,
               tvdbPosterUrl: null, // Will extract from images if available
               tmdbPosterUrl: null, // Will extract from images if available
             };
             
-            // If we have TVDB ID from Sonarr, try to get slug from TVDB API
+            // If we have TVDB ID from Sonarr, try to get slug and title from TVDB API
             if (enrichment.tvdbId && tvdbApiKey) {
               try {
                 const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
                 if (tvdbExtended) {
+                  // Update title from TVDB if available (more accurate than Sonarr title)
+                  enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || enrichment.tvdbTitle;
                   enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
                 }
               } catch (error) {
@@ -688,11 +727,14 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           ? existingRelease.sonarr_series_title
           : (sonarrCheck.sonarrSeriesTitle ?? undefined);
         
+        // Use actual show title from TVDB/TMDB if available, otherwise fallback to parsed showName
+        const actualShowName = enrichment.tvdbTitle || enrichment.tmdbTitle || showName;
+        
         const tvRelease: Omit<TvRelease, 'id'> = {
           guid: String(item.guid || ''),
           title: String(item.title || ''),
           normalized_title: String(item.normalized_title || ''),
-          show_name: showName,
+          show_name: actualShowName,
           season_number: season ?? undefined,
           source_site: String(item.source_site || ''),
           feed_id: Number(item.feed_id || 0),
