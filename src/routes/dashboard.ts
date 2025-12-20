@@ -961,7 +961,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     const unmatchedTvShows: typeof showGroups = [];
 
     for (const group of filteredShowGroups) {
-      if (!group.tvdbId && !group.tmdbId && !group.sonarrSeriesId) {
+      // Check if this is an unmatched item (no TVDB ID and no TMDB ID and no Sonarr ID)
+      // OR has TVDB/TMDB ID but no Sonarr ID and has unmatched releases (needs matching/re-evaluation)
+      if ((!group.tvdbId && !group.tmdbId && !group.sonarrSeriesId) || 
+          (group.unmatched.length > 0 && !group.sonarrSeriesId)) {
         unmatchedTvShows.push(group);
       } else if (group.sonarrSeriesId || group.existingShows.length > 0) {
         existingTvShows.push(group);
@@ -1870,8 +1873,10 @@ router.get('/tv', async (req: Request, res: Response) => {
       const existingShows = releases.filter(r => r.sonarr_series_id && (r.status === 'IGNORED' || r.status === 'ADDED'));
       // Unmatched: no TVDB ID, no TMDB ID, and no Sonarr ID
       // OR has TMDB ID but no TVDB ID and no Sonarr ID (needs matching)
+      // OR has TVDB ID but no Sonarr ID and status is IGNORED (was ignored but now has TVDB ID, needs re-evaluation)
       const unmatched = releases.filter(r => (!r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id) || 
-                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON'));
+                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON') ||
+                                            (r.tvdb_id && !r.sonarr_series_id && r.status === 'IGNORED'));
 
       // Get poster URL from any release
       let posterUrl: string | undefined;
@@ -1983,7 +1988,9 @@ router.get('/tv', async (req: Request, res: Response) => {
 
     for (const group of filteredShowGroups) {
       // Check if this is an unmatched item (no TVDB ID and no TMDB ID and no Sonarr ID)
-      if (!group.tvdbId && !group.tmdbId && !group.sonarrSeriesId) {
+      // OR has TVDB/TMDB ID but no Sonarr ID and has unmatched releases (needs matching/re-evaluation)
+      if ((!group.tvdbId && !group.tmdbId && !group.sonarrSeriesId) || 
+          (group.unmatched.length > 0 && !group.sonarrSeriesId)) {
         unmatchedItems.push(group);
       } else if (group.sonarrSeriesId || group.existingShows.length > 0) {
         // Show is in Sonarr or has existing releases - goes to "Existing TVShows"
