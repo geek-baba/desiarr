@@ -134,13 +134,19 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     const radarrApiUrl = allSettings.find(s => s.key === 'radarr_api_url')?.value || '';
     let radarrBaseUrl = '';
     if (radarrApiUrl) {
-      radarrBaseUrl = radarrApiUrl.replace(/\/api\/v3\/?$/i, '').replace(/\/$/, '');
+      // Remove /api/v3 or /api/v3/ from the end (case insensitive)
+      radarrBaseUrl = radarrApiUrl
+        .replace(/\/api\/v3\/?$/i, '')  // Remove /api/v3 or /api/v3/
+        .replace(/\/$/, '');              // Remove trailing slash
     }
     
     const sonarrApiUrl = allSettings.find(s => s.key === 'sonarr_api_url')?.value || '';
     let sonarrBaseUrl = '';
     if (sonarrApiUrl) {
-      sonarrBaseUrl = sonarrApiUrl.replace(/\/api\/v3\/?$/i, '').replace(/\/$/, '');
+      // Remove /api/v3 or /api/v3/ from the end (case insensitive)
+      sonarrBaseUrl = sonarrApiUrl
+        .replace(/\/api\/v3\/?$/i, '')  // Remove /api/v3 or /api/v3/
+        .replace(/\/$/, '');              // Remove trailing slash
     }
 
     const lastRefreshResult = db.prepare("SELECT value FROM app_settings WHERE key = 'matching_last_run'").get() as { value: string } | undefined;
