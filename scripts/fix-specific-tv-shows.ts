@@ -225,6 +225,23 @@ async function fix90sMiddleClassBiopic() {
       `).run(correctShowName, release.id);
       
       console.log(`  ✓ Cleared incorrect IDs and updated show name to "${correctShowName}"`);
+      
+      // Also clear TVDB ID from RSS feed items for this release
+      const rssItems = db.prepare(`
+        SELECT id, tvdb_id FROM rss_feed_items WHERE guid = ?
+      `).all(release.guid) as Array<{id: number; tvdb_id: number | null}>;
+      
+      for (const rssItem of rssItems) {
+        if (rssItem.tvdb_id === 425282) {
+          console.log(`  ✓ Clearing TVDB ID from RSS feed item ${rssItem.id}`);
+          db.prepare(`
+            UPDATE rss_feed_items SET
+              tvdb_id = NULL,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(rssItem.id);
+        }
+      }
     } else if (release.show_name !== correctShowName) {
       // Just update the show name if it's different
       console.log(`  ✓ Updating show name to "${correctShowName}"`);
