@@ -152,8 +152,13 @@
         <!-- Sonarr Link -->
         <% if (show.sonarrSeriesId && typeof sonarrBaseUrl !== 'undefined' && sonarrBaseUrl) { %>
           <% 
-            // Use slug if available, otherwise fall back to numeric ID
-            const sonarrLinkPath = show.sonarrSeriesSlug ? show.sonarrSeriesSlug : show.sonarrSeriesId;
+            // Sonarr uses TVDB slug format but with triple dashes instead of single dashes
+            // Convert TVDB slug (single dashes) to Sonarr format (triple dashes)
+            let sonarrLinkPath = show.sonarrSeriesId; // Fallback to ID
+            if (show.tvdbSlug) {
+              // Replace single dashes with triple dashes for Sonarr URL format
+              sonarrLinkPath = show.tvdbSlug.replace(/-/g, '---');
+            }
           %>
           <a 
             href="<%= sonarrBaseUrl %>/series/<%= sonarrLinkPath %>" 

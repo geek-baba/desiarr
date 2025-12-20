@@ -168,9 +168,9 @@
         <% } %>
 
         <!-- Radarr Link -->
-        <% if (movie.radarrMovieId && typeof radarrBaseUrl !== 'undefined') { %>
+        <% if (movie.radarrMovieId && movie.tmdbId && typeof radarrBaseUrl !== 'undefined') { %>
           <a 
-            href="<%= radarrBaseUrl %>/movie/<%= movie.radarrMovieId %>" 
+            href="<%= radarrBaseUrl %>/movie/<%= movie.tmdbId %>" 
             target="_blank" 
             rel="noreferrer" 
             class="icon-btn inline-flex items-center justify-center" 
