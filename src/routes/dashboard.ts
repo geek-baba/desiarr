@@ -6,7 +6,7 @@ import { settingsModel } from '../models/settings';
 import { config } from '../config';
 import { Release } from '../types/Release';
 import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId, syncRadarrMovies } from '../services/radarrSync';
-import { syncSonarrShows } from '../services/sonarrSync';
+import { syncSonarrShows, getSyncedSonarrShowBySonarrId } from '../services/sonarrSync';
 import { syncRssFeeds } from '../services/rssSync';
 import { runMatchingEngine } from '../services/matchingEngine';
 import { runTvMatchingEngine } from '../services/tvMatchingEngine';

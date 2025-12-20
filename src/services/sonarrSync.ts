@@ -14,6 +14,7 @@ export interface SonarrSyncStats {
 interface SonarrSeries {
   id: number;
   title: string;
+  titleSlug?: string;
   year?: number;
   path?: string;
   monitored: boolean;
@@ -113,6 +114,7 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
             tmdb_id: (show as any).tmdbId || null, // Sonarr may have TMDB ID
             imdb_id: show.imdbId || null,
             title: show.title,
+            title_slug: show.titleSlug || null,
             year: show.year || null,
             path: show.path || null,
             monitored: show.monitored ? 1 : 0,
@@ -130,6 +132,7 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
                 tmdb_id = ?,
                 imdb_id = ?,
                 title = ?,
+                title_slug = ?,
                 year = ?,
                 path = ?,
                 monitored = ?,
@@ -144,6 +147,7 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
               showData.tmdb_id,
               showData.imdb_id,
               showData.title,
+              showData.title_slug,
               showData.year,
               showData.path,
               showData.monitored,
@@ -151,22 +155,23 @@ export async function syncSonarrShows(): Promise<SonarrSyncStats> {
               showData.images,
               showData.date_added,
               showData.synced_at,
-              show.id
+              showData.sonarr_id
             );
             stats.updated++;
           } else {
             // Insert new show
             db.prepare(`
               INSERT INTO sonarr_shows (
-                sonarr_id, tvdb_id, tmdb_id, imdb_id, title, year, path,
+                sonarr_id, tvdb_id, tmdb_id, imdb_id, title, title_slug, year, path,
                 monitored, seasons, images, date_added, synced_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
               showData.sonarr_id,
               showData.tvdb_id,
               showData.tmdb_id,
               showData.imdb_id,
               showData.title,
+              showData.title_slug,
               showData.year,
               showData.path,
               showData.monitored,

@@ -151,8 +151,12 @@
 
         <!-- Sonarr Link -->
         <% if (show.sonarrSeriesId && typeof sonarrBaseUrl !== 'undefined' && sonarrBaseUrl) { %>
+          <% 
+            // Use slug if available, otherwise fall back to numeric ID
+            const sonarrLinkPath = show.sonarrSeriesSlug ? show.sonarrSeriesSlug : show.sonarrSeriesId;
+          %>
           <a 
-            href="<%= sonarrBaseUrl %>/series/<%= show.sonarrSeriesId %>" 
+            href="<%= sonarrBaseUrl %>/series/<%= sonarrLinkPath %>" 
             target="_blank" 
             rel="noreferrer" 
             class="icon-btn inline-flex items-center justify-center" 

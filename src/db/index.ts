@@ -125,6 +125,7 @@ db.exec(`
     tmdb_id INTEGER,
     imdb_id TEXT,
     title TEXT NOT NULL,
+    title_slug TEXT,
     year INTEGER,
     path TEXT,
     monitored INTEGER NOT NULL DEFAULT 1,
@@ -519,6 +520,13 @@ if (!tvReleaseColumns.includes('tvdb_title')) {
 if (!tvReleaseColumns.includes('tmdb_title')) {
   db.exec('ALTER TABLE tv_releases ADD COLUMN tmdb_title TEXT');
   console.log('Added column: tv_releases.tmdb_title');
+}
+
+// Add title_slug column to sonarr_shows if it doesn't exist
+const sonarrShowsColumns = db.prepare("PRAGMA table_info(sonarr_shows)").all().map((col: any) => col.name);
+if (!sonarrShowsColumns.includes('title_slug')) {
+  db.exec('ALTER TABLE sonarr_shows ADD COLUMN title_slug TEXT');
+  console.log('Added column: sonarr_shows.title_slug');
 }
 
 db.exec(`
