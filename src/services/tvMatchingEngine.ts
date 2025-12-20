@@ -576,8 +576,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // Check if already processed
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
-        // Preserve sonarr_series_id if it was manually set (show was added to Sonarr)
-        const preserveSonarrId = existingRelease && existingRelease.sonarr_series_id;
+        // Preserve sonarr_series_id only if TVDB ID hasn't changed (to avoid preserving wrong show's ID)
+        // We'll check this later after we have the enrichment data
 
         // Parse show name and season from title (needed for both manual and auto paths)
         let { showName, season, year } = parseTvTitle(item.title);
@@ -893,16 +893,31 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           // Check by IDs (for shows found via external APIs)
           sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season);
           
-          // If we have a preserved sonarr_series_id but checkSonarrShow didn't find it
-          // (e.g., Sonarr sync hasn't run yet), preserve the existing ID
-          if (preserveSonarrId && !sonarrCheck.exists && existingRelease && existingRelease.sonarr_series_id) {
-            console.log(`    ⚠ Preserving sonarr_series_id ${existingRelease.sonarr_series_id} (show was manually added, Sonarr sync may not have run yet)`);
-            sonarrCheck = {
-              exists: true, // Treat as existing since it was manually added
-              sonarrSeriesId: existingRelease.sonarr_series_id,
-              sonarrSeriesTitle: existingRelease.sonarr_series_title || null,
-              seasonExists: true, // Assume season exists if manually added
-            };
+          // Only preserve sonarr_series_id if:
+          // 1. We have an existing release with sonarr_series_id
+          // 2. The TVDB ID hasn't changed (same show)
+          // 3. checkSonarrShow didn't find it (might be sync timing issue)
+          const tvdbIdUnchanged = existingRelease && 
+            existingRelease.tvdb_id && 
+            enrichment.tvdbId && 
+            existingRelease.tvdb_id === enrichment.tvdbId;
+          
+          if (tvdbIdUnchanged && !sonarrCheck.exists && existingRelease && existingRelease.sonarr_series_id) {
+            // Verify the sonarr_series_id actually points to a show with matching TVDB ID
+            const preservedSonarrShow = getSyncedSonarrShowBySonarrId(existingRelease.sonarr_series_id);
+            if (preservedSonarrShow && preservedSonarrShow.tvdb_id === enrichment.tvdbId) {
+              console.log(`    ⚠ Preserving sonarr_series_id ${existingRelease.sonarr_series_id} (TVDB ID matches, Sonarr sync may not have run yet)`);
+              sonarrCheck = {
+                exists: true, // Treat as existing since TVDB ID matches
+                sonarrSeriesId: existingRelease.sonarr_series_id,
+                sonarrSeriesTitle: existingRelease.sonarr_series_title || preservedSonarrShow.title || null,
+                seasonExists: true, // Assume season exists if manually added
+              };
+            } else {
+              console.log(`    ⚠ Clearing sonarr_series_id ${existingRelease.sonarr_series_id} - TVDB ID changed or show not found in Sonarr`);
+            }
+          } else if (existingRelease && existingRelease.sonarr_series_id && !tvdbIdUnchanged) {
+            console.log(`    ⚠ Clearing sonarr_series_id ${existingRelease.sonarr_series_id} - TVDB ID changed from ${existingRelease.tvdb_id} to ${enrichment.tvdbId}`);
           }
         }
 
@@ -936,14 +951,16 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const finalStatus = preserveStatus ? 'ADDED' : status;
 
         // Create or update tv_release
-        // Preserve sonarr_series_id if it was manually set (show was added to Sonarr)
-        // even if checkSonarrShow didn't find it (Sonarr sync may not have run yet)
-        const finalSonarrSeriesId: number | undefined = preserveSonarrId && existingRelease?.sonarr_series_id 
-          ? existingRelease.sonarr_series_id 
-          : (sonarrCheck.sonarrSeriesId ?? undefined);
-        const finalSonarrSeriesTitle: string | undefined = preserveSonarrId && existingRelease?.sonarr_series_title
-          ? existingRelease.sonarr_series_title
-          : (sonarrCheck.sonarrSeriesTitle ?? undefined);
+        // Only preserve sonarr_series_id if:
+        // 1. checkSonarrShow found it (show exists in Sonarr), OR
+        // 2. TVDB ID hasn't changed and we have a preserved ID (sync timing issue)
+        // Otherwise, clear it (TVDB ID changed or show was removed from Sonarr)
+        const finalSonarrSeriesId: number | undefined = sonarrCheck.exists 
+          ? (sonarrCheck.sonarrSeriesId ?? undefined)
+          : undefined; // Clear if not found
+        const finalSonarrSeriesTitle: string | undefined = sonarrCheck.exists
+          ? (sonarrCheck.sonarrSeriesTitle ?? undefined)
+          : undefined; // Clear if not found
         
         // If we detected ID mismatches in existing release, force re-enrichment BEFORE creating tvRelease
         // This must happen before we determine actualShowName and create tvRelease
