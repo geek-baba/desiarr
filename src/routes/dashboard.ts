@@ -821,6 +821,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       showKey: string;
       showName: string;
       tvdbId?: number;
+      tvdbSlug?: string;
       tvdbUrl?: string;
       tmdbId?: number;
       imdbId?: string;
@@ -878,6 +879,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         showKey,
         showName,
         tvdbId,
+        tvdbSlug, // Pass TVDB slug for Sonarr link construction (will be converted to triple dashes)
         tvdbUrl,
         tmdbId: primaryRelease.tmdb_id,
         imdbId: primaryRelease.imdb_id,
@@ -1804,6 +1806,7 @@ router.get('/tv', async (req: Request, res: Response) => {
       showKey: string;
       showName: string;
       tvdbId?: number;
+      tvdbSlug?: string;
       tvdbUrl?: string;  // TVDB URL for linking
       tmdbId?: number;
       imdbId?: string;
@@ -1868,6 +1871,7 @@ router.get('/tv', async (req: Request, res: Response) => {
         showKey,
         showName,
         tvdbId,
+        tvdbSlug, // Pass TVDB slug for Sonarr link construction (will be converted to triple dashes)
         tvdbUrl,
         tmdbId: primaryRelease.tmdb_id,
         imdbId: primaryRelease.imdb_id,
