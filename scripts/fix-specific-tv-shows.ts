@@ -182,25 +182,33 @@ async function fixScam1992() {
 async function fix90sMiddleClassBiopic() {
   console.log('\n=== Fixing 90\'s A Middle Class Biopic ===');
   
+  // First, find ALL releases with TVDB ID 425282 (Class) that might be incorrectly matched
+  const allClassReleases = db.prepare(`
+    SELECT * FROM tv_releases 
+    WHERE tvdb_id = 425282
+    ORDER BY id DESC
+  `).all() as TvRelease[];
+  
+  console.log(`Found ${allClassReleases.length} release(s) with TVDB ID 425282 (Class)`);
+  
+  // Also find releases that mention "90's" or "Middle Class Biopic"
   const releases = db.prepare(`
     SELECT * FROM tv_releases 
     WHERE show_name LIKE '%90%Middle%Class%Biopic%' 
        OR title LIKE '%90%Middle%Class%Biopic%'
-       OR show_name LIKE '%Class%' AND (tvdb_id = 425282 OR tmdb_id IS NULL)
+       OR (show_name LIKE '%90%' AND show_name LIKE '%Middle%Class%')
     ORDER BY id DESC
   `).all() as TvRelease[];
   
-  if (releases.length === 0) {
-    console.log('No "90\'s A Middle Class Biopic" releases found');
-    return;
-  }
-  
-  console.log(`Found ${releases.length} release(s)`);
+  console.log(`Found ${releases.length} release(s) matching "90's A Middle Class Biopic"`);
   
   const correctShowName = "90's A Middle Class Biopic";
   
-  // Remove incorrect TVDB ID (425282 is "Class") and fix titles
-  for (const release of releases) {
+  // Clear TVDB ID 425282 from all releases that might be "90's A Middle Class Biopic"
+  const allReleasesToFix = [...releases, ...allClassReleases];
+  const uniqueReleases = Array.from(new Map(allReleasesToFix.map(r => [r.id, r])).values());
+  
+  for (const release of uniqueReleases) {
     console.log(`\nUpdating release ID ${release.id}: "${release.show_name}"`);
     console.log(`  Current: TVDB=${release.tvdb_id}, show_name="${release.show_name}", tvdb_title="${release.tvdb_title}", tmdb_title="${release.tmdb_title}"`);
     
@@ -208,7 +216,8 @@ async function fix90sMiddleClassBiopic() {
     const isWrongMatch = release.tvdb_id === 425282 || 
                         release.show_name === 'Class' || 
                         release.tvdb_title === 'Class' ||
-                        release.tmdb_title === 'Class';
+                        release.tmdb_title === 'Class' ||
+                        (release.show_name && release.show_name.includes('90') && release.show_name.includes('Middle'));
     
     if (isWrongMatch) {
       console.log(`  ⚠ Removing incorrect match to "Class" (TVDB 425282)`);
@@ -242,8 +251,8 @@ async function fix90sMiddleClassBiopic() {
           `).run(rssItem.id);
         }
       }
-    } else if (release.show_name !== correctShowName) {
-      // Just update the show name if it's different
+    } else if (release.show_name !== correctShowName && (release.show_name?.includes('90') || release.show_name?.includes('Middle'))) {
+      // Just update the show name if it's different but related
       console.log(`  ✓ Updating show name to "${correctShowName}"`);
       
       db.prepare(`
@@ -254,7 +263,7 @@ async function fix90sMiddleClassBiopic() {
         WHERE id = ?
       `).run(correctShowName, correctShowName, release.id);
     } else {
-      console.log(`  ℹ Already correct, skipping`);
+      console.log(`  ℹ Skipping (not related to 90's A Middle Class Biopic)`);
     }
   }
 }
