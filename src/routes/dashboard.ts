@@ -822,6 +822,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       showName: string;
       tvdbId?: number;
       tvdbSlug?: string;
+      sonarrSeriesSlug?: string; // Sonarr's title_slug from API (preferred for Sonarr links)
       tvdbUrl?: string;
       tmdbId?: number;
       imdbId?: string;
@@ -872,6 +873,14 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       const tvdbSlug = primaryRelease.tvdb_slug;
       const tvdbUrl = getTvdbUrl(tvdbId, tvdbSlug, showName);
 
+      // Get Sonarr slug for link construction
+      // Prefer Sonarr's title_slug (from API) if available, otherwise use TVDB slug
+      let sonarrSeriesSlug: string | undefined = undefined;
+      if (primaryRelease.sonarr_series_id) {
+        const syncedShow = getSyncedSonarrShowBySonarrId(primaryRelease.sonarr_series_id);
+        sonarrSeriesSlug = syncedShow?.title_slug || undefined;
+      }
+
       // Get RSS item ID from first release (for re-categorization)
       const rssItemId = releases.find(r => r.rss_item_id)?.rss_item_id || null;
 
@@ -879,7 +888,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         showKey,
         showName,
         tvdbId,
-        tvdbSlug, // Pass TVDB slug for Sonarr link construction (will be converted to triple dashes)
+        tvdbSlug, // Pass TVDB slug as fallback
+        sonarrSeriesSlug, // Pass Sonarr's title_slug if available (preferred)
         tvdbUrl,
         tmdbId: primaryRelease.tmdb_id,
         imdbId: primaryRelease.imdb_id,
