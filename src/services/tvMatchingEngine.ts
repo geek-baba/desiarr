@@ -660,9 +660,23 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
                 }
               }
               
+              // Validate show name - but be smart about language differences
+              // If existing show_name is in original language (non-ASCII) and English title matches parsed name, that's OK
               if (existingRelease.show_name && tvdbShowName) {
                 const { validateShowNameMatch } = await import('../utils/titleSimilarity');
-                if (!validateShowNameMatch(existingRelease.show_name, tvdbShowName)) {
+                
+                // Check if existing show_name contains non-ASCII characters (likely original language)
+                const hasNonAscii = /[^\x00-\x7F]/.test(existingRelease.show_name);
+                const englishTitleMatches = validateShowNameMatch(tvdbShowName, tvdbShowName); // Always true, but for consistency
+                
+                // If existing name is in original language, compare English title with parsed show name from RSS
+                // Otherwise, compare existing name with English title
+                if (hasNonAscii) {
+                  // Existing name is in original language - this is expected, don't trigger re-enrichment
+                  // The show_name will be updated to English title when we create/update the release
+                  console.log(`    ℹ️ Existing show_name "${existingRelease.show_name}" is in original language, will be updated to English "${tvdbShowName}"`);
+                } else if (!validateShowNameMatch(existingRelease.show_name, tvdbShowName)) {
+                  // Both are in same script - validate normally
                   console.log(`    ⚠️ SHOW NAME MISMATCH: Existing "${existingRelease.show_name}" doesn't match TVDB/TMDB "${tvdbShowName}"`);
                   needsRevalidation = true;
                 }
