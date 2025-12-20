@@ -54,7 +54,9 @@ export interface TvRelease {
   published_at: string;
   tvdb_id?: number;
   tvdb_slug?: string;
+  tvdb_title?: string;
   tmdb_id?: number;
+  tmdb_title?: string;
   imdb_id?: string;
   tvdb_poster_url?: string;
   tmdb_poster_url?: string;

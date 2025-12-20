@@ -74,7 +74,10 @@ db.exec(`
     link TEXT NOT NULL,
     published_at TEXT NOT NULL,
     tvdb_id INTEGER,
+    tvdb_slug TEXT,
+    tvdb_title TEXT,
     tmdb_id INTEGER,
+    tmdb_title TEXT,
     imdb_id TEXT,
     tvdb_poster_url TEXT,
     tmdb_poster_url TEXT,
@@ -82,6 +85,7 @@ db.exec(`
     sonarr_series_title TEXT,
     status TEXT NOT NULL DEFAULT 'NEW_SHOW',
     last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    manually_ignored INTEGER DEFAULT 0,
     FOREIGN KEY (feed_id) REFERENCES rss_feeds(id)
   );
 
