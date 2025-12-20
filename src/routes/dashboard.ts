@@ -1985,9 +1985,17 @@ router.get('/tv', async (req: Request, res: Response) => {
     
     let sonarrBaseUrl = '';
     if (sonarrApiUrl) {
+      // Remove /api/v3 or /api/v3/ from the end (case insensitive)
+      // Also handle /api or /api/ if present
       sonarrBaseUrl = sonarrApiUrl
-        .replace(/\/api\/v3\/?$/i, '')
-        .replace(/\/$/, '');
+        .replace(/\/api\/v3\/?$/i, '')  // Remove /api/v3 or /api/v3/
+        .replace(/\/api\/?$/i, '')      // Remove /api or /api/ if still present
+        .replace(/\/$/, '');              // Remove trailing slash
+      
+      console.log(`[Dashboard] Sonarr API URL from settings: ${sonarrApiUrl}`);
+      console.log(`[Dashboard] Sonarr base URL for links: ${sonarrBaseUrl}`);
+    } else {
+      console.warn('[Dashboard] No Sonarr API URL found in settings');
     }
 
     // Get last refresh time (matching engine last run)
