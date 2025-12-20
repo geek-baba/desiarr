@@ -848,8 +848,30 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
               }
             }
             
-            // Extract poster URLs from Sonarr images
-            if (sonarrShow.images && Array.isArray(sonarrShow.images)) {
+            // If we have TMDB ID from Sonarr, fetch TMDB show details to get English title
+            if (enrichment.tmdbId && tmdbApiKey) {
+              try {
+                const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
+                if (tmdbShow && tmdbShow.name) {
+                  // Extract show title from TMDB (typically in English)
+                  enrichment.tmdbTitle = tmdbShow.name;
+                  
+                  // Always use TMDB English title instead of TVDB original language title
+                  if (enrichment.tmdbTitle) {
+                    enrichment.tvdbTitle = enrichment.tmdbTitle; // Use English title
+                  }
+                  
+                  if (tmdbShow.poster_path) {
+                    enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+                  }
+                }
+              } catch (error) {
+                console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
+              }
+            }
+            
+            // Extract poster URLs from Sonarr images (fallback if TMDB poster not available)
+            if (!enrichment.tmdbPosterUrl && sonarrShow.images && Array.isArray(sonarrShow.images)) {
               const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
               if (poster) {
                 enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
