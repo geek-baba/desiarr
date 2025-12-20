@@ -259,13 +259,13 @@
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <div class="flex gap-2">
-                    <button 
-                      id="matchBtn<%= item.id %>"
-                      onclick="matchItem(<%= item.id %>)" 
-                      class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
-                    >
-                      Match
-                    </button>
+                  <button 
+                    id="matchBtn<%= item.id %>"
+                    onclick="matchItem(<%= item.id %>)" 
+                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs"
+                  >
+                    Match
+                  </button>
                     <button 
                       onclick="deleteAndIgnoreItem(<%= item.id %>)" 
                       class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs"
@@ -1354,8 +1354,8 @@
       let originalText = '';
       if (button) {
         originalText = button.textContent || '';
-        button.disabled = true;
-        button.textContent = 'Applying...';
+      button.disabled = true;
+      button.textContent = 'Applying...';
       } else {
         console.warn('[MATCH] Frontend: Button not found:', `matchBtn${itemId}`, '- continuing anyway');
       }
@@ -1400,8 +1400,8 @@
         console.error('[MATCH] Frontend Error:', error);
         showToast('Error: ' + (error.message || 'Unknown error'), 'error');
         if (button) {
-          button.disabled = false;
-          button.textContent = originalText;
+        button.disabled = false;
+        button.textContent = originalText;
         }
       }
     }

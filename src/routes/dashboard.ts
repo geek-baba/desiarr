@@ -833,7 +833,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
                             releases.find(r => r.sonarr_series_id) ||
                             releases[0];
       
-      const showName = primaryRelease.sonarr_series_title || 
+      // Prioritize tvdb_title/tmdb_title (English titles) over sonarr_series_title/show_name
+      const showName = primaryRelease.tmdb_title || 
+                      primaryRelease.tvdb_title ||
+                      primaryRelease.sonarr_series_title || 
                       primaryRelease.show_name || 
                       primaryRelease.title || 
                       'Unknown Show';
@@ -1814,7 +1817,10 @@ router.get('/tv', async (req: Request, res: Response) => {
                             releases.find(r => r.sonarr_series_id) ||
                             releases[0];
       
-      const showName = primaryRelease.sonarr_series_title || 
+      // Prioritize tvdb_title/tmdb_title (English titles) over sonarr_series_title/show_name
+      const showName = primaryRelease.tmdb_title || 
+                      primaryRelease.tvdb_title ||
+                      primaryRelease.sonarr_series_title || 
                       primaryRelease.show_name || 
                       primaryRelease.title || 
                       'Unknown Show';

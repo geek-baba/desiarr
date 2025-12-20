@@ -120,6 +120,7 @@ async function fixRiseAndFall() {
           tvdb_title = ?,
           tmdb_title = ?,
           show_name = ?,
+          sonarr_series_title = ?,
           last_checked_at = datetime('now')
         WHERE id = ?
       `).run(
@@ -129,6 +130,7 @@ async function fixRiseAndFall() {
         tmdbTitle || tvdbTitle,
         tmdbTitle,
         tmdbTitle || tvdbTitle || 'Rise and Fall',
+        tmdbTitle || tvdbTitle || 'Rise and Fall', // Also update sonarr_series_title
         release.id
       );
       
@@ -165,9 +167,10 @@ async function fixScam1992() {
       db.prepare(`
         UPDATE tv_releases SET
           show_name = ?,
+          sonarr_series_title = ?,
           last_checked_at = datetime('now')
         WHERE id = ?
-      `).run(correctShowName, release.id);
+      `).run(correctShowName, correctShowName, release.id); // Update both show_name and sonarr_series_title
       
       console.log(`  ✓ Updated show name to "${correctShowName}"`);
     } else {
