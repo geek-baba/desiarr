@@ -91,7 +91,9 @@ export const tvReleasesModel = {
       // Preserve existing IDs if new release doesn't have them (to avoid overwriting manually set IDs)
       const tvdbId = release.tvdb_id ?? existing.tvdb_id ?? null;
       const tvdbSlug = release.tvdb_slug ?? existing.tvdb_slug ?? null;
+      const tvdbTitle = release.tvdb_title ?? existing.tvdb_title ?? null;
       const tmdbId = release.tmdb_id ?? existing.tmdb_id ?? null;
+      const tmdbTitle = release.tmdb_title ?? existing.tmdb_title ?? null;
       const imdbId = release.imdb_id ?? existing.imdb_id ?? null;
 
       db.prepare(`
@@ -106,7 +108,9 @@ export const tvReleasesModel = {
           published_at = ?,
           tvdb_id = ?,
           tvdb_slug = ?,
+          tvdb_title = ?,
           tmdb_id = ?,
+          tmdb_title = ?,
           imdb_id = ?,
           tvdb_poster_url = ?,
           tmdb_poster_url = ?,

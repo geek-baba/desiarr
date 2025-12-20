@@ -512,6 +512,14 @@ if (!tvReleaseColumns.includes('tvdb_slug')) {
   db.exec('ALTER TABLE tv_releases ADD COLUMN tvdb_slug TEXT');
   console.log('Added column: tv_releases.tvdb_slug');
 }
+if (!tvReleaseColumns.includes('tvdb_title')) {
+  db.exec('ALTER TABLE tv_releases ADD COLUMN tvdb_title TEXT');
+  console.log('Added column: tv_releases.tvdb_title');
+}
+if (!tvReleaseColumns.includes('tmdb_title')) {
+  db.exec('ALTER TABLE tv_releases ADD COLUMN tmdb_title TEXT');
+  console.log('Added column: tv_releases.tmdb_title');
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS ignored_shows (
