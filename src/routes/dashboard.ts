@@ -1894,9 +1894,20 @@ router.get('/tv', async (req: Request, res: Response) => {
 
       // Get Sonarr slug for link construction
       // Prefer Sonarr's title_slug (from API) if available, otherwise use TVDB slug
+      // Check all releases in the group to find one with sonarr_series_id, not just primaryRelease
       let sonarrSeriesSlug: string | undefined = undefined;
-      if (primaryRelease.sonarr_series_id) {
-        const syncedShow = getSyncedSonarrShowBySonarrId(primaryRelease.sonarr_series_id);
+      let finalSonarrSeriesId: number | undefined = primaryRelease.sonarr_series_id || undefined;
+      
+      // If primaryRelease doesn't have sonarr_series_id, check other releases in the group
+      if (!finalSonarrSeriesId) {
+        const releaseWithSonarr = releases.find(r => r.sonarr_series_id);
+        if (releaseWithSonarr) {
+          finalSonarrSeriesId = releaseWithSonarr.sonarr_series_id || undefined;
+        }
+      }
+      
+      if (finalSonarrSeriesId) {
+        const syncedShow = getSyncedSonarrShowBySonarrId(finalSonarrSeriesId);
         sonarrSeriesSlug = syncedShow?.title_slug || undefined;
       }
 
@@ -1912,7 +1923,7 @@ router.get('/tv', async (req: Request, res: Response) => {
         tvdbUrl,
         tmdbId: primaryRelease.tmdb_id,
         imdbId: primaryRelease.imdb_id,
-        sonarrSeriesId: primaryRelease.sonarr_series_id,
+        sonarrSeriesId: finalSonarrSeriesId || primaryRelease.sonarr_series_id,
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
         rssItemId: rssItemId,
