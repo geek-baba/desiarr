@@ -858,8 +858,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       const existingShows = releases.filter(r => r.sonarr_series_id && (r.status === 'IGNORED' || r.status === 'ADDED'));
       // Unmatched: no TVDB ID, no TMDB ID, and no Sonarr ID
       // OR has TMDB ID but no TVDB ID and no Sonarr ID (needs matching)
+      // OR has TVDB ID but no Sonarr ID and status is IGNORED (was ignored but now has TVDB ID, needs re-evaluation)
       const unmatched = releases.filter(r => (!r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id) || 
-                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON'));
+                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON') ||
+                                            (r.tvdb_id && !r.sonarr_series_id && r.status === 'IGNORED'));
 
       let posterUrl: string | undefined;
       const releaseWithPoster = releases.find(r => r.tmdb_poster_url || r.tvdb_poster_url);
