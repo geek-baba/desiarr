@@ -184,7 +184,9 @@ async function fix90sMiddleClassBiopic() {
   
   const releases = db.prepare(`
     SELECT * FROM tv_releases 
-    WHERE show_name LIKE '%90%Middle%Class%Biopic%' OR title LIKE '%90%Middle%Class%Biopic%'
+    WHERE show_name LIKE '%90%Middle%Class%Biopic%' 
+       OR title LIKE '%90%Middle%Class%Biopic%'
+       OR show_name LIKE '%Class%' AND (tvdb_id = 425282 OR tmdb_id IS NULL)
     ORDER BY id DESC
   `).all() as TvRelease[];
   
@@ -195,25 +197,47 @@ async function fix90sMiddleClassBiopic() {
   
   console.log(`Found ${releases.length} release(s)`);
   
-  // Remove incorrect TVDB ID (425282 is "Class")
+  const correctShowName = "90's A Middle Class Biopic";
+  
+  // Remove incorrect TVDB ID (425282 is "Class") and fix titles
   for (const release of releases) {
     console.log(`\nUpdating release ID ${release.id}: "${release.show_name}"`);
-    console.log(`  Current TVDB ID: ${release.tvdb_id}`);
+    console.log(`  Current: TVDB=${release.tvdb_id}, show_name="${release.show_name}", tvdb_title="${release.tvdb_title}", tmdb_title="${release.tmdb_title}"`);
     
-    if (release.tvdb_id === 425282) {
-      console.log(`  ⚠ Removing incorrect TVDB ID 425282 (this is "Class", not "90's A Middle Class Biopic")`);
+    // Check if this is the wrong show (Class instead of 90's A Middle Class Biopic)
+    const isWrongMatch = release.tvdb_id === 425282 || 
+                        release.show_name === 'Class' || 
+                        release.tvdb_title === 'Class' ||
+                        release.tmdb_title === 'Class';
+    
+    if (isWrongMatch) {
+      console.log(`  ⚠ Removing incorrect match to "Class" (TVDB 425282)`);
       
       db.prepare(`
         UPDATE tv_releases SET
           tvdb_id = NULL,
           tvdb_title = NULL,
+          tmdb_title = NULL,
+          show_name = ?,
+          sonarr_series_title = NULL,
           last_checked_at = datetime('now')
         WHERE id = ?
-      `).run(release.id);
+      `).run(correctShowName, release.id);
       
-      console.log(`  ✓ Removed incorrect TVDB ID`);
+      console.log(`  ✓ Cleared incorrect IDs and updated show name to "${correctShowName}"`);
+    } else if (release.show_name !== correctShowName) {
+      // Just update the show name if it's different
+      console.log(`  ✓ Updating show name to "${correctShowName}"`);
+      
+      db.prepare(`
+        UPDATE tv_releases SET
+          show_name = ?,
+          sonarr_series_title = ?,
+          last_checked_at = datetime('now')
+        WHERE id = ?
+      `).run(correctShowName, correctShowName, release.id);
     } else {
-      console.log(`  ℹ TVDB ID is not 425282, skipping`);
+      console.log(`  ℹ Already correct, skipping`);
     }
   }
 }
