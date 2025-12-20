@@ -151,9 +151,9 @@ export const tvReleasesModel = {
       const result = db.prepare(`
         INSERT INTO tv_releases (
           guid, title, normalized_title, show_name, season_number, source_site, feed_id, link,
-          published_at, tvdb_id, tvdb_slug, tmdb_id, imdb_id, tvdb_poster_url, tmdb_poster_url,
+          published_at, tvdb_id, tvdb_slug, tvdb_title, tmdb_id, tmdb_title, imdb_id, tvdb_poster_url, tmdb_poster_url,
           sonarr_series_id, sonarr_series_title, status, manually_ignored
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         sanitizeForSqlite(release.guid),
         sanitizeForSqlite(release.title),
@@ -166,7 +166,9 @@ export const tvReleasesModel = {
         sanitizeForSqlite(release.published_at),
         sanitizeForSqlite(release.tvdb_id),
         sanitizeForSqlite(release.tvdb_slug),
+        sanitizeForSqlite(release.tvdb_title),
         sanitizeForSqlite(release.tmdb_id),
+        sanitizeForSqlite(release.tmdb_title),
         sanitizeForSqlite(release.imdb_id),
         sanitizeForSqlite(release.tvdb_poster_url),
         sanitizeForSqlite(release.tmdb_poster_url),
