@@ -138,6 +138,9 @@ async function enrichTvShow(
   let imdbId: string | null = null;
   let tvdbPosterUrl: string | null = null;
   let tmdbPosterUrl: string | null = null;
+  
+  // Store candidate TVDB data for cross-validation
+  let candidateTvdbData: { id: number; slug: string | null; tmdbId: number | null; imdbId: string | null } | null = null;
 
   // Step 1: Search TVDB
   if (tvdbApiKey) {
@@ -207,18 +210,18 @@ async function enrichTvShow(
           }
           
           // TVDB v4 API uses 'tvdb_id' or 'id' field
-          tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
+          const candidateTvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
           // Extract slug from search result (TVDB v4 API may include slug, nameSlug, or slug field)
-          tvdbSlug = (tvdbShow as any).slug || (tvdbShow as any).nameSlug || (tvdbShow as any).name_slug || null;
+          const candidateTvdbSlug = (tvdbShow as any).slug || (tvdbShow as any).nameSlug || (tvdbShow as any).name_slug || null;
           
-          if (tvdbId) {
-          console.log(`    ✓ Found TVDB ID: ${tvdbId}`);
-          if (tvdbSlug) {
-            console.log(`    ✓ Found TVDB slug: ${tvdbSlug}`);
+          if (candidateTvdbId) {
+          console.log(`    ✓ Found candidate TVDB ID: ${candidateTvdbId}`);
+          if (candidateTvdbSlug) {
+            console.log(`    ✓ Found candidate TVDB slug: ${candidateTvdbSlug}`);
           }
           
           // Get extended info for poster and other IDs
-          const tvdbExtended = await tvdbClient.getSeriesExtended(tvdbId);
+          const tvdbExtended = await tvdbClient.getSeriesExtended(candidateTvdbId);
           if (tvdbExtended) {
             // Extract show title from TVDB extended info
             // TVDB returns original language name, so we'll prefer TMDB English title when available
@@ -226,9 +229,7 @@ async function enrichTvShow(
             tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || tvdbShow.name || tvdbShow.title || null;
             
             // Extract slug from extended info if not found in search result
-            if (!tvdbSlug) {
-              tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
-            }
+            const finalTvdbSlug = candidateTvdbSlug || (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
             // Extract poster URL (TVDB v4 structure may vary)
             const artwork = (tvdbExtended as any).artwork || (tvdbExtended as any).artworks;
             if (artwork && Array.isArray(artwork)) {
@@ -241,6 +242,9 @@ async function enrichTvShow(
             // Extract TMDB and IMDB IDs from extended info
             // TVDB v4 API uses sourceName field with values "TheMovieDB.com" and "IMDB"
             const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids;
+            let tvdbTmdbId: number | null = null;
+            let tvdbImdbId: string | null = null;
+            
             if (remoteIds && Array.isArray(remoteIds)) {
               const tmdbRemote = remoteIds.find((r: any) => 
                 r.sourceName === 'TheMovieDB.com' || 
@@ -255,59 +259,21 @@ async function enrichTvShow(
                 r.source === 'imdb'
               );
               
-              // Validate and set TMDB ID
               if (tmdbRemote && tmdbRemote.id) {
-                const extractedTmdbId = parseInt(String(tmdbRemote.id), 10);
-                console.log(`    ✓ Found TMDB ID from TVDB: ${extractedTmdbId}`);
-                
-                // Validate TMDB ID consistency if we have API key
-                if (tmdbApiKey) {
-                  try {
-                    const tmdbShow = await tmdbClient.getTvShow(extractedTmdbId);
-                    if (tmdbShow) {
-                      // Use TMDB English title for validation and storage
-                      const tmdbEnglishTitle = tmdbShow.name || '';
-                      
-                      // Verify the TMDB show name matches what we're looking for
-                      const { validateShowNameMatch } = await import('../utils/titleSimilarity');
-                      if (validateShowNameMatch(showName, tmdbEnglishTitle || tmdbShow.original_name || '')) {
-                        tmdbId = extractedTmdbId;
-                        // Use TMDB English title instead of TVDB original language title
-                        tvdbTitle = tmdbEnglishTitle; // Store English title
-                        console.log(`    ✓ Validated TMDB ID ${tmdbId} - name matches: "${tmdbEnglishTitle}"`);
-                        
-                        // Cross-validate IMDB ID if TMDB has one
-                        if (tmdbShow.external_ids?.imdb_id) {
-                          const tmdbImdbId = tmdbShow.external_ids.imdb_id;
-                          if (imdbRemote && imdbRemote.id && String(imdbRemote.id) !== tmdbImdbId) {
-                            console.log(`    ⚠️ IMDB ID mismatch: TVDB says ${imdbRemote.id}, TMDB says ${tmdbImdbId} - using TMDB`);
-                            imdbId = tmdbImdbId; // Use TMDB's IMDB ID as more reliable
-                          } else if (!imdbId) {
-                            imdbId = tmdbImdbId;
-                            console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
-                          }
-                        }
-                      } else {
-                        console.log(`    ⚠️ Rejected TMDB ID ${extractedTmdbId} - name mismatch: "${tmdbEnglishTitle}" vs "${showName}"`);
-                        // Don't set tmdbId if validation fails
-                      }
-                    }
-                  } catch (error) {
-                    console.log(`    ⚠️ Could not validate TMDB ID ${extractedTmdbId}:`, error);
-                    // Still use it if validation fails (might be network issue)
-                    tmdbId = extractedTmdbId;
-                  }
-                } else {
-                  tmdbId = extractedTmdbId;
-                }
+                tvdbTmdbId = parseInt(String(tmdbRemote.id), 10);
               }
-              
-              // Set IMDB ID from TVDB if not already set from TMDB validation
-              if (imdbRemote && imdbRemote.id && !imdbId) {
-                imdbId = String(imdbRemote.id);
-                console.log(`    ✓ Found IMDB ID from TVDB: ${imdbId}`);
+              if (imdbRemote && imdbRemote.id) {
+                tvdbImdbId = String(imdbRemote.id);
               }
             }
+            
+            // Store candidate TVDB data for cross-validation after TMDB search
+            candidateTvdbData = {
+              id: candidateTvdbId,
+              slug: finalTvdbSlug,
+              tmdbId: tvdbTmdbId,
+              imdbId: tvdbImdbId,
+            };
           }
           }
         }
@@ -360,6 +326,49 @@ async function enrichTvShow(
                 imdbId = tmdbShowDetails.external_ids.imdb_id;
                 console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
               }
+              
+              // Cross-validate TVDB match: if we have a candidate TVDB match, check if its TMDB ID matches
+              if (candidateTvdbData) {
+                if (candidateTvdbData.tmdbId && candidateTvdbData.tmdbId !== tmdbId) {
+                  console.log(`    ⚠️ TVDB match rejected - TMDB ID mismatch: TVDB candidate has ${candidateTvdbData.tmdbId}, but TMDB search found ${tmdbId}`);
+                  // Reject the TVDB match
+                  candidateTvdbData = null;
+                } else if (candidateTvdbData.imdbId && imdbId && candidateTvdbData.imdbId !== imdbId) {
+                  console.log(`    ⚠️ TVDB match rejected - IMDB ID mismatch: TVDB candidate has ${candidateTvdbData.imdbId}, but TMDB search found ${imdbId}`);
+                  // Reject the TVDB match
+                  candidateTvdbData = null;
+                } else {
+                  // TVDB match is valid, use it
+                  tvdbId = candidateTvdbData.id;
+                  tvdbSlug = candidateTvdbData.slug;
+                  console.log(`    ✓ TVDB match validated - IDs match: TVDB ID ${tvdbId}, TMDB ID ${tmdbId}`);
+                }
+              }
+              
+              // If TVDB match was rejected, try to find correct TVDB ID from TMDB external_ids
+              if (!tvdbId && tmdbShowDetails.external_ids?.tvdb_id && tvdbApiKey) {
+                try {
+                  const correctTvdbId = tmdbShowDetails.external_ids.tvdb_id;
+                  console.log(`    🔍 Attempting to find correct TVDB ID from TMDB external_ids: ${correctTvdbId}`);
+                  const correctTvdbExtended = await tvdbClient.getSeriesExtended(correctTvdbId);
+                  if (correctTvdbExtended) {
+                    tvdbId = correctTvdbId;
+                    tvdbSlug = (correctTvdbExtended as any).slug || (correctTvdbExtended as any).nameSlug || (correctTvdbExtended as any).name_slug || null;
+                    console.log(`    ✓ Found correct TVDB ID from TMDB: ${tvdbId}${tvdbSlug ? ` (slug: ${tvdbSlug})` : ''}`);
+                    
+                    // Get poster from correct TVDB entry
+                    const artwork = (correctTvdbExtended as any).artwork || (correctTvdbExtended as any).artworks;
+                    if (artwork && Array.isArray(artwork)) {
+                      const poster = artwork.find((a: any) => a.type === 2 || a.imageType === 'poster');
+                      if (poster) {
+                        tvdbPosterUrl = poster.image || poster.url || poster.thumbnail || null;
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.log(`    ⚠️ Could not fetch correct TVDB ID from TMDB:`, error);
+                }
+              }
             }
           }
         }
@@ -367,6 +376,14 @@ async function enrichTvShow(
     } catch (error: any) {
       console.log(`    ✗ TMDB search failed:`, error?.message || error);
     }
+  }
+
+  // If we still have a candidate TVDB match that wasn't validated, use it now
+  // (This happens when TMDB search didn't find a match, so we can't cross-validate)
+  if (!tvdbId && candidateTvdbData) {
+    tvdbId = candidateTvdbData.id;
+    tvdbSlug = candidateTvdbData.slug;
+    console.log(`    ✓ Using TVDB match (no TMDB cross-validation available): TVDB ID ${tvdbId}`);
   }
 
   // Step 3: If IMDB ID still not found, try OMDB
