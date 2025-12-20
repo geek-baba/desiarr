@@ -152,12 +152,15 @@
         <!-- Sonarr Link -->
         <% if (show.sonarrSeriesId && typeof sonarrBaseUrl !== 'undefined' && sonarrBaseUrl) { %>
           <% 
-            // Sonarr uses TVDB slug format but with triple dashes instead of single dashes
-            // Convert TVDB slug (single dashes) to Sonarr format (triple dashes)
-            let sonarrLinkPath = show.sonarrSeriesId; // Fallback to ID
-            if (show.tvdbSlug) {
-              // Replace single dashes with triple dashes for Sonarr URL format
-              sonarrLinkPath = show.tvdbSlug.replace(/-/g, '---');
+            // Prefer Sonarr's title_slug from API (already in correct format)
+            // If not available, use TVDB slug (Sonarr uses same format as TVDB)
+            let sonarrLinkPath = show.sonarrSeriesId; // Fallback to numeric ID
+            if (show.sonarrSeriesSlug) {
+              // Use Sonarr's title_slug directly (from Sonarr API, already correct format)
+              sonarrLinkPath = show.sonarrSeriesSlug;
+            } else if (show.tvdbSlug) {
+              // Fallback to TVDB slug (Sonarr uses same format as TVDB)
+              sonarrLinkPath = show.tvdbSlug;
             }
           %>
           <a 

@@ -10,8 +10,34 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/desiarr.db');
-const db = new Database(dbPath);
+// Try multiple possible database paths
+const possiblePaths = [
+  process.env.DB_PATH,
+  path.join(__dirname, '../data/desiarr.db'),
+  path.join(__dirname, '../data/app.db'),
+  '/app/data/desiarr.db',
+  '/app/data/app.db',
+].filter(Boolean) as string[];
+
+let db: Database.Database | null = null;
+for (const dbPath of possiblePaths) {
+  try {
+    db = new Database(dbPath);
+    // Test if we can query
+    db.prepare('SELECT 1').get();
+    console.log(`Using database: ${dbPath}`);
+    break;
+  } catch (error) {
+    // Try next path
+    if (db) db.close();
+    db = null;
+  }
+}
+
+if (!db) {
+  console.error('Could not find database file. Tried:', possiblePaths);
+  process.exit(1);
+}
 
 console.log('=== Clearing Incorrect Sonarr Series IDs ===\n');
 
