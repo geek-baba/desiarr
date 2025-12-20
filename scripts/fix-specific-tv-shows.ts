@@ -28,6 +28,48 @@ interface TvRelease {
 async function fixRiseAndFall() {
   console.log('\n=== Fixing Rise and Fall (2025) ===');
   
+  // First, clear any incorrect sonarr_series_id values
+  const releasesWithSonarrId = db.prepare(`
+    SELECT id, show_name, tvdb_id, sonarr_series_id
+    FROM tv_releases 
+    WHERE (show_name LIKE '%Rise%Fall%' OR title LIKE '%Rise%Fall%')
+      AND sonarr_series_id IS NOT NULL
+  `).all() as Array<{id: number; show_name: string; tvdb_id: number | null; sonarr_series_id: number}>;
+  
+  if (releasesWithSonarrId.length > 0) {
+    console.log(`Found ${releasesWithSonarrId.length} release(s) with sonarr_series_id`);
+    for (const release of releasesWithSonarrId) {
+      // Check if the sonarr_series_id points to a show with matching TVDB ID
+      const sonarrShow = db.prepare(`
+        SELECT sonarr_id, tvdb_id, title
+        FROM sonarr_shows
+        WHERE sonarr_id = ?
+      `).get(release.sonarr_series_id) as { sonarr_id: number; tvdb_id: number | null; title: string } | undefined;
+      
+      if (!sonarrShow) {
+        console.log(`  ⚠ Clearing sonarr_series_id ${release.sonarr_series_id} - show not found in Sonarr`);
+        db.prepare(`
+          UPDATE tv_releases SET
+            sonarr_series_id = NULL,
+            sonarr_series_title = NULL,
+            last_checked_at = datetime('now')
+          WHERE id = ?
+        `).run(release.id);
+      } else if (release.tvdb_id && sonarrShow.tvdb_id && release.tvdb_id !== sonarrShow.tvdb_id) {
+        console.log(`  ⚠ Clearing sonarr_series_id ${release.sonarr_series_id} - TVDB ID mismatch (release: ${release.tvdb_id}, Sonarr: ${sonarrShow.tvdb_id})`);
+        db.prepare(`
+          UPDATE tv_releases SET
+            sonarr_series_id = NULL,
+            sonarr_series_title = NULL,
+            last_checked_at = datetime('now')
+          WHERE id = ?
+        `).run(release.id);
+      } else {
+        console.log(`  ✓ Keeping sonarr_series_id ${release.sonarr_series_id} - TVDB ID matches`);
+      }
+    }
+  }
+  
   // Find all releases with "Rise and Fall" or "Rise And Fall"
   const releases = db.prepare(`
     SELECT * FROM tv_releases 
