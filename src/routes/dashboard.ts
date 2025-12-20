@@ -856,7 +856,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
       const newShows = releases.filter(r => r.status === 'NEW_SHOW' || r.status === 'NEW_SEASON');
       const existingShows = releases.filter(r => r.sonarr_series_id && (r.status === 'IGNORED' || r.status === 'ADDED'));
-      const unmatched = releases.filter(r => !r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id);
+      // Unmatched: no TVDB ID, no TMDB ID, and no Sonarr ID
+      // OR has TMDB ID but no TVDB ID and no Sonarr ID (needs matching)
+      const unmatched = releases.filter(r => (!r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id) || 
+                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON'));
 
       let posterUrl: string | undefined;
       const releaseWithPoster = releases.find(r => r.tmdb_poster_url || r.tvdb_poster_url);
@@ -875,9 +878,20 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
       // Get Sonarr slug for link construction
       // Prefer Sonarr's title_slug (from API) if available, otherwise use TVDB slug
+      // Check all releases in the group to find one with sonarr_series_id, not just primaryRelease
       let sonarrSeriesSlug: string | undefined = undefined;
-      if (primaryRelease.sonarr_series_id) {
-        const syncedShow = getSyncedSonarrShowBySonarrId(primaryRelease.sonarr_series_id);
+      let finalSonarrSeriesId: number | undefined = primaryRelease.sonarr_series_id || undefined;
+      
+      // If primaryRelease doesn't have sonarr_series_id, check other releases in the group
+      if (!finalSonarrSeriesId) {
+        const releaseWithSonarr = releases.find(r => r.sonarr_series_id);
+        if (releaseWithSonarr) {
+          finalSonarrSeriesId = releaseWithSonarr.sonarr_series_id || undefined;
+        }
+      }
+      
+      if (finalSonarrSeriesId) {
+        const syncedShow = getSyncedSonarrShowBySonarrId(finalSonarrSeriesId);
         sonarrSeriesSlug = syncedShow?.title_slug || undefined;
       }
 
@@ -893,7 +907,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         tvdbUrl,
         tmdbId: primaryRelease.tmdb_id,
         imdbId: primaryRelease.imdb_id,
-        sonarrSeriesId: primaryRelease.sonarr_series_id,
+        sonarrSeriesId: finalSonarrSeriesId || primaryRelease.sonarr_series_id,
         sonarrSeriesTitle: primaryRelease.sonarr_series_title,
         posterUrl,
         rssItemId: rssItemId,
@@ -1854,7 +1868,10 @@ router.get('/tv', async (req: Request, res: Response) => {
       // Similar to Movies: New TVShow (not in Sonarr), Existing TVShow (in Sonarr), Unmatched (no IDs)
       const newShows = releases.filter(r => r.status === 'NEW_SHOW' || r.status === 'NEW_SEASON');
       const existingShows = releases.filter(r => r.sonarr_series_id && (r.status === 'IGNORED' || r.status === 'ADDED'));
-      const unmatched = releases.filter(r => !r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id);
+      // Unmatched: no TVDB ID, no TMDB ID, and no Sonarr ID
+      // OR has TMDB ID but no TVDB ID and no Sonarr ID (needs matching)
+      const unmatched = releases.filter(r => (!r.tvdb_id && !r.tmdb_id && !r.sonarr_series_id) || 
+                                            (r.tmdb_id && !r.tvdb_id && !r.sonarr_series_id && r.status !== 'NEW_SHOW' && r.status !== 'NEW_SEASON'));
 
       // Get poster URL from any release
       let posterUrl: string | undefined;
