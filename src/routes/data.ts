@@ -1650,21 +1650,51 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
         tvdbClient.updateConfig();
         const tvdbResults = await tvdbClient.searchSeries(showName);
         if (tvdbResults && tvdbResults.length > 0) {
-          // Score results by title similarity
-          const { calculateTitleSimilarity } = await import('../utils/titleSimilarity');
+          // Score results by title similarity with validation
+          const { calculateTitleSimilarity, validateShowNameMatch, validateYearMatch } = await import('../utils/titleSimilarity');
           const scoredResults = tvdbResults
             .map((series: any) => {
               const seriesName = series.name || series.title || '';
               const similarity = calculateTitleSimilarity(showName, seriesName);
-              return { series, similarity };
+              const seriesYear = series.year || (series.firstAired ? series.firstAired.substring(0, 4) : null);
+              return { series, similarity, seriesName, seriesYear };
             })
-            .sort((a, b) => b.similarity - a.similarity);
+            .filter((result: any) => {
+              // Apply similarity threshold
+              if (result.similarity < 0.5) {
+                console.log(`    Rejected "${result.seriesName}" - similarity too low (${result.similarity.toFixed(3)})`);
+                return false;
+              }
+              // Validate show name match
+              if (!validateShowNameMatch(showName, result.seriesName)) {
+                console.log(`    Rejected "${result.seriesName}" - key words missing`);
+                return false;
+              }
+              // Validate year if available
+              if (year && !validateYearMatch(year, result.seriesYear)) {
+                console.log(`    Rejected "${result.seriesName}" - year mismatch`);
+                return false;
+              }
+              return true;
+            })
+            .sort((a: any, b: any) => {
+              // Sort by similarity, with year match bonus
+              if (year) {
+                const aYearMatch = validateYearMatch(year, a.seriesYear) ? 0.1 : 0;
+                const bYearMatch = validateYearMatch(year, b.seriesYear) ? 0.1 : 0;
+                return (b.similarity + bYearMatch) - (a.similarity + aYearMatch);
+              }
+              return b.similarity - a.similarity;
+            });
           
-          const bestMatch = scoredResults[0];
-          const tvdbShow = bestMatch.series;
-          tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
-          
-          if (tvdbId) {
+          if (scoredResults.length === 0) {
+            console.log(`    ✗ No TVDB results passed validation`);
+          } else {
+            const bestMatch = scoredResults[0];
+            const tvdbShow = bestMatch.series;
+            tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
+            
+            if (tvdbId) {
             console.log(`    ✓ Found TVDB ID: ${tvdbId} (${tvdbShow.name || tvdbShow.title})`);
             
             // Get extended info to extract TMDB/IMDB IDs
@@ -1696,6 +1726,7 @@ router.post('/rss/match/:id', async (req: Request, res: Response) => {
               }
             } catch (error) {
               console.log(`    ⚠ Failed to fetch TVDB extended info:`, error);
+            }
             }
           }
         } else {

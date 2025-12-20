@@ -308,29 +308,49 @@ class TMDBClient {
       }
       
       // Import similarity utilities dynamically to avoid circular dependencies
-      const { scoreTmdbMatch } = await import('../utils/titleSimilarity');
+      const { scoreTmdbMatch, calculateTitleSimilarity, validateShowNameMatch } = await import('../utils/titleSimilarity');
       
-      // Score all results and select the best match
+      // Score all results and select the best match with validation
       const scoredResults = results
-        .map((show: any) => ({
-          show,
-          score: scoreTmdbMatch(query, {
-            title: show.name || '',
+        .map((show: any) => {
+          const showName = show.name || '';
+          const similarity = calculateTitleSimilarity(query, showName);
+          const score = scoreTmdbMatch(query, {
+            title: showName,
             original_title: show.original_name || '',
             original_language: show.original_language || '',
-          }, expectedLanguage),
-        }))
-        .sort((a: { show: any; score: number }, b: { show: any; score: number }) => b.score - a.score); // Sort by score descending
+          }, expectedLanguage);
+          
+          return {
+            show,
+            score,
+            similarity,
+            showName,
+          };
+        })
+        .filter((result: any) => {
+          // Apply similarity threshold
+          if (result.similarity < 0.5) {
+            return false;
+          }
+          // Validate show name match
+          if (!validateShowNameMatch(query, result.showName)) {
+            return false;
+          }
+          return true;
+        })
+        .sort((a: any, b: any) => b.score - a.score); // Sort by score descending
       
       if (scoredResults.length > 0) {
         const bestMatch = scoredResults[0];
-        console.log(`    Selected best match: "${bestMatch.show.name}" (score: ${bestMatch.score.toFixed(3)}, language: ${bestMatch.show.original_language || 'unknown'})`);
+        console.log(`    Selected best match: "${bestMatch.show.name}" (score: ${bestMatch.score.toFixed(3)}, similarity: ${bestMatch.similarity.toFixed(3)}, language: ${bestMatch.show.original_language || 'unknown'})`);
         if (scoredResults.length > 1) {
-          console.log(`    Considered ${scoredResults.length} results`);
+          console.log(`    Considered ${scoredResults.length} results (from ${results.length} total)`);
         }
         return bestMatch.show;
       }
       
+      console.log(`    No TMDB results passed validation (similarity threshold, name validation)`);
       return null;
     } catch (error: any) {
       // Log search errors (usually not 404s, but network/rate limit issues)

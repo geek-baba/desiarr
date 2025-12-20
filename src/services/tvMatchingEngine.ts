@@ -118,7 +118,8 @@ async function enrichTvShow(
   tmdbApiKey: string | undefined,
   omdbApiKey: string | undefined,
   braveApiKey: string | undefined,
-  expectedLanguage?: string | null
+  expectedLanguage?: string | null,
+  year?: number | null
 ): Promise<{
   tvdbId: number | null;
   tvdbSlug: string | null;
@@ -144,32 +145,73 @@ async function enrichTvShow(
       console.log(`    Searching TVDB for: "${showName}"`);
       const tvdbResults = await tvdbClient.searchSeries(showName);
       if (tvdbResults && tvdbResults.length > 0) {
+        // Import validation functions
+        const { validateShowNameMatch, validateYearMatch } = await import('../utils/titleSimilarity');
+        
         // Score all results by title similarity and select best match
         const scoredResults = tvdbResults
           .map((series: any) => {
             const seriesName = series.name || series.title || '';
             const similarity = calculateTitleSimilarity(showName, seriesName);
+            const seriesYear = series.year || series.firstAired ? (series.firstAired as string).substring(0, 4) : null;
+            
             return {
               series,
               similarity,
+              seriesName,
+              seriesYear,
             };
           })
-          .sort((a, b) => b.similarity - a.similarity); // Sort by similarity descending
+          .filter((result: any) => {
+            // Apply similarity threshold (minimum 0.5 for consideration)
+            if (result.similarity < 0.5) {
+              console.log(`    Rejected "${result.seriesName}" - similarity too low (${result.similarity.toFixed(3)})`);
+              return false;
+            }
+            
+            // Validate show name match (key words must be present)
+            if (!validateShowNameMatch(showName, result.seriesName)) {
+              console.log(`    Rejected "${result.seriesName}" - key words missing from "${showName}"`);
+              return false;
+            }
+            
+            // Validate year match if we have year information
+            if (season === null && year) {
+              if (!validateYearMatch(year, result.seriesYear)) {
+                console.log(`    Rejected "${result.seriesName}" - year mismatch (parsed: ${year}, matched: ${result.seriesYear})`);
+                return false;
+              }
+            }
+            
+            return true;
+          })
+          .sort((a: any, b: any) => {
+            // Sort by similarity, but also consider year match
+            if (season === null && year) {
+              const aYearMatch = validateYearMatch(year, a.seriesYear) ? 0.1 : 0;
+              const bYearMatch = validateYearMatch(year, b.seriesYear) ? 0.1 : 0;
+              return (b.similarity + bYearMatch) - (a.similarity + aYearMatch);
+            }
+            return b.similarity - a.similarity;
+          }); // Sort by similarity descending
         
-        const bestMatch = scoredResults[0];
-        const tvdbShow = bestMatch.series;
-        
-        console.log(`    Selected best TVDB match: "${tvdbShow.name || tvdbShow.title}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
-        if (scoredResults.length > 1) {
-          console.log(`    Considered ${scoredResults.length} TVDB results`);
-        }
-        
-        // TVDB v4 API uses 'tvdb_id' or 'id' field
-        tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
-        // Extract slug from search result (TVDB v4 API may include slug, nameSlug, or slug field)
-        tvdbSlug = (tvdbShow as any).slug || (tvdbShow as any).nameSlug || (tvdbShow as any).name_slug || null;
-        
-        if (tvdbId) {
+        if (scoredResults.length === 0) {
+          console.log(`    ✗ No TVDB results passed validation (similarity threshold, name validation, year check)`);
+        } else {
+          const bestMatch = scoredResults[0];
+          const tvdbShow = bestMatch.series;
+          
+          console.log(`    Selected best TVDB match: "${tvdbShow.name || tvdbShow.title}" (similarity: ${bestMatch.similarity.toFixed(3)})`);
+          if (scoredResults.length > 1) {
+            console.log(`    Considered ${scoredResults.length} TVDB results (from ${tvdbResults.length} total)`);
+          }
+          
+          // TVDB v4 API uses 'tvdb_id' or 'id' field
+          tvdbId = (tvdbShow as any).tvdb_id || (tvdbShow as any).id || null;
+          // Extract slug from search result (TVDB v4 API may include slug, nameSlug, or slug field)
+          tvdbSlug = (tvdbShow as any).slug || (tvdbShow as any).nameSlug || (tvdbShow as any).name_slug || null;
+          
+          if (tvdbId) {
           console.log(`    ✓ Found TVDB ID: ${tvdbId}`);
           if (tvdbSlug) {
             console.log(`    ✓ Found TVDB slug: ${tvdbSlug}`);
@@ -223,15 +265,55 @@ async function enrichTvShow(
                 r.source === 'imdb'
               );
               
+              // Validate and set TMDB ID
               if (tmdbRemote && tmdbRemote.id) {
-                tmdbId = parseInt(String(tmdbRemote.id), 10);
-                console.log(`    ✓ Found TMDB ID from TVDB: ${tmdbId}`);
+                const extractedTmdbId = parseInt(String(tmdbRemote.id), 10);
+                console.log(`    ✓ Found TMDB ID from TVDB: ${extractedTmdbId}`);
+                
+                // Validate TMDB ID consistency if we have API key
+                if (tmdbApiKey) {
+                  try {
+                    const tmdbShow = await tmdbClient.getTvShow(extractedTmdbId);
+                    if (tmdbShow) {
+                      // Verify the TMDB show name matches what we're looking for
+                      const { validateShowNameMatch } = await import('../utils/titleSimilarity');
+                      if (validateShowNameMatch(showName, tmdbShow.name || tmdbShow.original_name || '')) {
+                        tmdbId = extractedTmdbId;
+                        console.log(`    ✓ Validated TMDB ID ${tmdbId} - name matches: "${tmdbShow.name}"`);
+                        
+                        // Cross-validate IMDB ID if TMDB has one
+                        if (tmdbShow.external_ids?.imdb_id) {
+                          const tmdbImdbId = tmdbShow.external_ids.imdb_id;
+                          if (imdbRemote && imdbRemote.id && String(imdbRemote.id) !== tmdbImdbId) {
+                            console.log(`    ⚠️ IMDB ID mismatch: TVDB says ${imdbRemote.id}, TMDB says ${tmdbImdbId} - using TMDB`);
+                            imdbId = tmdbImdbId; // Use TMDB's IMDB ID as more reliable
+                          } else if (!imdbId) {
+                            imdbId = tmdbImdbId;
+                            console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
+                          }
+                        }
+                      } else {
+                        console.log(`    ⚠️ Rejected TMDB ID ${extractedTmdbId} - name mismatch: "${tmdbShow.name}" vs "${showName}"`);
+                        // Don't set tmdbId if validation fails
+                      }
+                    }
+                  } catch (error) {
+                    console.log(`    ⚠️ Could not validate TMDB ID ${extractedTmdbId}:`, error);
+                    // Still use it if validation fails (might be network issue)
+                    tmdbId = extractedTmdbId;
+                  }
+                } else {
+                  tmdbId = extractedTmdbId;
+                }
               }
-              if (imdbRemote && imdbRemote.id) {
+              
+              // Set IMDB ID from TVDB if not already set from TMDB validation
+              if (imdbRemote && imdbRemote.id && !imdbId) {
                 imdbId = String(imdbRemote.id);
                 console.log(`    ✓ Found IMDB ID from TVDB: ${imdbId}`);
               }
             }
+          }
           }
         }
       }
@@ -247,27 +329,42 @@ async function enrichTvShow(
       console.log(`    Searching TMDB for: "${showName}"${expectedLanguage ? ` [language: ${expectedLanguage}]` : ''}`);
       const tmdbShow = await tmdbClient.searchTv(showName, expectedLanguage);
       if (tmdbShow) {
-        tmdbId = tmdbShow.id;
-        console.log(`    ✓ Found TMDB ID: ${tmdbId} (${tmdbShow.name})`);
+        // Validate the match before accepting it
+        const { validateShowNameMatch, validateYearMatch } = await import('../utils/titleSimilarity');
+        const tmdbShowName = tmdbShow.name || '';
+        const tmdbYear = tmdbShow.first_air_date ? parseInt(tmdbShow.first_air_date.substring(0, 4), 10) : null;
         
-        // Get TMDB show details for poster and IMDB ID
-        if (tmdbId) {
-          const tmdbShowDetails = await tmdbClient.getTvShow(tmdbId);
-          if (tmdbShowDetails) {
-            // Extract show title from TMDB (typically in English)
-            tmdbTitle = tmdbShowDetails.name || null;
-            
-            // If we have TMDB title (English), prefer it over TVDB title (original language)
-            if (tmdbTitle && !tvdbTitle) {
-              tvdbTitle = tmdbTitle; // Use TMDB English title as TVDB title fallback
-            }
-            
-            if (tmdbShowDetails.poster_path) {
-              tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShowDetails.poster_path}`;
-            }
-            if (tmdbShowDetails.external_ids?.imdb_id) {
-              imdbId = tmdbShowDetails.external_ids.imdb_id;
-              console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
+        // Check similarity threshold and name validation
+        const similarity = calculateTitleSimilarity(showName, tmdbShowName);
+        if (similarity < 0.5) {
+          console.log(`    ✗ Rejected TMDB match "${tmdbShowName}" - similarity too low (${similarity.toFixed(3)})`);
+        } else if (!validateShowNameMatch(showName, tmdbShowName)) {
+          console.log(`    ✗ Rejected TMDB match "${tmdbShowName}" - key words missing from "${showName}"`);
+        } else if (season === null && year && !validateYearMatch(year, tmdbYear)) {
+          console.log(`    ✗ Rejected TMDB match "${tmdbShowName}" - year mismatch (parsed: ${year}, matched: ${tmdbYear})`);
+        } else {
+          tmdbId = tmdbShow.id;
+          console.log(`    ✓ Found TMDB ID: ${tmdbId} (${tmdbShow.name}, similarity: ${similarity.toFixed(3)})`);
+          
+          // Get TMDB show details for poster and IMDB ID
+          if (tmdbId) {
+            const tmdbShowDetails = await tmdbClient.getTvShow(tmdbId);
+            if (tmdbShowDetails) {
+              // Extract show title from TMDB (typically in English)
+              tmdbTitle = tmdbShowDetails.name || null;
+              
+              // If we have TMDB title (English), prefer it over TVDB title (original language)
+              if (tmdbTitle && !tvdbTitle) {
+                tvdbTitle = tmdbTitle; // Use TMDB English title as TVDB title fallback
+              }
+              
+              if (tmdbShowDetails.poster_path) {
+                tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShowDetails.poster_path}`;
+              }
+              if (tmdbShowDetails.external_ids?.imdb_id) {
+                imdbId = tmdbShowDetails.external_ids.imdb_id;
+                console.log(`    ✓ Found IMDB ID from TMDB: ${imdbId}`);
+              }
             }
           }
         }
@@ -479,21 +576,77 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         const feedName = feed?.name || '';
         
         // For BWT TVShows feed, remove year from show name (year is often inaccurate)
+        // BUT: Be careful not to remove years that are part of the show name (e.g., "90's A Middle Class Biopic")
         if (feedName.toLowerCase().includes('bwt') && feedName.toLowerCase().includes('tv')) {
-          // Remove year patterns: "2025", "(2025)", "[2025]", ".2025", " 2025", "2025 " (at end)
-          // Handle year at the end of show name (common in release names like "Show Name 2025 S03")
+          // Only remove year if it's clearly a release year (at the end, standalone, or in parentheses)
+          // Don't remove years that are part of phrases like "90's" or "1992"
+          const originalShowName = showName;
           showName = showName
-            .replace(/\s*\((\d{4})\)\s*/g, ' ') // Remove (2025)
-            .replace(/\s*\[(\d{4})\]\s*/g, ' ') // Remove [2025]
-            .replace(/\s*\.(\d{4})\s*/g, ' ') // Remove .2025
-            .replace(/\s+(\d{4})\s+/g, ' ') // Remove standalone 2025 with spaces on both sides
-            .replace(/\s+(\d{4})$/g, '') // Remove year at the end (e.g., "Show Name 2025")
-            .replace(/^(\d{4})\s+/g, '') // Remove year at the start
+            .replace(/\s*\((\d{4})\)\s*/g, ' ') // Remove (2025) in parentheses
+            .replace(/\s*\[(\d{4})\]\s*/g, ' ') // Remove [2025] in brackets
+            .replace(/\s+(\d{4})$/g, '') // Remove year at the very end (e.g., "Show Name 2025")
+            .replace(/^(\d{4})\s+/g, '') // Remove year at the very start
             .replace(/\s+/g, ' ') // Normalize spaces
             .trim();
-          console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
+          
+          // If we removed too much (e.g., "90's" became empty or too short), revert
+          if (showName.length < 3 || (originalShowName.includes("'s") && !showName.includes("'s"))) {
+            showName = originalShowName; // Keep original if we broke it
+            console.log(`    Kept original show name (year might be part of title): "${showName}"`);
+          } else if (showName !== originalShowName) {
+            console.log(`    Cleaned show name (removed year for BWT TVShows): "${showName}"`);
+          }
         }
 
+        // If we have an existing release, validate its IDs for consistency
+        let needsRevalidation: boolean = false;
+        if (existingRelease && existingRelease.tvdb_id && tvdbApiKey) {
+          try {
+            console.log(`    Validating existing release IDs for TVDB ID ${existingRelease.tvdb_id}...`);
+            const tvdbExtended = await tvdbClient.getSeriesExtended(existingRelease.tvdb_id);
+            if (tvdbExtended) {
+              const remoteIds = (tvdbExtended as any).remoteIds || (tvdbExtended as any).remote_ids || [];
+              const tmdbRemote = remoteIds.find((r: any) => 
+                r.sourceName === 'TheMovieDB.com' || r.sourceName === 'TheMovieDB' ||
+                r.source_name === 'TheMovieDB.com' || r.source_name === 'TheMovieDB' ||
+                r.source === 'themoviedb'
+              );
+              const imdbRemote = remoteIds.find((r: any) => 
+                r.sourceName === 'IMDB' || r.source_name === 'IMDB' || r.source === 'imdb'
+              );
+              
+              // Check for ID mismatches
+              if (tmdbRemote && tmdbRemote.id) {
+                const tvdbTmdbId = parseInt(String(tmdbRemote.id), 10);
+                if (existingRelease.tmdb_id && existingRelease.tmdb_id !== tvdbTmdbId) {
+                  console.log(`    ⚠️ ID MISMATCH DETECTED: Existing TMDB ID ${existingRelease.tmdb_id} doesn't match TVDB's ${tvdbTmdbId}`);
+                  needsRevalidation = true;
+                }
+              }
+              
+              if (imdbRemote && imdbRemote.id) {
+                const tvdbImdbId = String(imdbRemote.id);
+                if (existingRelease.imdb_id && existingRelease.imdb_id !== tvdbImdbId) {
+                  console.log(`    ⚠️ ID MISMATCH DETECTED: Existing IMDB ID ${existingRelease.imdb_id} doesn't match TVDB's ${tvdbImdbId}`);
+                  needsRevalidation = true;
+                }
+              }
+              
+              // Also validate show name matches
+              const tvdbShowName = (tvdbExtended as any).name || (tvdbExtended as any).title || '';
+              if (existingRelease.show_name && tvdbShowName) {
+                const { validateShowNameMatch } = await import('../utils/titleSimilarity');
+                if (!validateShowNameMatch(existingRelease.show_name, tvdbShowName)) {
+                  console.log(`    ⚠️ SHOW NAME MISMATCH: Existing "${existingRelease.show_name}" doesn't match TVDB "${tvdbShowName}"`);
+                  needsRevalidation = true;
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`    ⚠️ Could not validate existing release IDs:`, error);
+          }
+        }
+        
         // Check if this item has manually overridden IDs - if so, use them directly
         const hasManualTvdbId = item.tvdb_id_manual && item.tvdb_id;
         const hasManualTmdbId = item.tmdb_id_manual && item.tmdb_id;
@@ -579,6 +732,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           }
           
           // Fetch TMDB poster if we have a TMDB ID
+          // Also validate ID consistency
           if (enrichment.tmdbId && tmdbApiKey) {
             try {
               const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
@@ -594,8 +748,23 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
                 if (tmdbShow.poster_path) {
                   enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
                 }
-                if (tmdbShow.external_ids?.imdb_id && !enrichment.imdbId) {
-                  enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+                
+                // Validate IMDB ID consistency
+                if (tmdbShow.external_ids?.imdb_id) {
+                  if (enrichment.imdbId && enrichment.imdbId !== tmdbShow.external_ids.imdb_id) {
+                    console.log(`    ⚠️ IMDB ID mismatch: Manual override has ${enrichment.imdbId}, TMDB says ${tmdbShow.external_ids.imdb_id} - using TMDB`);
+                    enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+                  } else if (!enrichment.imdbId) {
+                    enrichment.imdbId = tmdbShow.external_ids.imdb_id;
+                  }
+                }
+                
+                // Validate TVDB ID consistency if we have one
+                if (enrichment.tvdbId && tmdbShow.external_ids?.tvdb_id) {
+                  if (enrichment.tvdbId !== tmdbShow.external_ids.tvdb_id) {
+                    console.log(`    ⚠️ TVDB ID mismatch: Manual override has ${enrichment.tvdbId}, TMDB says ${tmdbShow.external_ids.tvdb_id} - keeping manual override`);
+                    // Keep manual override as it's explicitly set by user
+                  }
                 }
               }
             } catch (error) {
@@ -666,7 +835,8 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
               tmdbApiKey,
               omdbApiKey,
               braveApiKey,
-              expectedLanguage
+              expectedLanguage,
+              year
             );
           }
         }
@@ -752,6 +922,27 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // Use actual show title from TMDB (English) or TVDB, otherwise fallback to parsed showName
         // Prefer TMDB title as it's typically in English, then TVDB title, then parsed showName
         const actualShowName = enrichment.tmdbTitle || enrichment.tvdbTitle || showName;
+        
+        // If we detected ID mismatches in existing release, force re-enrichment
+        if (needsRevalidation && existingRelease) {
+          console.log(`    🔄 Re-enriching due to ID mismatches detected in existing release...`);
+          // Re-run enrichment to get correct IDs
+          const expectedLanguage = getLanguageFromRssItem({
+            audio_languages: item.audio_languages,
+            title: item.title,
+          });
+          enrichment = await enrichTvShow(
+            showName,
+            season,
+            tvdbApiKey,
+            tmdbApiKey,
+            omdbApiKey,
+            braveApiKey,
+            expectedLanguage,
+            year
+          );
+          console.log(`    ✓ Re-enrichment complete: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+        }
         
         const tvRelease: Omit<TvRelease, 'id'> = {
           guid: String(item.guid || ''),

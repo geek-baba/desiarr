@@ -46,6 +46,41 @@ export function calculateTitleSimilarity(str1: string, str2: string): number {
 }
 
 /**
+ * Validate that a matched show name contains key words from the parsed show name
+ * This helps prevent false matches like "Azad" matching "Le Mille E Una Notte"
+ */
+export function validateShowNameMatch(parsedName: string, matchedName: string, minWordMatch: number = 1): boolean {
+  const parsedWords = parsedName.toLowerCase().trim().split(/\s+/).filter(w => w.length > 2); // Filter out short words like "a", "the", "of"
+  const matchedLower = matchedName.toLowerCase().trim();
+  
+  if (parsedWords.length === 0) return true; // If no meaningful words, accept match
+  
+  // Count how many key words from parsed name appear in matched name
+  const matchedWords = parsedWords.filter(word => matchedLower.includes(word));
+  
+  // Require at least minWordMatch words to be present, or if parsed name is very short (1-2 words), require all
+  if (parsedWords.length <= 2) {
+    return matchedWords.length === parsedWords.length;
+  }
+  
+  return matchedWords.length >= minWordMatch;
+}
+
+/**
+ * Check if year information is consistent
+ * Returns true if years match (within tolerance), false if mismatch is significant
+ */
+export function validateYearMatch(parsedYear: number | null, matchedYear: string | number | null, tolerance: number = 3): boolean {
+  if (!parsedYear || !matchedYear) return true; // If either is missing, don't reject
+  
+  const matchedYearNum = typeof matchedYear === 'string' ? parseInt(matchedYear, 10) : matchedYear;
+  if (isNaN(matchedYearNum)) return true; // If can't parse, don't reject
+  
+  const yearDiff = Math.abs(parsedYear - matchedYearNum);
+  return yearDiff <= tolerance;
+}
+
+/**
  * Get language code from RSS item
  * Checks audio_languages field and description for language hints
  */
