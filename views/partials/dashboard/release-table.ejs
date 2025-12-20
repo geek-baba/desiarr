@@ -194,13 +194,23 @@
                 >
                   Ignore
                 </button>
-              <% } else if (r.releaseType === 'ignored' && !r.radarr_movie_id && movie.tmdbId) { %>
-                <button 
-                  onclick="addMovie(<%= r.id %>)" 
-                  class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition-colors"
-                >
-                  Add to Radarr
-                </button>
+              <% } else if (r.releaseType === 'ignored') { %>
+                <% if (!r.radarr_movie_id && movie.tmdbId) { %>
+                  <button 
+                    onclick="addMovie(<%= r.id %>)" 
+                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                  >
+                    Add to Radarr
+                  </button>
+                <% } %>
+                <% if (!r.manually_ignored) { %>
+                  <button 
+                    onclick="ignoreRelease(<%= r.id %>)" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-xs <%= !r.radarr_movie_id && movie.tmdbId ? 'ml-1' : '' %> transition-colors"
+                  >
+                    Ignore
+                  </button>
+                <% } %>
               <% } %>
               <% if (r.link) { %>
                 <a 
