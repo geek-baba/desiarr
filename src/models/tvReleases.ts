@@ -181,6 +181,28 @@ export const tvReleasesModel = {
     }
   },
 
+  markAddedToSonarr: (id: number, sonarrSeriesId: number, sonarrSeriesTitle: string): boolean => {
+    const result = db
+      .prepare(
+        `
+        UPDATE tv_releases 
+        SET 
+          sonarr_series_id = ?, 
+          sonarr_series_title = ?, 
+          status = 'ADDED',
+          manually_ignored = CASE WHEN manually_ignored IS NULL THEN 0 ELSE manually_ignored END,
+          last_checked_at = datetime('now')
+        WHERE id = ?
+      `
+      )
+      .run(
+        sanitizeForSqlite(sonarrSeriesId),
+        sanitizeForSqlite(sonarrSeriesTitle),
+        id
+      );
+    return result.changes > 0;
+  },
+
   updateStatus: (id: number, status: TvReleaseStatus, options?: { manuallyIgnored?: boolean }): boolean => {
     const manuallyIgnored =
       typeof options?.manuallyIgnored === 'boolean'

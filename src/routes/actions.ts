@@ -268,15 +268,22 @@ router.post('/tv/:id/add', async (req: Request, res: Response) => {
 
     // Add to Sonarr with selected options
     const addedSeries = await sonarrClient.addSeries(series, parseInt(qualityProfileId, 10), rootFolderPath);
-
-    // Update release with Sonarr series ID
-    const updatedRelease = {
-      ...release,
-      sonarr_series_id: addedSeries.id,
-      sonarr_series_title: addedSeries.title,
-      status: 'ADDED' as const,
-    };
-    tvReleasesModel.upsert(updatedRelease);
+    
+    // Update release with Sonarr series ID using a focused update to avoid any upsert issues
+    try {
+      const updated = tvReleasesModel.markAddedToSonarr(release.id!, addedSeries.id, addedSeries.title);
+      if (!updated) {
+        console.error(
+          'Add TV show warning: Sonarr series was created but tv_releases row was not updated',
+          { releaseId: release.id, sonarrSeriesId: addedSeries.id }
+        );
+      }
+    } catch (dbError) {
+      console.error(
+        'Add TV show DB update error: Sonarr series was created but failed to update tv_releases',
+        dbError
+      );
+    }
 
     res.json({ 
       success: true, 
