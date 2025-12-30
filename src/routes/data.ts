@@ -833,9 +833,10 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'RSS item not found' });
     }
 
-    // Check if this is a TV feed
+    // Check if this is a TV feed (consider feed_type_override)
     const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
-    if (!feed || feed.feed_type !== 'tv') {
+    const effectiveFeedType = item.feed_type_override || feed?.feed_type || 'movie';
+    if (effectiveFeedType !== 'tv') {
       return res.status(400).json({ success: false, error: 'TVDB override is only available for TV feeds' });
     }
 

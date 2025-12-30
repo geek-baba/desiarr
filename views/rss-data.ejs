@@ -180,8 +180,9 @@
               <tr class="item-row" data-title="<%= (item.title || '').toLowerCase() %>" data-feed="<%= (item.feed_name || '').toLowerCase() %>" data-year="<%= item.year || '' %>" data-tmdb="<%= item.tmdb_id || '' %>" data-imdb="<%= (item.imdb_id || '').toLowerCase() %>">
                 <td class="px-4 py-3 text-sm"><%= item.feed_name %></td>
                 <td class="px-4 py-3 text-sm">
-                  <span class="px-2 py-1 text-xs rounded-full <%= (item.feed_type || 'movie') === 'tv' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' %>">
-                    <%= (item.feed_type || 'movie') === 'tv' ? 'TV' : 'Movie' %>
+                  <% const effectiveFeedType = item.feed_type_override || item.feed_type || 'movie'; %>
+                  <span class="px-2 py-1 text-xs rounded-full <%= effectiveFeedType === 'tv' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' %>">
+                    <%= effectiveFeedType === 'tv' ? 'TV' : 'Movie' %>
                   </span>
                 </td>
                 <td class="px-4 py-3 text-sm">
@@ -204,7 +205,8 @@
                     <% } else { %>
                       <span>-</span>
                     <% } %>
-                    <% if ((item.feed_type || 'movie') === 'tv') { %>
+                    <% const effectiveFeedType = item.feed_type_override || item.feed_type || 'movie'; %>
+                    <% if (effectiveFeedType === 'tv') { %>
                       <button 
                         onclick="overrideTvdbId(<%= item.id %>)" 
                         class="bg-teal-500 hover:bg-teal-600 text-white px-2 py-1 rounded text-xs w-fit"
@@ -218,7 +220,8 @@
                 <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                   <div class="flex flex-col gap-1">
                     <% if (item.tmdb_id) { %>
-                      <% if ((item.feed_type || 'movie') === 'tv') { %>
+                      <% const effectiveFeedType = item.feed_type_override || item.feed_type || 'movie'; %>
+                      <% if (effectiveFeedType === 'tv') { %>
                         <a href="https://www.themoviedb.org/tv/<%= item.tmdb_id %>" target="_blank" class="text-blue-600 hover:underline">
                           <%= item.tmdb_id %>
                         </a>
@@ -1091,7 +1094,7 @@
       imdbIdEl.value = item.imdb_id || '';
       
       // Show/hide TV-specific fields
-      const isTv = item.feed_type === 'tv';
+      const isTv = (item.feed_type_override || item.feed_type || 'movie') === 'tv';
       if (isTv) {
         tvFields.classList.remove('hidden');
         tvdbField.classList.remove('hidden');
@@ -1162,7 +1165,8 @@
       if (item.imdb_id) {
         attrs.push(`<strong>IMDB ID:</strong> ${item.imdb_id}`);
       }
-      if (item.feed_type === 'tv') {
+      const effectiveFeedType = item.feed_type_override || item.feed_type || 'movie';
+      if (effectiveFeedType === 'tv') {
         if (item.show_name) {
           attrs.push(`<strong>Show Name:</strong> ${item.show_name}`);
         }
@@ -1194,7 +1198,7 @@
       const showName = document.getElementById('matchShowName')?.value.trim() || null;
       const tvdbId = document.getElementById('matchTvdbId')?.value ? parseInt(document.getElementById('matchTvdbId').value, 10) : null;
       
-      const isTv = currentMatchItemData?.feed_type === 'tv';
+      const isTv = (currentMatchItemData?.feed_type_override || currentMatchItemData?.feed_type || 'movie') === 'tv';
       
       // Build search parameters
       const searchParams = {};
@@ -1332,7 +1336,7 @@
       
       // Save itemId BEFORE hiding modal (hideMatchModal sets currentMatchItemId to null)
       const itemId = currentMatchItemId;
-      const isTv = currentMatchItemData?.feed_type === 'tv';
+      const isTv = (currentMatchItemData?.feed_type_override || currentMatchItemData?.feed_type || 'movie') === 'tv';
       
       // Build match parameters from selected match
       const matchParams = {};
@@ -1420,7 +1424,7 @@
       const season = document.getElementById('matchSeason')?.value ? parseInt(document.getElementById('matchSeason').value, 10) : null;
       const tvdbId = document.getElementById('matchTvdbId')?.value ? parseInt(document.getElementById('matchTvdbId').value, 10) : null;
       
-      const isTv = currentMatchItemData?.feed_type === 'tv';
+      const isTv = (currentMatchItemData?.feed_type_override || currentMatchItemData?.feed_type || 'movie') === 'tv';
       
       // Build match parameters
       const matchParams = {
