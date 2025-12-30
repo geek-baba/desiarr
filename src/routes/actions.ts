@@ -228,7 +228,7 @@ router.post('/tv/:id/add', async (req: Request, res: Response) => {
 
     console.log(`Add TV show request for release ID ${req.params.id}: status=${release.status}, tvdb_id=${release.tvdb_id}, sonarr_series_id=${release.sonarr_series_id}`);
 
-    // Check if show already exists in Sonarr
+    // Check if show already exists in Sonarr (in our database)
     if (release.sonarr_series_id) {
       return res.status(400).json({ 
         error: 'TV show already exists in Sonarr.' 
@@ -240,6 +240,43 @@ router.post('/tv/:id/add', async (req: Request, res: Response) => {
       return res.status(400).json({ 
         error: 'TVDB ID is required to add TV show to Sonarr. Please ensure the release has a valid TVDB ID.' 
       });
+    }
+
+    // Check if show already exists in Sonarr by querying all series
+    // This handles cases where the show was added to Sonarr but our database doesn't know about it
+    // (e.g., after manually updating TVDB ID or moving from movies to TV)
+    try {
+      const allSeries = await sonarrClient.getSeries();
+      const existingSeries = allSeries.find((s: any) => s.tvdbId === release.tvdb_id);
+      
+      if (existingSeries) {
+        console.log(`Show with TVDB ID ${release.tvdb_id} already exists in Sonarr (ID: ${existingSeries.id}, Title: ${existingSeries.title})`);
+        
+        // Update database to reflect that show is already in Sonarr
+        try {
+          const updated = tvReleasesModel.markAddedToSonarr(release.id!, existingSeries.id, existingSeries.title);
+          if (!updated) {
+            console.error(
+              'Update TV show warning: Show exists in Sonarr but tv_releases row was not updated',
+              { releaseId: release.id, sonarrSeriesId: existingSeries.id }
+            );
+          }
+        } catch (dbError) {
+          console.error(
+            'Update TV show DB error: Show exists in Sonarr but failed to update tv_releases',
+            dbError
+          );
+        }
+        
+        return res.json({ 
+          success: true, 
+          message: `TV show "${existingSeries.title}" already exists in Sonarr. Database updated.`,
+          sonarrSeriesId: existingSeries.id,
+        });
+      }
+    } catch (checkError) {
+      console.error('Error checking existing series in Sonarr:', checkError);
+      // Continue with add flow if check fails
     }
 
     const { qualityProfileId, rootFolderPath } = req.body;
