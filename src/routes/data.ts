@@ -805,9 +805,31 @@ router.post('/rss/override-tmdb/:id', async (req: Request, res: Response) => {
 
     console.log(`Manually updated RSS item ${itemId} with TMDB ID ${tmdbId} and IMDB ID ${imdbId || 'none'}`);
 
+    // Trigger match for this single item in the background
+    // Determine if it's a movie or TV show
+    const feed = db.prepare('SELECT feed_type FROM rss_feeds WHERE id = ?').get(item.feed_id) as any;
+    const effectiveFeedType = item.feed_type_override || feed?.feed_type || 'movie';
+    
+    // Process the item in the background (don't wait for it)
+    // Note: This runs the full matching engine which processes all items, but ensures
+    // the updated item is matched. In the future, this could be optimized to process only this item.
+    (async () => {
+      try {
+        console.log(`[TMDB Override] Triggering match for RSS item ${itemId} (type: ${effectiveFeedType})...`);
+        if (effectiveFeedType === 'tv') {
+          await runTvMatchingEngine();
+        } else {
+          await runMatchingEngine();
+        }
+        console.log(`[TMDB Override] Match completed for RSS item ${itemId}`);
+      } catch (error: any) {
+        console.error(`[TMDB Override] Error matching RSS item ${itemId} after TMDB update:`, error);
+      }
+    })();
+
     res.json({ 
       success: true, 
-      message: `TMDB ID updated to ${tmdbId} (${tmdbMovie.title})`,
+      message: `TMDB ID updated to ${tmdbId} (${tmdbMovie.title}). Matching in progress...`,
       tmdbId: parseInt(tmdbId, 10),
       imdbId: imdbId,
       tmdbTitle: tmdbMovie.title,
