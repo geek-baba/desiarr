@@ -441,8 +441,9 @@ async function enrichTvShow(
 
 /**
  * Check if show/season exists in Sonarr
+ * Cross-validates TMDB/IMDB IDs to ensure correct match
  */
-function checkSonarrShow(tvdbId: number | null, tmdbId: number | null, season: number | null): {
+function checkSonarrShow(tvdbId: number | null, tmdbId: number | null, season: number | null, imdbId?: string | null): {
   exists: boolean;
   sonarrSeriesId: number | null;
   sonarrSeriesTitle: string | null;
@@ -456,6 +457,20 @@ function checkSonarrShow(tvdbId: number | null, tmdbId: number | null, season: n
   if (tvdbId) {
     const sonarrShow = getSyncedSonarrShowByTvdbId(tvdbId);
     if (sonarrShow) {
+      // Cross-validate: If we have TMDB/IMDB IDs, ensure they match the Sonarr show
+      // This prevents matching to wrong shows when TVDB ID matches but other IDs differ
+      if (tmdbId && sonarrShow.tmdb_id && sonarrShow.tmdb_id !== tmdbId) {
+        console.log(`    ⚠️ Sonarr show match rejected: TVDB ID ${tvdbId} matches, but TMDB ID mismatch (expected ${tmdbId}, Sonarr has ${sonarrShow.tmdb_id})`);
+        console.log(`    Sonarr show: "${sonarrShow.title}" - likely wrong show in Sonarr or data sync issue`);
+        return { exists: false, sonarrSeriesId: null, sonarrSeriesTitle: null, seasonExists: false };
+      }
+      
+      if (imdbId && sonarrShow.imdb_id && sonarrShow.imdb_id !== imdbId) {
+        console.log(`    ⚠️ Sonarr show match rejected: TVDB ID ${tvdbId} matches, but IMDB ID mismatch (expected ${imdbId}, Sonarr has ${sonarrShow.imdb_id})`);
+        console.log(`    Sonarr show: "${sonarrShow.title}" - likely wrong show in Sonarr or data sync issue`);
+        return { exists: false, sonarrSeriesId: null, sonarrSeriesTitle: null, seasonExists: false };
+      }
+      
       // Check if season exists
       let seasonExists = false;
       if (season !== null && sonarrShow.seasons) {
@@ -927,7 +942,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           };
         } else {
           // Check by IDs (for shows found via external APIs)
-          sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season);
+          sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season, enrichment.imdbId);
           
           // Only preserve sonarr_series_id if:
           // 1. We have an existing release with sonarr_series_id
