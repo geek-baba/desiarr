@@ -955,15 +955,26 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           
           if (tvdbIdUnchanged && !sonarrCheck.exists && existingRelease && existingRelease.sonarr_series_id) {
             // Verify the sonarr_series_id actually points to a show with matching TVDB ID
+            // AND validate TMDB/IMDB IDs match (cross-validation)
             const preservedSonarrShow = getSyncedSonarrShowBySonarrId(existingRelease.sonarr_series_id);
             if (preservedSonarrShow && preservedSonarrShow.tvdb_id === enrichment.tvdbId) {
-              console.log(`    ⚠ Preserving sonarr_series_id ${existingRelease.sonarr_series_id} (TVDB ID matches, Sonarr sync may not have run yet)`);
-              sonarrCheck = {
-                exists: true, // Treat as existing since TVDB ID matches
-                sonarrSeriesId: existingRelease.sonarr_series_id,
-                sonarrSeriesTitle: existingRelease.sonarr_series_title || preservedSonarrShow.title || null,
-                seasonExists: true, // Assume season exists if manually added
-              };
+              // Cross-validate TMDB/IMDB IDs before preserving
+              const tmdbIdMatches = !enrichment.tmdbId || !preservedSonarrShow.tmdb_id || preservedSonarrShow.tmdb_id === enrichment.tmdbId;
+              const imdbIdMatches = !enrichment.imdbId || !preservedSonarrShow.imdb_id || preservedSonarrShow.imdb_id === enrichment.imdbId;
+              
+              if (tmdbIdMatches && imdbIdMatches) {
+                console.log(`    ⚠ Preserving sonarr_series_id ${existingRelease.sonarr_series_id} (TVDB ID matches, Sonarr sync may not have run yet)`);
+                sonarrCheck = {
+                  exists: true, // Treat as existing since TVDB ID matches
+                  sonarrSeriesId: existingRelease.sonarr_series_id,
+                  sonarrSeriesTitle: existingRelease.sonarr_series_title || preservedSonarrShow.title || null,
+                  seasonExists: true, // Assume season exists if manually added
+                };
+              } else {
+                console.log(`    ⚠ Clearing sonarr_series_id ${existingRelease.sonarr_series_id} - ID mismatch (TVDB matches but TMDB/IMDB don't)`);
+                console.log(`      Expected: TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+                console.log(`      Sonarr has: TMDB=${preservedSonarrShow.tmdb_id || 'N/A'}, IMDB=${preservedSonarrShow.imdb_id || 'N/A'}`);
+              }
             } else {
               console.log(`    ⚠ Clearing sonarr_series_id ${existingRelease.sonarr_series_id} - TVDB ID changed or show not found in Sonarr`);
             }
