@@ -715,6 +715,15 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           imdbId: string | null;
           tvdbPosterUrl: string | null;
           tmdbPosterUrl: string | null;
+        } = {
+          tvdbId: null,
+          tvdbSlug: null,
+          tvdbTitle: null,
+          tmdbId: null,
+          tmdbTitle: null,
+          imdbId: null,
+          tvdbPosterUrl: null,
+          tmdbPosterUrl: null,
         };
         let sonarrShow: any = null; // Will be set if found by name search
         
@@ -884,77 +893,76 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
                 tvdbPosterUrl: null, // Will extract from images if available
                 tmdbPosterUrl: null, // Will extract from images if available
               };
-            }
-          }
-          
-          if (!sonarrShow) {
-            
-            // If we have TVDB ID from Sonarr, try to get slug and title from TVDB API
-            if (enrichment.tvdbId && tvdbApiKey) {
-              try {
-                const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
-                if (tvdbExtended) {
-                  // Update title from TVDB if available (will prefer TMDB English title later if available)
-                  enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || enrichment.tvdbTitle;
-                  enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
-                }
-              } catch (error) {
-                // Silently fail, slug is optional
-              }
-            }
-            
-            // If we have TMDB ID from Sonarr, fetch TMDB show details to get English title
-            if (enrichment.tmdbId && tmdbApiKey) {
-              try {
-                const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
-                if (tmdbShow && tmdbShow.name) {
-                  // Extract show title from TMDB (typically in English)
-                  enrichment.tmdbTitle = tmdbShow.name;
-                  
-                  // Always use TMDB English title instead of TVDB original language title
-                  if (enrichment.tmdbTitle) {
-                    enrichment.tvdbTitle = enrichment.tmdbTitle; // Use English title
+              
+              // Sonarr show was found and validated - enrich with additional data
+              // If we have TVDB ID from Sonarr, try to get slug and title from TVDB API
+              if (enrichment.tvdbId && tvdbApiKey) {
+                try {
+                  const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
+                  if (tvdbExtended) {
+                    // Update title from TVDB if available (will prefer TMDB English title later if available)
+                    enrichment.tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title || enrichment.tvdbTitle;
+                    enrichment.tvdbSlug = (tvdbExtended as any).slug || (tvdbExtended as any).nameSlug || (tvdbExtended as any).name_slug || null;
                   }
-                  
-                  if (tmdbShow.poster_path) {
-                    enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
-                  }
+                } catch (error) {
+                  // Silently fail, slug is optional
                 }
-              } catch (error) {
-                console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
               }
-            }
-            
-            // Extract poster URLs from Sonarr images (fallback if TMDB poster not available)
-            if (!enrichment.tmdbPosterUrl && sonarrShow.images && Array.isArray(sonarrShow.images)) {
-              const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
-              if (poster) {
-                enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
-                enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+              
+              // If we have TMDB ID from Sonarr, fetch TMDB show details to get English title
+              if (enrichment.tmdbId && tmdbApiKey) {
+                try {
+                  const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
+                  if (tmdbShow && tmdbShow.name) {
+                    // Extract show title from TMDB (typically in English)
+                    enrichment.tmdbTitle = tmdbShow.name;
+                    
+                    // Always use TMDB English title instead of TVDB original language title
+                    if (enrichment.tmdbTitle) {
+                      enrichment.tvdbTitle = enrichment.tmdbTitle; // Use English title
+                    }
+                    
+                    if (tmdbShow.poster_path) {
+                      enrichment.tmdbPosterUrl = `https://image.tmdb.org/t/p/w500${tmdbShow.poster_path}`;
+                    }
+                  }
+                } catch (error) {
+                  console.log(`    ⚠ Failed to fetch TMDB show for ID ${enrichment.tmdbId}:`, error);
+                }
               }
+              
+              // Extract poster URLs from Sonarr images (fallback if TMDB poster not available)
+              if (!enrichment.tmdbPosterUrl && sonarrShow.images && Array.isArray(sonarrShow.images)) {
+                const poster = sonarrShow.images.find((img: any) => img.coverType === 'poster');
+                if (poster) {
+                  enrichment.tvdbPosterUrl = poster.remoteUrl || poster.url || null;
+                  enrichment.tmdbPosterUrl = poster.remoteUrl || poster.url || null;
+                }
+              }
+              
+              console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+            } else {
+              // Sonarr show was rejected or not found - use external API enrichment
+              console.log(`    ✗ Not found in Sonarr or rejected, using external API enrichment`);
+              
+              // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
+              // Extract language from RSS item if available
+              const expectedLanguage = getLanguageFromRssItem({
+                audio_languages: item.audio_languages,
+                title: item.title,
+              });
+              
+              enrichment = await enrichTvShow(
+                showName,
+                season,
+                tvdbApiKey,
+                tmdbApiKey,
+                omdbApiKey,
+                braveApiKey,
+                expectedLanguage,
+                year
+              );
             }
-            
-            console.log(`    Using Sonarr IDs: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
-          } else {
-            console.log(`    ✗ Not found in Sonarr, using external API enrichment`);
-            
-            // Step 2: If not in Sonarr, enrich with TVDB → TMDB → IMDB
-            // Extract language from RSS item if available
-            const expectedLanguage = getLanguageFromRssItem({
-              audio_languages: item.audio_languages,
-              title: item.title,
-            });
-            
-            enrichment = await enrichTvShow(
-              showName,
-              season,
-              tvdbApiKey,
-              tmdbApiKey,
-              omdbApiKey,
-              braveApiKey,
-              expectedLanguage,
-              year
-            );
           }
         }
 
