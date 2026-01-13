@@ -987,12 +987,56 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
       }
     }
 
+    // Get old TVDB ID before updating (to clear old tv_releases entries)
+    const oldTvdbId = item.tvdb_id;
+    
     // Update the RSS item with the new TVDB ID and any found IDs, mark as manually set
     db.prepare(`
       UPDATE rss_feed_items 
       SET tvdb_id = ?, tmdb_id = ?, imdb_id = ?, tvdb_id_manual = 1, updated_at = datetime('now')
       WHERE id = ?
     `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
+    
+    // Clear old tv_releases entries that have the wrong TVDB ID
+    // This ensures the matching engine will recreate them with the correct IDs
+    if (oldTvdbId && oldTvdbId !== parseInt(tvdbId, 10)) {
+      // Clear entries for this specific GUID (this RSS item)
+      db.prepare(`
+        UPDATE tv_releases 
+        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
+            tmdb_id = NULL, tmdb_title = NULL,
+            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
+            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+            status = 'NEW', last_checked_at = datetime('now')
+        WHERE guid = ?
+      `).run(item.guid);
+      
+      // Also clear any other tv_releases entries that have the old TVDB ID
+      // (in case there are multiple releases for the same show with wrong IDs)
+      db.prepare(`
+        UPDATE tv_releases 
+        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
+            tmdb_id = NULL, tmdb_title = NULL,
+            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
+            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+            status = 'NEW', last_checked_at = datetime('now')
+        WHERE tvdb_id = ? AND tvdb_id != ?
+      `).run(oldTvdbId, parseInt(tvdbId, 10));
+      
+      console.log(`Cleared old tv_releases entries for TVDB ID ${oldTvdbId} (updated to ${tvdbId})`);
+    } else if (!oldTvdbId) {
+      // If there was no old TVDB ID, still clear any existing tv_releases for this GUID
+      // to ensure fresh matching
+      db.prepare(`
+        UPDATE tv_releases 
+        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
+            tmdb_id = NULL, tmdb_title = NULL,
+            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
+            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+            status = 'NEW', last_checked_at = datetime('now')
+        WHERE guid = ?
+      `).run(item.guid);
+    }
 
     // Propagate IDs to all other RSS items for the same TV show
     // Strategy: Update all RSS items that have the same TVDB ID (after we set it)
