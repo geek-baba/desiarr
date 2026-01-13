@@ -795,13 +795,20 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         
         // STEP 1: If we have a TVDB ID (manual or from RSS), ALWAYS check Sonarr by TVDB ID FIRST
         // This is the primary and most reliable way to match shows in Sonarr
+        let sonarrCheckFromRss: {
+          exists: boolean;
+          sonarrSeriesId: number | null;
+          sonarrSeriesTitle: string | null;
+          seasonExists: boolean;
+        } | null = null;
+        
         if (rssTvdbId) {
           console.log(`    Checking Sonarr by TVDB ID: ${rssTvdbId} (primary method)`);
-          const sonarrCheckByTvdbId = checkSonarrShow(rssTvdbId, rssTmdbId, season, rssImdbId);
+          sonarrCheckFromRss = checkSonarrShow(rssTvdbId, rssTmdbId, season, rssImdbId);
           
-          if (sonarrCheckByTvdbId.exists && sonarrCheckByTvdbId.sonarrSeriesId) {
+          if (sonarrCheckFromRss.exists && sonarrCheckFromRss.sonarrSeriesId) {
             // Found in Sonarr by TVDB ID - get the show details
-            sonarrShow = getSyncedSonarrShowBySonarrId(sonarrCheckByTvdbId.sonarrSeriesId);
+            sonarrShow = getSyncedSonarrShowBySonarrId(sonarrCheckFromRss.sonarrSeriesId);
             if (sonarrShow) {
               console.log(`    ✓ Found in Sonarr by TVDB ID: "${sonarrShow.title}" (Sonarr ID: ${sonarrShow.sonarr_id})`);
               
