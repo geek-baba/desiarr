@@ -998,44 +998,33 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     `).run(parseInt(tvdbId, 10), tmdbId || null, imdbId || null, itemId);
     
     // Clear old tv_releases entries that have the wrong TVDB ID
-    // This ensures the matching engine will recreate them with the correct IDs
+    // Delete the rows entirely to force fresh recreation (avoids NOT NULL constraint issues)
     if (oldTvdbId && oldTvdbId !== parseInt(tvdbId, 10)) {
-      // Clear entries for this specific GUID (this RSS item)
-      db.prepare(`
-        UPDATE tv_releases 
-        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
-            tmdb_id = NULL, tmdb_title = NULL,
-            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
-            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-            status = 'NEW', last_checked_at = datetime('now')
+      // Delete entries for this specific GUID (this RSS item)
+      const deletedCount1 = db.prepare(`
+        DELETE FROM tv_releases 
         WHERE guid = ?
-      `).run(item.guid);
+      `).run(item.guid).changes;
       
-      // Also clear any other tv_releases entries that have the old TVDB ID
+      // Also delete any other tv_releases entries that have the old TVDB ID
       // (in case there are multiple releases for the same show with wrong IDs)
-      db.prepare(`
-        UPDATE tv_releases 
-        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
-            tmdb_id = NULL, tmdb_title = NULL,
-            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
-            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-            status = 'NEW', last_checked_at = datetime('now')
+      const deletedCount2 = db.prepare(`
+        DELETE FROM tv_releases 
         WHERE tvdb_id = ? AND tvdb_id != ?
-      `).run(oldTvdbId, parseInt(tvdbId, 10));
+      `).run(oldTvdbId, parseInt(tvdbId, 10)).changes;
       
-      console.log(`Cleared old tv_releases entries for TVDB ID ${oldTvdbId} (updated to ${tvdbId})`);
+      console.log(`Deleted ${deletedCount1 + deletedCount2} old tv_releases entries for TVDB ID ${oldTvdbId} (updated to ${tvdbId})`);
     } else if (!oldTvdbId) {
-      // If there was no old TVDB ID, still clear any existing tv_releases for this GUID
+      // If there was no old TVDB ID, still delete any existing tv_releases for this GUID
       // to ensure fresh matching
-      db.prepare(`
-        UPDATE tv_releases 
-        SET tvdb_id = NULL, tvdb_slug = NULL, tvdb_title = NULL,
-            tmdb_id = NULL, tmdb_title = NULL,
-            show_name = NULL, sonarr_series_id = NULL, sonarr_series_title = NULL,
-            tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-            status = 'NEW', last_checked_at = datetime('now')
+      const deletedCount = db.prepare(`
+        DELETE FROM tv_releases 
         WHERE guid = ?
-      `).run(item.guid);
+      `).run(item.guid).changes;
+      
+      if (deletedCount > 0) {
+        console.log(`Deleted existing tv_release for GUID ${item.guid} to force fresh matching`);
+      }
     }
 
     // Propagate IDs to all other RSS items for the same TV show
