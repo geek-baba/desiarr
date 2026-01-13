@@ -1046,6 +1046,20 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     // Update tv_releases - update the specific release by guid, and also update all releases with the same TVDB ID
     const tvRelease = db.prepare('SELECT * FROM tv_releases WHERE guid = ?').get(item.guid) as any;
     if (tvRelease) {
+      // Check if TVDB ID changed - if so, clear sonarr_series_id to force re-validation
+      const oldTvdbId = tvRelease.tvdb_id;
+      const tvdbIdChanged = oldTvdbId && oldTvdbId !== parseInt(tvdbId, 10);
+      
+      if (tvdbIdChanged) {
+        console.log(`  ⚠️ TVDB ID changed from ${oldTvdbId} to ${parseInt(tvdbId, 10)} - clearing sonarr_series_id to force re-validation`);
+        // Clear sonarr_series_id for this release and all releases with the old TVDB ID
+        db.prepare(`
+          UPDATE tv_releases 
+          SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+          WHERE tvdb_id = ? OR guid = ?
+        `).run(oldTvdbId, item.guid);
+      }
+      
       db.prepare(`
         UPDATE tv_releases 
         SET tvdb_id = ?, tvdb_slug = ?, tmdb_id = ?, imdb_id = ?, tvdb_poster_url = ?, tmdb_poster_url = ?, last_checked_at = datetime('now')
@@ -1123,9 +1137,22 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
     const seriesName = (tvdbSeries as any).name || (tvdbSeries as any).title || 'Unknown Series';
     console.log(`Manually updated RSS item ${itemId} with TVDB ID ${tvdbId} (${seriesName})`);
 
+    // Trigger match for this single item in the background to re-validate Sonarr match
+    // This ensures the sonarr_series_id is updated if the TVDB ID changed
+    (async () => {
+      try {
+        console.log(`[TVDB Override] Triggering TV match for RSS item ${itemId}...`);
+        const { runTvMatchingEngine } = require('../services/tvMatchingEngine');
+        await runTvMatchingEngine();
+        console.log(`[TVDB Override] Match completed for RSS item ${itemId}`);
+      } catch (error: any) {
+        console.error(`[TVDB Override] Error matching RSS item ${itemId} after TVDB update:`, error);
+      }
+    })();
+
     res.json({ 
       success: true, 
-      message: `TVDB ID updated to ${tvdbId} (${seriesName})`,
+      message: `TVDB ID updated to ${tvdbId} (${seriesName}). Matching in progress...`,
       tvdbId: parseInt(tvdbId, 10),
       tmdbId: tmdbId,
       imdbId: imdbId,
