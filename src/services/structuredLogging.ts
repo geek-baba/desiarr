@@ -180,3 +180,44 @@ export function flush() {
   flushLogs();
 }
 
+
+// Automatic log cleanup - runs daily
+// Keep last 7 days of logs, but always keep ERROR and WARN logs
+const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+const LOG_RETENTION_DAYS = 7;
+
+function cleanupOldLogs() {
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - LOG_RETENTION_DAYS);
+    const cutoffDateStr = cutoffDate.toISOString();
+    
+    // Delete old DEBUG and INFO logs, but keep ERROR and WARN
+    const result = db.prepare(`
+      DELETE FROM structured_logs 
+      WHERE timestamp < ? 
+      AND level IN ('DEBUG', 'INFO')
+    `).run(cutoffDateStr);
+    
+    if (result.changes > 0) {
+      console.log(`[LOG CLEANUP] Deleted ${result.changes} old log entries (older than ${LOG_RETENTION_DAYS} days)`);
+      
+      // Vacuum database every 10th cleanup to reclaim space
+      const cleanupCount = db.prepare("SELECT value FROM app_settings WHERE key = 'log_cleanup_count'").get() as any;
+      const count = (cleanupCount?.value ? parseInt(cleanupCount.value, 10) : 0) + 1;
+      db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('log_cleanup_count', ?)").run(String(count));
+      
+      if (count % 10 === 0) {
+        console.log('[LOG CLEANUP] Running VACUUM to reclaim database space...');
+        db.exec('VACUUM');
+      }
+    }
+  } catch (error) {
+    console.error('[LOG CLEANUP] Error cleaning up logs:', error);
+  }
+}
+
+// Schedule automatic cleanup
+setInterval(cleanupOldLogs, CLEANUP_INTERVAL);
+// Run cleanup on startup (after a delay to let app initialize)
+setTimeout(cleanupOldLogs, 60000); // Run after 1 minute
