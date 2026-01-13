@@ -869,17 +869,31 @@ router.post('/rss/override-tvdb/:id', async (req: Request, res: Response) => {
         WHERE id = ?
       `).run(itemId);
 
+      // Clear TVDB ID and Sonarr match from tv_releases to move show to unmatched
       db.prepare(`
         UPDATE tv_releases
-        SET tvdb_id = NULL, tvdb_slug = NULL, last_checked_at = datetime('now')
+        SET tvdb_id = NULL, tvdb_slug = NULL, 
+            sonarr_series_id = NULL, sonarr_series_title = NULL,
+            status = 'NEW',
+            last_checked_at = datetime('now')
         WHERE guid = ?
       `).run(item.guid);
 
-      console.log(`Cleared TVDB ID for RSS item ${itemId}`);
+      console.log(`Cleared TVDB ID for RSS item ${itemId} - show moved to unmatched`);
+
+      // Trigger matching engine to update status
+      (async () => {
+        try {
+          const { runTvMatchingEngine } = await import('../services/tvMatchingEngine.js');
+          await runTvMatchingEngine();
+        } catch (error: any) {
+          console.error('Error running TV matching engine after clearing TVDB ID:', error);
+        }
+      })();
 
       return res.json({
         success: true,
-        message: 'TVDB ID cleared. This show will remain unmatched until a new ID is set manually.',
+        message: 'TVDB ID cleared. Show moved to unmatched status.',
       });
     }
     
