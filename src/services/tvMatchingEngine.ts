@@ -1041,6 +1041,33 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           // Check by IDs (for shows found via external APIs)
           sonarrCheck = checkSonarrShow(enrichment.tvdbId, enrichment.tmdbId, season, enrichment.imdbId);
           
+          // If we have an existing release with sonarr_series_id, validate it matches the correct show
+          // This handles cases where the wrong show was matched previously
+          if (existingRelease && existingRelease.sonarr_series_id && enrichment.tvdbId) {
+            const existingSonarrShow = getSyncedSonarrShowBySonarrId(existingRelease.sonarr_series_id);
+            if (existingSonarrShow) {
+              // Check if the existing sonarr_series_id points to a show with matching IDs
+              const tvdbIdMatches = !enrichment.tvdbId || !existingSonarrShow.tvdb_id || existingSonarrShow.tvdb_id === enrichment.tvdbId;
+              const tmdbIdMatches = !enrichment.tmdbId || !existingSonarrShow.tmdb_id || existingSonarrShow.tmdb_id === enrichment.tmdbId;
+              const imdbIdMatches = !enrichment.imdbId || !existingSonarrShow.imdb_id || existingSonarrShow.imdb_id === enrichment.imdbId;
+              
+              if (!tvdbIdMatches || !tmdbIdMatches || !imdbIdMatches) {
+                console.log(`    ⚠️ Existing sonarr_series_id ${existingRelease.sonarr_series_id} points to wrong show - clearing`);
+                console.log(`      Expected: TVDB=${enrichment.tvdbId || 'N/A'}, TMDB=${enrichment.tmdbId || 'N/A'}, IMDB=${enrichment.imdbId || 'N/A'}`);
+                console.log(`      Sonarr has: TVDB=${existingSonarrShow.tvdb_id || 'N/A'}, TMDB=${existingSonarrShow.tmdb_id || 'N/A'}, IMDB=${existingSonarrShow.imdb_id || 'N/A'}`);
+                // Clear the wrong sonarr_series_id from database immediately
+                db.prepare(`
+                  UPDATE tv_releases 
+                  SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+                  WHERE guid = ?
+                `).run(item.guid);
+                // Update existingRelease object to reflect the cleared sonarr_series_id
+                (existingRelease as any).sonarr_series_id = undefined;
+                (existingRelease as any).sonarr_series_title = undefined;
+              }
+            }
+          }
+          
           // Only preserve sonarr_series_id if:
           // 1. We have an existing release with sonarr_series_id
           // 2. The TVDB ID hasn't changed (same show)
