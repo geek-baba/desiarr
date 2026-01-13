@@ -1044,7 +1044,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           }
         }
 
-        // Check if show/season exists in Sonarr (using the IDs we have or the show we found by name)
+        // Check if show/season exists in Sonarr (using the IDs we have or the show we found by TVDB ID)
         let sonarrCheck: {
           exists: boolean;
           sonarrSeriesId: number | null;
@@ -1052,7 +1052,11 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           seasonExists: boolean;
         };
         
-        if (sonarrShow) {
+        // If we already found the show by TVDB ID from RSS feed, use that result
+        if (sonarrCheckFromRss && sonarrCheckFromRss.exists) {
+          sonarrCheck = sonarrCheckFromRss;
+          console.log(`    Using Sonarr check result from RSS TVDB ID: exists=${sonarrCheck.exists}, sonarrSeriesId=${sonarrCheck.sonarrSeriesId}`);
+        } else if (sonarrShow) {
           // We found the show by TVDB ID - validate IDs match (should already be validated, but double-check)
           // If we have IDs from RSS feed or enrichment, cross-validate them
           const finalTvdbId = enrichment.tvdbId || null;
