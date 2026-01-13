@@ -602,17 +602,13 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
             // If RSS feed has TVDB ID and it doesn't match the Sonarr show's TVDB ID, clear it
             if (existingSonarrShow.tvdb_id && existingSonarrShow.tvdb_id !== item.tvdb_id) {
               console.log(`    ⚠️ Clearing wrong sonarr_series_id: RSS has TVDB ID ${item.tvdb_id}, but Sonarr show ${existingRelease.sonarr_series_id} has TVDB ID ${existingSonarrShow.tvdb_id}`);
+              // Delete the row to force fresh recreation (avoids NOT NULL constraint on show_name)
               db.prepare(`
-                UPDATE tv_releases 
-                SET sonarr_series_id = NULL, sonarr_series_title = NULL, 
-                    show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
-                    tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-                    last_checked_at = datetime('now')
+                DELETE FROM tv_releases 
                 WHERE guid = ?
               `).run(item.guid);
-              // Update existingRelease object to reflect the cleared sonarr_series_id
-              (existingRelease as any).sonarr_series_id = undefined;
-              (existingRelease as any).sonarr_series_title = undefined;
+              // Clear existingRelease to force recreation
+              (existingRelease as any) = undefined;
             }
           }
         }
@@ -620,35 +616,27 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // If RSS feed item has a TVDB ID that differs from existing release, clear sonarr_series_id
         // This handles cases where TVDB ID was overridden but matching engine hasn't run yet
         if (existingRelease && item.tvdb_id && existingRelease.tvdb_id && existingRelease.tvdb_id !== item.tvdb_id) {
-          console.log(`    ⚠️ TVDB ID mismatch: RSS item has ${item.tvdb_id}, existing release has ${existingRelease.tvdb_id} - clearing sonarr_series_id`);
+          console.log(`    ⚠️ TVDB ID mismatch: RSS item has ${item.tvdb_id}, existing release has ${existingRelease.tvdb_id} - deleting row to force fresh match`);
+          // Delete the row to force fresh recreation (avoids NOT NULL constraint on show_name)
           db.prepare(`
-            UPDATE tv_releases 
-            SET sonarr_series_id = NULL, sonarr_series_title = NULL,
-                show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
-                tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-                last_checked_at = datetime('now')
+            DELETE FROM tv_releases 
             WHERE guid = ?
           `).run(item.guid);
-          // Update existingRelease object to reflect the cleared sonarr_series_id
-          (existingRelease as any).sonarr_series_id = undefined;
-          (existingRelease as any).sonarr_series_title = undefined;
+          // Clear existingRelease to force recreation
+          (existingRelease as any) = undefined;
         }
         
         // Also clear sonarr_series_id if RSS feed has no TVDB ID but existing release has one
         // This handles cases where IDs were manually cleared
         if (existingRelease && existingRelease.sonarr_series_id && !item.tvdb_id) {
-          console.log(`    ⚠️ RSS feed has no TVDB ID but existing release has sonarr_series_id - clearing to move to unmatched`);
+          console.log(`    ⚠️ RSS feed has no TVDB ID but existing release has sonarr_series_id - deleting row to move to unmatched`);
+          // Delete the row to force fresh recreation (avoids NOT NULL constraint on show_name)
           db.prepare(`
-            UPDATE tv_releases 
-            SET sonarr_series_id = NULL, sonarr_series_title = NULL, 
-                show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
-                tvdb_poster_url = NULL, tmdb_poster_url = NULL,
-                status = 'NEW', last_checked_at = datetime('now')
+            DELETE FROM tv_releases 
             WHERE guid = ?
           `).run(item.guid);
-          // Update existingRelease object to reflect the cleared sonarr_series_id
-          (existingRelease as any).sonarr_series_id = undefined;
-          (existingRelease as any).sonarr_series_title = undefined;
+          // Clear existingRelease to force recreation
+          (existingRelease as any) = undefined;
         }
         
         // Preserve sonarr_series_id only if TVDB ID hasn't changed (to avoid preserving wrong show's ID)
