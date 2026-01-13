@@ -593,6 +593,27 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // Preserve ADDED status, but still process IGNORED items to update metadata (IDs, titles, etc.)
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
         
+        // CRITICAL: Clear wrong sonarr_series_id if RSS feed TVDB ID doesn't match existing Sonarr show
+        // This must happen BEFORE enrichment to ensure we don't preserve wrong matches
+        if (existingRelease && existingRelease.sonarr_series_id && item.tvdb_id) {
+          // Check if the existing sonarr_series_id points to a show with a different TVDB ID
+          const existingSonarrShow = getSyncedSonarrShowBySonarrId(existingRelease.sonarr_series_id);
+          if (existingSonarrShow) {
+            // If RSS feed has TVDB ID and it doesn't match the Sonarr show's TVDB ID, clear it
+            if (existingSonarrShow.tvdb_id && existingSonarrShow.tvdb_id !== item.tvdb_id) {
+              console.log(`    ⚠️ Clearing wrong sonarr_series_id: RSS has TVDB ID ${item.tvdb_id}, but Sonarr show ${existingRelease.sonarr_series_id} has TVDB ID ${existingSonarrShow.tvdb_id}`);
+              db.prepare(`
+                UPDATE tv_releases 
+                SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+                WHERE guid = ?
+              `).run(item.guid);
+              // Update existingRelease object to reflect the cleared sonarr_series_id
+              (existingRelease as any).sonarr_series_id = undefined;
+              (existingRelease as any).sonarr_series_title = undefined;
+            }
+          }
+        }
+        
         // If RSS feed item has a TVDB ID that differs from existing release, clear sonarr_series_id
         // This handles cases where TVDB ID was overridden but matching engine hasn't run yet
         if (existingRelease && item.tvdb_id && existingRelease.tvdb_id && existingRelease.tvdb_id !== item.tvdb_id) {
@@ -600,6 +621,20 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           db.prepare(`
             UPDATE tv_releases 
             SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+            WHERE guid = ?
+          `).run(item.guid);
+          // Update existingRelease object to reflect the cleared sonarr_series_id
+          (existingRelease as any).sonarr_series_id = undefined;
+          (existingRelease as any).sonarr_series_title = undefined;
+        }
+        
+        // Also clear sonarr_series_id if RSS feed has no TVDB ID but existing release has one
+        // This handles cases where IDs were manually cleared
+        if (existingRelease && existingRelease.sonarr_series_id && !item.tvdb_id) {
+          console.log(`    ⚠️ RSS feed has no TVDB ID but existing release has sonarr_series_id - clearing to move to unmatched`);
+          db.prepare(`
+            UPDATE tv_releases 
+            SET sonarr_series_id = NULL, sonarr_series_title = NULL, status = 'NEW', last_checked_at = datetime('now')
             WHERE guid = ?
           `).run(item.guid);
           // Update existingRelease object to reflect the cleared sonarr_series_id
