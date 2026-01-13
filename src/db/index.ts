@@ -196,6 +196,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_logs_source ON structured_logs(source);
   CREATE INDEX IF NOT EXISTS idx_logs_job_id ON structured_logs(job_id);
   CREATE INDEX IF NOT EXISTS idx_logs_message ON structured_logs(message);
+  -- Composite indexes for common query patterns
+  CREATE INDEX IF NOT EXISTS idx_logs_timestamp_level ON structured_logs(timestamp DESC, level);
+  CREATE INDEX IF NOT EXISTS idx_logs_timestamp_source ON structured_logs(timestamp DESC, source);
+  CREATE INDEX IF NOT EXISTS idx_logs_level_source ON structured_logs(level, source);
 
   CREATE TABLE IF NOT EXISTS tmdb_movie_cache (
     tmdb_id INTEGER PRIMARY KEY,
@@ -419,6 +423,10 @@ try {
       CREATE INDEX idx_logs_source ON structured_logs(source);
       CREATE INDEX idx_logs_job_id ON structured_logs(job_id);
       CREATE INDEX idx_logs_message ON structured_logs(message);
+      -- Composite indexes for common query patterns
+      CREATE INDEX IF NOT EXISTS idx_logs_timestamp_level ON structured_logs(timestamp DESC, level);
+      CREATE INDEX IF NOT EXISTS idx_logs_timestamp_source ON structured_logs(timestamp DESC, source);
+      CREATE INDEX IF NOT EXISTS idx_logs_level_source ON structured_logs(level, source);
     `);
     console.log('Created table: structured_logs');
   }

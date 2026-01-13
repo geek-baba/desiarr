@@ -82,12 +82,23 @@ router.get('/', (req: Request, res: Response) => {
     }
 
     // Text search (across message, release_title, file_path)
+    // For better performance, limit search to recent logs if no other filters
     if (query.search) {
-      sql += ' AND (message LIKE ? OR release_title LIKE ? OR file_path LIKE ?)';
-      countSql += ' AND (message LIKE ? OR release_title LIKE ? OR file_path LIKE ?)';
       const searchTerm = `%${query.search}%`;
-      params.push(searchTerm, searchTerm, searchTerm);
-      countParams.push(searchTerm, searchTerm, searchTerm);
+      // If no date filter, limit search to last 7 days for performance
+      if (!query.dateFrom && !query.dateTo) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        sql += ' AND timestamp >= ? AND (LOWER(message) LIKE LOWER(?) OR LOWER(release_title) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))';
+        countSql += ' AND timestamp >= ? AND (LOWER(message) LIKE LOWER(?) OR LOWER(release_title) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))';
+        params.push(sevenDaysAgo.toISOString(), searchTerm, searchTerm, searchTerm);
+        countParams.push(sevenDaysAgo.toISOString(), searchTerm, searchTerm, searchTerm);
+      } else {
+        sql += ' AND (LOWER(message) LIKE LOWER(?) OR LOWER(release_title) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))';
+        countSql += ' AND (LOWER(message) LIKE LOWER(?) OR LOWER(release_title) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))';
+        params.push(searchTerm, searchTerm, searchTerm);
+        countParams.push(searchTerm, searchTerm, searchTerm);
+      }
     }
 
     // Get total count for pagination
@@ -246,7 +257,7 @@ router.post('/export', (req: Request, res: Response) => {
         params.push(filters.jobId);
       }
       if (filters.search) {
-        sql += ' AND (message LIKE ? OR release_title LIKE ? OR file_path LIKE ?)';
+        sql += ' AND (LOWER(message) LIKE LOWER(?) OR LOWER(release_title) LIKE LOWER(?) OR LOWER(file_path) LIKE LOWER(?))';
         const searchTerm = `%${filters.search}%`;
         params.push(searchTerm, searchTerm, searchTerm);
       }
@@ -307,6 +318,102 @@ router.post('/export', (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to export logs',
+    });
+  }
+});
+
+// POST /api/logs/cleanup - Archive/delete old logs
+router.post('/cleanup', (req: Request, res: Response) => {
+  try {
+    const { days = 7, keepErrors = true } = req.body;
+    
+    // Calculate cutoff date
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffDateStr = cutoffDate.toISOString();
+    
+    let deletedCount = 0;
+    
+    if (keepErrors) {
+      // Delete old logs but keep ERROR and WARN logs
+      const result = db.prepare(`
+        DELETE FROM structured_logs 
+        WHERE timestamp < ? 
+        AND level NOT IN ('ERROR', 'WARN')
+      `).run(cutoffDateStr);
+      deletedCount = result.changes;
+    } else {
+      // Delete all old logs
+      const result = db.prepare(`
+        DELETE FROM structured_logs 
+        WHERE timestamp < ?
+      `).run(cutoffDateStr);
+      deletedCount = result.changes;
+    }
+    
+    // Vacuum database to reclaim space
+    db.exec('VACUUM');
+    
+    res.json({
+      success: true,
+      deleted: deletedCount,
+      message: `Deleted ${deletedCount} log entries older than ${days} days`,
+    });
+  } catch (error: any) {
+    console.error('Error cleaning up logs:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to cleanup logs',
+    });
+  }
+});
+
+// GET /api/logs/stats - Get log statistics
+router.get('/stats', (req: Request, res: Response) => {
+  try {
+    const total = db.prepare('SELECT COUNT(*) as count FROM structured_logs').get() as any;
+    const byLevel = db.prepare(`
+      SELECT level, COUNT(*) as count 
+      FROM structured_logs 
+      GROUP BY level
+    `).all() as any[];
+    const bySource = db.prepare(`
+      SELECT source, COUNT(*) as count 
+      FROM structured_logs 
+      GROUP BY source 
+      ORDER BY count DESC 
+      LIMIT 10
+    `).all() as any[];
+    const oldest = db.prepare(`
+      SELECT MIN(timestamp) as oldest 
+      FROM structured_logs
+    `).get() as any;
+    const newest = db.prepare(`
+      SELECT MAX(timestamp) as newest 
+      FROM structured_logs
+    `).get() as any;
+    
+    res.json({
+      success: true,
+      stats: {
+        total: total?.count || 0,
+        byLevel: byLevel.reduce((acc, row) => {
+          acc[row.level] = row.count;
+          return acc;
+        }, {} as Record<string, number>),
+        bySource: bySource.reduce((acc, row) => {
+          acc[row.source] = row.count;
+          return acc;
+        }, {} as Record<string, number>),
+        oldest: oldest?.oldest || null,
+        newest: newest?.newest || null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error fetching log stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch log stats',
     });
   }
 });
