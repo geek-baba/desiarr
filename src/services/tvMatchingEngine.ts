@@ -604,7 +604,10 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
               console.log(`    ⚠️ Clearing wrong sonarr_series_id: RSS has TVDB ID ${item.tvdb_id}, but Sonarr show ${existingRelease.sonarr_series_id} has TVDB ID ${existingSonarrShow.tvdb_id}`);
               db.prepare(`
                 UPDATE tv_releases 
-                SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+                SET sonarr_series_id = NULL, sonarr_series_title = NULL, 
+                    show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
+                    tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+                    last_checked_at = datetime('now')
                 WHERE guid = ?
               `).run(item.guid);
               // Update existingRelease object to reflect the cleared sonarr_series_id
@@ -620,7 +623,10 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           console.log(`    ⚠️ TVDB ID mismatch: RSS item has ${item.tvdb_id}, existing release has ${existingRelease.tvdb_id} - clearing sonarr_series_id`);
           db.prepare(`
             UPDATE tv_releases 
-            SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+            SET sonarr_series_id = NULL, sonarr_series_title = NULL,
+                show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
+                tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+                last_checked_at = datetime('now')
             WHERE guid = ?
           `).run(item.guid);
           // Update existingRelease object to reflect the cleared sonarr_series_id
@@ -634,7 +640,10 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           console.log(`    ⚠️ RSS feed has no TVDB ID but existing release has sonarr_series_id - clearing to move to unmatched`);
           db.prepare(`
             UPDATE tv_releases 
-            SET sonarr_series_id = NULL, sonarr_series_title = NULL, status = 'NEW', last_checked_at = datetime('now')
+            SET sonarr_series_id = NULL, sonarr_series_title = NULL, 
+                show_name = NULL, tvdb_title = NULL, tmdb_title = NULL,
+                tvdb_poster_url = NULL, tmdb_poster_url = NULL,
+                status = 'NEW', last_checked_at = datetime('now')
             WHERE guid = ?
           `).run(item.guid);
           // Update existingRelease object to reflect the cleared sonarr_series_id
