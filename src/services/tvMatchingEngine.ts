@@ -590,6 +590,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
 
         // Check if already processed
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
+        // Preserve ADDED status, but still process IGNORED items to update metadata (IDs, titles, etc.)
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
         
         // If RSS feed item has a TVDB ID that differs from existing release, clear sonarr_series_id
@@ -812,6 +813,7 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
           
           // Fetch TMDB poster if we have a TMDB ID
           // Also validate ID consistency
+          // IMPORTANT: Always fetch title when we have manual IDs to ensure correct show name
           if (enrichment.tmdbId && tmdbApiKey) {
             try {
               const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
@@ -822,6 +824,9 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
                 // Always use TMDB English title instead of TVDB original language title
                 if (enrichment.tmdbTitle) {
                   enrichment.tvdbTitle = enrichment.tmdbTitle; // Use English title
+                  console.log(`    ✓ Fetched TMDB title: "${enrichment.tmdbTitle}"`);
+                } else {
+                  console.log(`    ⚠️ TMDB show found but no title in response`);
                 }
                 
                 if (tmdbShow.poster_path) {
@@ -1172,7 +1177,43 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         
         // Use actual show title from TMDB (English) or TVDB, otherwise fallback to parsed showName
         // Prefer TMDB title as it's typically in English, then TVDB title, then parsed showName
-        const actualShowName = enrichment.tmdbTitle || enrichment.tvdbTitle || showName;
+        // BUT: If we have manual IDs and still don't have a title, try to fetch it one more time
+        let actualShowName = enrichment.tmdbTitle || enrichment.tvdbTitle || showName;
+        
+        // If we have manual IDs but no title, try to fetch it from TMDB/TVDB
+        if ((hasManualTvdbId || hasManualTmdbId) && !enrichment.tmdbTitle && !enrichment.tvdbTitle) {
+          console.log(`    ⚠️ Manual IDs present but no title found - attempting to fetch title...`);
+          if (enrichment.tmdbId && tmdbApiKey) {
+            try {
+              const tmdbShow = await tmdbClient.getTvShow(enrichment.tmdbId);
+              if (tmdbShow && tmdbShow.name) {
+                actualShowName = tmdbShow.name;
+                enrichment.tmdbTitle = tmdbShow.name;
+                console.log(`    ✓ Fetched title from TMDB: "${actualShowName}"`);
+              }
+            } catch (error) {
+              console.log(`    ⚠ Failed to fetch TMDB title:`, error);
+            }
+          }
+          if (!actualShowName || actualShowName === showName) {
+            // If still no title or title is same as parsed (wrong), try TVDB
+            if (enrichment.tvdbId && tvdbApiKey) {
+              try {
+                const tvdbExtended = await tvdbClient.getSeriesExtended(enrichment.tvdbId);
+                if (tvdbExtended) {
+                  const tvdbTitle = (tvdbExtended as any).name || (tvdbExtended as any).title;
+                  if (tvdbTitle) {
+                    actualShowName = tvdbTitle;
+                    enrichment.tvdbTitle = tvdbTitle;
+                    console.log(`    ✓ Fetched title from TVDB: "${actualShowName}"`);
+                  }
+                }
+              } catch (error) {
+                console.log(`    ⚠ Failed to fetch TVDB title:`, error);
+              }
+            }
+          }
+        }
         
         const tvRelease: Omit<TvRelease, 'id'> = {
           guid: String(item.guid || ''),
