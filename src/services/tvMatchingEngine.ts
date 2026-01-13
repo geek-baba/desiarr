@@ -591,6 +591,21 @@ export async function runTvMatchingEngine(): Promise<TvMatchingStats> {
         // Check if already processed
         const existingRelease = tvReleasesModel.getByGuid(item.guid);
         const preserveStatus = existingRelease && existingRelease.status === 'ADDED';
+        
+        // If RSS feed item has a TVDB ID that differs from existing release, clear sonarr_series_id
+        // This handles cases where TVDB ID was overridden but matching engine hasn't run yet
+        if (existingRelease && item.tvdb_id && existingRelease.tvdb_id && existingRelease.tvdb_id !== item.tvdb_id) {
+          console.log(`    ⚠️ TVDB ID mismatch: RSS item has ${item.tvdb_id}, existing release has ${existingRelease.tvdb_id} - clearing sonarr_series_id`);
+          db.prepare(`
+            UPDATE tv_releases 
+            SET sonarr_series_id = NULL, sonarr_series_title = NULL, last_checked_at = datetime('now')
+            WHERE guid = ?
+          `).run(item.guid);
+          // Update existingRelease object to reflect the cleared sonarr_series_id
+          (existingRelease as any).sonarr_series_id = undefined;
+          (existingRelease as any).sonarr_series_title = undefined;
+        }
+        
         // Preserve sonarr_series_id only if TVDB ID hasn't changed (to avoid preserving wrong show's ID)
         // We'll check this later after we have the enrichment data
 
