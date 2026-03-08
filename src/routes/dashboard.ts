@@ -5,7 +5,7 @@ import { feedsModel } from '../models/feeds';
 import { settingsModel } from '../models/settings';
 import { config } from '../config';
 import { Release } from '../types/Release';
-import { getSyncedRadarrMovieByTmdbId, getSyncedRadarrMovieByRadarrId, syncRadarrMovies } from '../services/radarrSync';
+import { syncRadarrMovies } from '../services/radarrSync';
 import { syncSonarrShows, getSyncedSonarrShowBySonarrId } from '../services/sonarrSync';
 import { syncRssFeeds } from '../services/rssSync';
 import { runMatchingEngine } from '../services/matchingEngine';
@@ -13,7 +13,6 @@ import { runTvMatchingEngine } from '../services/tvMatchingEngine';
 import { syncProgress } from '../services/syncProgress';
 import { parseReleaseFromTitle } from '../scoring/parseFromTitle';
 import { buildShowKey, ignoredShowsModel } from '../models/ignoredShows';
-import { TMDBClient } from '../tmdb/client';
 import db from '../db';
 import { getLanguageName, getLanguageCode, isIndianLanguage } from '../utils/languageMapping';
 
@@ -154,6 +153,20 @@ router.get('/movies', async (req: Request, res: Response) => {
       (release as any).feedName = feedMap[release.feed_id] || 'Unknown Feed';
     }
 
+    // Preload Radarr and TMDB cache once (avoid N queries and no TMDB API on dashboard)
+    const radarrRows = db.prepare('SELECT * FROM radarr_movies').all() as any[];
+    const radarrByTmdbId = new Map<number, any>();
+    const radarrByRadarrId = new Map<number, any>();
+    for (const row of radarrRows) {
+      if (row.tmdb_id) radarrByTmdbId.set(row.tmdb_id, row);
+      radarrByRadarrId.set(row.radarr_id, row);
+    }
+    const tmdbCacheRows = db.prepare('SELECT tmdb_id, title, original_language FROM tmdb_movie_cache WHERE is_deleted = 0').all() as any[];
+    const tmdbCacheByTmdbId = new Map<number, { title: string | null; original_language: string | null }>();
+    for (const row of tmdbCacheRows) {
+      tmdbCacheByTmdbId.set(row.tmdb_id, { title: row.title || null, original_language: row.original_language || null });
+    }
+
     // Group releases by movie (using TMDB ID as primary key, fallback to normalized title)
     // Two-pass approach: first group by ID, then merge title-based groups that match ID-based groups
     const releasesByMovie: { [key: string]: any[] } = {};
@@ -240,54 +253,31 @@ router.get('/movies', async (req: Request, res: Response) => {
                             releases.find(r => r.tmdb_id) || 
                             releases[0];
       
-      // Ensure we have the proper title and language from TMDB (not Radarr)
-      // This ensures we use the actual movie title instead of the release filename
-      let tmdbMovieData: { title?: string; original_language?: string } | null = null;
-      
+      // Ensure we have title and language from local data only (no TMDB API on dashboard)
       if (primaryRelease.tmdb_id) {
-        // First check if we already have tmdb_title and tmdb_original_language in release data
         if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
-          // Try to get from synced Radarr data first (as a cache)
-          const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
-          if (syncedMovie && syncedMovie.title) {
+          const syncedMovie = radarrByTmdbId.get(primaryRelease.tmdb_id);
+          if (syncedMovie?.title) {
             primaryRelease.tmdb_title = syncedMovie.title;
           }
-          
-          // If still missing title or language, fetch from TMDB API
           if (!primaryRelease.tmdb_title || !primaryRelease.tmdb_original_language) {
-            const allSettings = settingsModel.getAll();
-            const tmdbApiKey = allSettings.find(s => s.key === 'tmdb_api_key')?.value;
-            if (tmdbApiKey) {
-              try {
-                const tmdbClient = new TMDBClient();
-                tmdbClient.setApiKey(tmdbApiKey);
-                tmdbMovieData = await tmdbClient.getMovie(primaryRelease.tmdb_id);
-                if (tmdbMovieData) {
-                  if (tmdbMovieData.title && !primaryRelease.tmdb_title) {
-                    primaryRelease.tmdb_title = tmdbMovieData.title;
-                    // Update the database for future use
-                    db.prepare('UPDATE movie_releases SET tmdb_title = ? WHERE tmdb_id = ?')
-                      .run(tmdbMovieData.title, primaryRelease.tmdb_id);
-                  }
-                  if (tmdbMovieData.original_language && !primaryRelease.tmdb_original_language) {
-                    primaryRelease.tmdb_original_language = tmdbMovieData.original_language;
-                    // Update the database for future use
-                    db.prepare('UPDATE movie_releases SET tmdb_original_language = ? WHERE tmdb_id = ?')
-                      .run(tmdbMovieData.original_language, primaryRelease.tmdb_id);
-                  }
-                }
-              } catch (error) {
-                console.error(`Error fetching TMDB movie ${primaryRelease.tmdb_id}:`, error);
+            const cached = tmdbCacheByTmdbId.get(primaryRelease.tmdb_id);
+            if (cached) {
+              if (cached.title && !primaryRelease.tmdb_title) {
+                primaryRelease.tmdb_title = cached.title;
+                db.prepare('UPDATE movie_releases SET tmdb_title = ? WHERE tmdb_id = ?').run(cached.title, primaryRelease.tmdb_id);
+              }
+              if (cached.original_language && !primaryRelease.tmdb_original_language) {
+                primaryRelease.tmdb_original_language = cached.original_language;
+                db.prepare('UPDATE movie_releases SET tmdb_original_language = ? WHERE tmdb_id = ?').run(cached.original_language, primaryRelease.tmdb_id);
               }
             }
           }
         }
       }
-      
       if (primaryRelease.radarr_movie_id && !primaryRelease.radarr_movie_title) {
-        // Try to get title from synced Radarr data
-        const syncedMovie = getSyncedRadarrMovieByRadarrId(primaryRelease.radarr_movie_id);
-        if (syncedMovie && syncedMovie.title) {
+        const syncedMovie = radarrByRadarrId.get(primaryRelease.radarr_movie_id);
+        if (syncedMovie?.title) {
           primaryRelease.radarr_movie_title = syncedMovie.title;
         }
       }
@@ -338,7 +328,7 @@ router.get('/movies', async (req: Request, res: Response) => {
       let radarrMovieId: number | undefined = primaryRelease.radarr_movie_id;
       
       if (!hasRadarrMatch && primaryRelease.tmdb_id) {
-        const syncedMovie = getSyncedRadarrMovieByTmdbId(primaryRelease.tmdb_id);
+        const syncedMovie = radarrByTmdbId.get(primaryRelease.tmdb_id);
         if (syncedMovie) {
           hasRadarrMatch = true;
           radarrMovieId = syncedMovie.radarr_id;
@@ -380,7 +370,7 @@ router.get('/movies', async (req: Request, res: Response) => {
       // Extract Radarr info from synced Radarr movies table (more complete than release attributes)
       let radarrInfo: any = null;
       if (primaryRelease.radarr_movie_id) {
-        const syncedRadarrMovie = getSyncedRadarrMovieByRadarrId(primaryRelease.radarr_movie_id);
+        const syncedRadarrMovie = radarrByRadarrId.get(primaryRelease.radarr_movie_id);
         if (syncedRadarrMovie) {
           try {
             // Parse movie file for attributes
@@ -561,22 +551,15 @@ router.get('/movies', async (req: Request, res: Response) => {
       
       // If we have a radarr_movie_id, verify it exists in radarr_movies table to get the correct ID
       if (finalRadarrMovieId) {
-        const syncedMovie = getSyncedRadarrMovieByRadarrId(finalRadarrMovieId);
+        const syncedMovie = radarrByRadarrId.get(finalRadarrMovieId);
         if (syncedMovie) {
           // Use the radarr_id from the synced table (this is the actual Radarr movie ID)
           finalRadarrMovieId = syncedMovie.radarr_id;
         }
       }
       
-      // Get original language from TMDB ONLY (tmdb_original_language) - NEVER use Radarr language at movie level
-      // Radarr language should only be used in Radarr Data card
-      let originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
-      
-      // If we just fetched from TMDB API, use that language
-      if (!originalLanguageCode && tmdbMovieData?.original_language) {
-        originalLanguageCode = tmdbMovieData.original_language;
-      }
-      
+      // Get original language from TMDB only (from release or cache - no API on dashboard)
+      const originalLanguageCode: string | undefined = primaryRelease.tmdb_original_language || undefined;
       const originalLanguageName = originalLanguageCode ? getLanguageName(originalLanguageCode) : undefined;
       const isIndian = originalLanguageCode ? isIndianLanguage(originalLanguageCode) : false;
       
@@ -616,9 +599,9 @@ router.get('/movies', async (req: Request, res: Response) => {
         try {
           let syncedMovie: any = null;
           if (movieGroup.radarrMovieId) {
-            syncedMovie = getSyncedRadarrMovieByRadarrId(movieGroup.radarrMovieId);
+            syncedMovie = radarrByRadarrId.get(movieGroup.radarrMovieId);
           } else if (movieGroup.tmdbId) {
-            syncedMovie = getSyncedRadarrMovieByTmdbId(movieGroup.tmdbId);
+            syncedMovie = radarrByTmdbId.get(movieGroup.tmdbId);
           }
           
           if (syncedMovie) {

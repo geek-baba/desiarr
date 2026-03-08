@@ -1,0 +1,12 @@
+services:
+  desiarr:
+    container_name: desiarr
+    image: ghcr.io/geek-baba/desiarr:latest
+    ports:
+      - 8085:8085
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ${CONFIG}/desiarr:/app/data
+    restart: unless-stopped
+networks: {}
