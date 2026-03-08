@@ -48,54 +48,20 @@
     <main class="p-4 lg:p-6">
       <% 
         const currentViewType = typeof viewType !== 'undefined' ? viewType : 'movies';
-        
-        // Movies view variables
-        const hasNewMovies = currentViewType === 'movies' && newMoviesByPeriod && (
-          (newMoviesByPeriod.today && newMoviesByPeriod.today.length > 0) ||
-          (newMoviesByPeriod.yesterday && newMoviesByPeriod.yesterday.length > 0) ||
-          (newMoviesByPeriod.older && newMoviesByPeriod.older.length > 0)
-        );
-        const hasUpgradeMovies = currentViewType === 'movies' && typeof upgradeMoviesByPeriod !== 'undefined' && upgradeMoviesByPeriod && (
-          (upgradeMoviesByPeriod.today && upgradeMoviesByPeriod.today.length > 0) ||
-          (upgradeMoviesByPeriod.yesterday && upgradeMoviesByPeriod.yesterday.length > 0) ||
-          (upgradeMoviesByPeriod.older && upgradeMoviesByPeriod.older.length > 0)
-        );
-        const hasExistingMovies = currentViewType === 'movies' && existingMoviesByPeriod && (
-          (existingMoviesByPeriod.today && existingMoviesByPeriod.today.length > 0) ||
-          (existingMoviesByPeriod.yesterday && existingMoviesByPeriod.yesterday.length > 0) ||
-          (existingMoviesByPeriod.older && existingMoviesByPeriod.older.length > 0)
-        );
+        // Movies view (flat arrays: newMovies, upgradeMovies, existingMovies, unmatchedItems)
+        const hasNewMovies = currentViewType === 'movies' && newMovies && newMovies.length > 0;
+        const hasUpgradeMovies = currentViewType === 'movies' && typeof upgradeMovies !== 'undefined' && upgradeMovies && upgradeMovies.length > 0;
+        const hasExistingMovies = currentViewType === 'movies' && existingMovies && existingMovies.length > 0;
         const hasUnmatched = currentViewType === 'movies' && unmatchedItems && unmatchedItems.length > 0;
-        
-        // TV view variables
-        const hasNewTvShows = currentViewType === 'tv' && newTvShowsByPeriod && (
-          (newTvShowsByPeriod.today && newTvShowsByPeriod.today.length > 0) ||
-          (newTvShowsByPeriod.yesterday && newTvShowsByPeriod.yesterday.length > 0) ||
-          (newTvShowsByPeriod.older && newTvShowsByPeriod.older.length > 0)
-        );
-        const hasExistingTvShows = currentViewType === 'tv' && existingTvShowsByPeriod && (
-          (existingTvShowsByPeriod.today && existingTvShowsByPeriod.today.length > 0) ||
-          (existingTvShowsByPeriod.yesterday && existingTvShowsByPeriod.yesterday.length > 0) ||
-          (existingTvShowsByPeriod.older && existingTvShowsByPeriod.older.length > 0)
-        );
+        // TV view (flat arrays: newTvShows, existingTvShows, unmatchedItems)
+        const hasNewTvShows = currentViewType === 'tv' && newTvShows && newTvShows.length > 0;
+        const hasExistingTvShows = currentViewType === 'tv' && existingTvShows && existingTvShows.length > 0;
         const hasUnmatchedTv = currentViewType === 'tv' && unmatchedItems && unmatchedItems.length > 0;
       %>
 
       <!-- Movies/TV View Selector Tabs -->
       <div class="mb-6">
         <nav class="flex gap-2 items-center" aria-label="View Type">
-          <a 
-            href="/dashboard"
-            class="<%= currentViewType === 'combined' 
-              ? 'bg-blue-600 text-white shadow-md' 
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700' %> 
-              px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 flex items-center gap-2"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-            </svg>
-            <span>Combined</span>
-          </a>
           <a 
             href="/movies"
             class="<%= currentViewType === 'movies' 
@@ -123,9 +89,9 @@
         </nav>
       </div>
 
-      <% if (currentViewType === 'combined') { %>
+      <% if (false) { /* Combined view removed - use Movies / TV tabs */ %>
         <% 
-          // Combined view: merge movies and TV shows into unified list
+          // (Combined view removed)
           // Helper to get latest date from a group
           function getLatestDateCombined(group) {
             let allReleases = [];
@@ -348,10 +314,10 @@
           <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
             <% 
               const mainTabs = [
-                { key: 'new', label: 'New Movies', count: (newMoviesByPeriod.today?.length || 0) + (newMoviesByPeriod.yesterday?.length || 0) + (newMoviesByPeriod.older?.length || 0), visible: hasNewMovies },
-                { key: 'upgrade', label: 'Upgrade Movies', count: (typeof upgradeMoviesByPeriod !== 'undefined' && upgradeMoviesByPeriod ? ((upgradeMoviesByPeriod.today?.length || 0) + (upgradeMoviesByPeriod.yesterday?.length || 0) + (upgradeMoviesByPeriod.older?.length || 0)) : 0), visible: hasUpgradeMovies },
+                { key: 'new', label: 'New Movies', count: (newMovies?.length || 0), visible: hasNewMovies },
+                { key: 'upgrade', label: 'Upgrade Movies', count: (upgradeMovies?.length || 0), visible: hasUpgradeMovies },
                 { key: 'unmatched', label: 'Unmatched Movies', count: unmatchedItems?.length || 0, visible: hasUnmatched },
-                { key: 'existing', label: 'Existing Movies', count: (existingMoviesByPeriod.today?.length || 0) + (existingMoviesByPeriod.yesterday?.length || 0) + (existingMoviesByPeriod.older?.length || 0), visible: hasExistingMovies },
+                { key: 'existing', label: 'Existing Movies', count: (existingMovies?.length || 0), visible: hasExistingMovies },
               ];
               let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
               if (firstVisibleTab === -1) firstVisibleTab = 0;
@@ -427,54 +393,8 @@
         <!-- New Movies Section -->
         <% if (hasNewMovies) { %>
           <div id="main-section-new" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
-            <!-- Time Period Tabs for New Movies - Modern Design -->
-            <div class="mb-4">
-              <nav class="flex gap-2" aria-label="Time Periods">
-                <% const newPeriods = [
-                  { key: 'today', label: 'Today', count: newMoviesByPeriod.today?.length || 0 },
-                  { key: 'yesterday', label: 'Yesterday', count: newMoviesByPeriod.yesterday?.length || 0 },
-                  { key: 'older', label: 'Older', count: newMoviesByPeriod.older?.length || 0 }
-                ]; %>
-                <% 
-                  let firstNewIndex = -1;
-                  newPeriods.forEach((period, index) => {
-                    if (period.count > 0 && firstNewIndex === -1) {
-                      firstNewIndex = index;
-                    }
-                  });
-                %>
-                <% newPeriods.forEach((period, index) => { %>
-                  <% if (period.count > 0) { %>
-                    <button 
-                      onclick="showNewMoviesPeriod('<%= period.key %>')" 
-                      id="new-tab-<%= period.key %>"
-                      class="<%= index === firstNewIndex 
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                        px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                    >
-                      <span><%= period.label %></span>
-                      <span class="<%= index === firstNewIndex 
-                        ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                        px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                        <%= period.count %>
-                      </span>
-                    </button>
-                  <% } %>
-                <% }); %>
-              </nav>
-            </div>
-
-            <!-- New Movies Time Period Sections -->
-            <% newPeriods.forEach((period, index) => { %>
-              <% if (newMoviesByPeriod[period.key] && newMoviesByPeriod[period.key].length > 0) { %>
-                <div id="new-period-<%= period.key %>" class="new-movies-section <%= index === firstNewIndex ? '' : 'hidden' %>">
-                  <% newMoviesByPeriod[period.key].forEach(movie => { %>
-                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
-                  <% }); %>
-                </div>
-              <% } %>
+            <% (newMovies || []).forEach(movie => { %>
+              <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
             <% }); %>
           </div>
         <% } %>
@@ -482,118 +402,17 @@
         <!-- Upgrade Movies Section -->
         <% if (hasUpgradeMovies) { %>
           <div id="main-section-upgrade" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
-            <!-- Time Period Tabs for Upgrade Movies - Modern Design -->
-            <div class="mb-4">
-              <nav class="flex gap-2" aria-label="Time Periods">
-                <% const upgradePeriods = [
-                  { key: 'today', label: 'Today', count: upgradeMoviesByPeriod.today?.length || 0 },
-                  { key: 'yesterday', label: 'Yesterday', count: upgradeMoviesByPeriod.yesterday?.length || 0 },
-                  { key: 'older', label: 'Older', count: upgradeMoviesByPeriod.older?.length || 0 }
-                ]; %>
-                <% 
-                  let firstUpgradeIndex = -1;
-                  upgradePeriods.forEach((period, index) => {
-                    if (period.count > 0 && firstUpgradeIndex === -1) {
-                      firstUpgradeIndex = index;
-                    }
-                  });
-                %>
-                <% upgradePeriods.forEach((period, index) => { %>
-                  <% if (period.count > 0) { %>
-                    <button 
-                      onclick="showUpgradeMoviesPeriod('<%= period.key %>')" 
-                      id="upgrade-tab-<%= period.key %>"
-                      class="<%= index === firstUpgradeIndex 
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                        px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                    >
-                      <span><%= period.label %></span>
-                      <span class="<%= index === firstUpgradeIndex 
-                        ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                        px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                        <%= period.count %>
-                      </span>
-                    </button>
-                  <% } %>
-                <% }); %>
-              </nav>
-            </div>
-
-            <!-- Upgrade Movies Time Period Sections -->
-            <% upgradePeriods.forEach((period, index) => { %>
-              <% if (upgradeMoviesByPeriod[period.key] && upgradeMoviesByPeriod[period.key].length > 0) { %>
-                <div id="upgrade-period-<%= period.key %>" class="upgrade-movies-section <%= index === firstUpgradeIndex ? '' : 'hidden' %>">
-                  <% upgradeMoviesByPeriod[period.key].forEach(movie => { %>
-                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
-                  <% }); %>
-                </div>
-              <% } %>
+            <% (upgradeMovies || []).forEach(movie => { %>
+              <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
             <% }); %>
           </div>
-        <% } %>
-
-        <!-- Unmatched Items Section -->
-        <% if (hasUnmatched) { %>
-        <div id="main-section-unmatched" class="main-section <%= firstVisibleTab === 2 ? '' : 'hidden' %>">
-          <% unmatchedItems.forEach(movie => { %>
-            <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
-          <% }); %>
-        </div>
         <% } %>
 
         <!-- Existing Movies Section -->
         <% if (hasExistingMovies) { %>
           <div id="main-section-existing" class="main-section <%= firstVisibleTab === 3 ? '' : 'hidden' %>">
-            <!-- Time Period Tabs for Existing Movies - Modern Design -->
-            <div class="mb-4">
-              <nav class="flex gap-2" aria-label="Time Periods">
-                <% const existingPeriods = [
-                  { key: 'today', label: 'Today', count: existingMoviesByPeriod.today?.length || 0 },
-                  { key: 'yesterday', label: 'Yesterday', count: existingMoviesByPeriod.yesterday?.length || 0 },
-                  { key: 'older', label: 'Older', count: existingMoviesByPeriod.older?.length || 0 }
-                ]; %>
-                <% 
-                  let firstExistingIndex = -1;
-                  existingPeriods.forEach((period, index) => {
-                    if (period.count > 0 && firstExistingIndex === -1) {
-                      firstExistingIndex = index;
-                    }
-                  });
-                %>
-                <% existingPeriods.forEach((period, index) => { %>
-                  <% if (period.count > 0) { %>
-                    <button 
-                      onclick="showExistingMoviesPeriod('<%= period.key %>')" 
-                      id="existing-tab-<%= period.key %>"
-                      class="<%= index === firstExistingIndex 
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                        : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                        px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                    >
-                      <span><%= period.label %></span>
-                      <span class="<%= index === firstExistingIndex 
-                        ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                        px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                        <%= period.count %>
-                      </span>
-                    </button>
-                  <% } %>
-                <% }); %>
-              </nav>
-            </div>
-
-            <!-- Existing Movies Time Period Sections -->
-            <% existingPeriods.forEach((period, index) => { %>
-              <% if (existingMoviesByPeriod[period.key] && existingMoviesByPeriod[period.key].length > 0) { %>
-                <div id="existing-period-<%= period.key %>" class="existing-movies-section <%= index === firstExistingIndex ? '' : 'hidden' %>">
-                  <% existingMoviesByPeriod[period.key].forEach(movie => { %>
-                    <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
-                  <% }); %>
-                </div>
-              <% } %>
+            <% (existingMovies || []).forEach(movie => { %>
+              <%- include('partials/dashboard/movie-card', { movie, radarrBaseUrl }) %>
             <% }); %>
           </div>
         <% } %>
@@ -619,8 +438,8 @@
             <nav class="flex gap-2 items-center flex-wrap" aria-label="Main Sections">
               <% 
                 const mainTabs = [
-                  { key: 'new', label: 'New TVShows', count: (newTvShowsByPeriod.today?.length || 0) + (newTvShowsByPeriod.yesterday?.length || 0) + (newTvShowsByPeriod.older?.length || 0), visible: hasNewTvShows },
-                  { key: 'existing', label: 'Existing TVShows', count: (existingTvShowsByPeriod.today?.length || 0) + (existingTvShowsByPeriod.yesterday?.length || 0) + (existingTvShowsByPeriod.older?.length || 0), visible: hasExistingTvShows },
+                  { key: 'new', label: 'New TV Shows', count: (newTvShows?.length || 0), visible: hasNewTvShows },
+                  { key: 'existing', label: 'Existing TV Shows', count: (existingTvShows?.length || 0), visible: hasExistingTvShows },
                   { key: 'unmatched', label: 'Unmatched Items', count: unmatchedItems?.length || 0, visible: hasUnmatchedTv },
                 ];
                 let firstVisibleTab = mainTabs.findIndex(tab => tab.visible);
@@ -694,112 +513,20 @@
             </div>
           </div>
 
-          <!-- New TVShows Section -->
+          <!-- New TV Shows Section -->
           <% if (hasNewTvShows) { %>
             <div id="main-section-new" class="main-section <%= firstVisibleTab === 0 ? '' : 'hidden' %>">
-              <!-- Time Period Tabs for New TVShows -->
-              <div class="mb-4">
-                <nav class="flex gap-2" aria-label="Time Periods">
-                  <% const newTvShowsPeriods = [
-                    { key: 'today', label: 'Today', count: newTvShowsByPeriod.today?.length || 0 },
-                    { key: 'yesterday', label: 'Yesterday', count: newTvShowsByPeriod.yesterday?.length || 0 },
-                    { key: 'older', label: 'Older', count: newTvShowsByPeriod.older?.length || 0 }
-                  ]; %>
-                  <% 
-                    let firstNewTvShowsIndex = -1;
-                    newTvShowsPeriods.forEach((period, index) => {
-                      if (period.count > 0 && firstNewTvShowsIndex === -1) {
-                        firstNewTvShowsIndex = index;
-                      }
-                    });
-                  %>
-                  <% newTvShowsPeriods.forEach((period, index) => { %>
-                    <% if (period.count > 0) { %>
-                      <button 
-                        onclick="showNewTvShowsPeriod('<%= period.key %>')" 
-                        id="new-tvshows-tab-<%= period.key %>"
-                        class="<%= index === firstNewTvShowsIndex 
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                      >
-                        <span><%= period.label %></span>
-                        <span class="<%= index === firstNewTvShowsIndex 
-                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                          <%= period.count %>
-                        </span>
-                      </button>
-                    <% } %>
-                  <% }); %>
-                </nav>
-              </div>
-
-              <!-- New TVShows Time Period Sections -->
-              <% newTvShowsPeriods.forEach((period, index) => { %>
-                <% if (newTvShowsByPeriod[period.key] && newTvShowsByPeriod[period.key].length > 0) { %>
-                  <div id="new-tvshows-period-<%= period.key %>" class="new-tvshows-section <%= index === firstNewTvShowsIndex ? '' : 'hidden' %>">
-                    <% newTvShowsByPeriod[period.key].forEach(show => { %>
-                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
-                    <% }); %>
-                  </div>
-                <% } %>
+              <% (newTvShows || []).forEach(show => { %>
+                <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
               <% }); %>
             </div>
           <% } %>
 
-          <!-- Existing TVShows Section -->
+          <!-- Existing TV Shows Section -->
           <% if (hasExistingTvShows) { %>
             <div id="main-section-existing" class="main-section <%= firstVisibleTab === 1 ? '' : 'hidden' %>">
-              <!-- Time Period Tabs for Existing TVShows -->
-              <div class="mb-4">
-                <nav class="flex gap-2" aria-label="Time Periods">
-                  <% const existingTvShowsPeriods = [
-                    { key: 'today', label: 'Today', count: existingTvShowsByPeriod.today?.length || 0 },
-                    { key: 'yesterday', label: 'Yesterday', count: existingTvShowsByPeriod.yesterday?.length || 0 },
-                    { key: 'older', label: 'Older', count: existingTvShowsByPeriod.older?.length || 0 }
-                  ]; %>
-                  <% 
-                    let firstExistingTvShowsIndex = -1;
-                    existingTvShowsPeriods.forEach((period, index) => {
-                      if (period.count > 0 && firstExistingTvShowsIndex === -1) {
-                        firstExistingTvShowsIndex = index;
-                      }
-                    });
-                  %>
-                  <% existingTvShowsPeriods.forEach((period, index) => { %>
-                    <% if (period.count > 0) { %>
-                      <button 
-                        onclick="showExistingTvShowsPeriod('<%= period.key %>')" 
-                        id="existing-tvshows-tab-<%= period.key %>"
-                        class="<%= index === firstExistingTvShowsIndex 
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-2 border-blue-300 dark:border-blue-700' 
-                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-gray-200 dark:hover:border-gray-600' %> 
-                          px-3 py-1.5 rounded-md font-medium text-xs transition-all duration-200 flex items-center gap-1.5"
-                      >
-                        <span><%= period.label %></span>
-                        <span class="<%= index === firstExistingTvShowsIndex 
-                          ? 'bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200' 
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' %> 
-                          px-1.5 py-0.5 rounded-full text-xs font-semibold min-w-[1.5rem] text-center">
-                          <%= period.count %>
-                        </span>
-                      </button>
-                    <% } %>
-                  <% }); %>
-                </nav>
-              </div>
-
-              <!-- Existing TVShows Time Period Sections -->
-              <% existingTvShowsPeriods.forEach((period, index) => { %>
-                <% if (existingTvShowsByPeriod[period.key] && existingTvShowsByPeriod[period.key].length > 0) { %>
-                  <div id="existing-tvshows-period-<%= period.key %>" class="existing-tvshows-section <%= index === firstExistingTvShowsIndex ? '' : 'hidden' %>">
-                    <% existingTvShowsByPeriod[period.key].forEach(show => { %>
-                      <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
-                    <% }); %>
-                  </div>
-                <% } %>
+              <% (existingTvShows || []).forEach(show => { %>
+                <%- include('partials/dashboard/tv-show-card', { show, sonarrBaseUrl }) %>
               <% }); %>
             </div>
           <% } %>
