@@ -127,11 +127,23 @@ export async function runMatchingEngine(): Promise<MatchingStats> {
         let radarrHistory: string | undefined;
 
         // Step 0: Validate existing TMDB/IMDB ID pair if both are present
+        // IMPORTANT: Also use this call to backfill tmdb_title / tmdb_original_language
+        // so dashboards don't have to call TMDB again just to get clean titles.
         if (tmdbId && imdbId && tmdbApiKey) {
           try {
             console.log(`  Validating TMDB ID ${tmdbId} and IMDB ID ${imdbId} match...`);
             const tmdbMovie = await tmdbClient.getMovie(tmdbId);
             const tmdbImdbId = tmdbMovie?.imdb_id;
+
+            // Backfill TMDB title / original_language from this call if we don't have them yet
+            if (tmdbMovie) {
+              if (!tmdbTitle && tmdbMovie.title) {
+                tmdbTitle = tmdbMovie.title;
+              }
+              if (!tmdbOriginalLanguage && tmdbMovie.original_language) {
+                tmdbOriginalLanguage = tmdbMovie.original_language;
+              }
+            }
             
             if (tmdbImdbId && tmdbImdbId !== imdbId) {
               console.log(`  ⚠ MISMATCH DETECTED: TMDB ${tmdbId} has IMDB ${tmdbImdbId}, but we have IMDB ${imdbId}`);
