@@ -132,7 +132,8 @@ router.get('/dashboard', (_req: Request, res: Response) => {
 router.get('/movies', async (req: Request, res: Response) => {
   try {
     const allReleases = db.prepare(`
-      SELECT r.* FROM movie_releases r
+      SELECT r.*, rss.id as rss_item_id
+      FROM movie_releases r
       INNER JOIN rss_feed_items rss ON r.guid = rss.guid
       INNER JOIN rss_feeds f ON rss.feed_id = f.id
       WHERE f.feed_type = 'movie'

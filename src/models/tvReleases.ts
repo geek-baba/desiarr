@@ -29,14 +29,16 @@ export const tvReleasesModel = {
     let rows: any[];
     if (status) {
       rows = db.prepare(`
-        SELECT r.* FROM tv_releases r
+        SELECT r.*, rss.id as rss_item_id
+        FROM tv_releases r
         INNER JOIN rss_feed_items rss ON r.guid = rss.guid
         WHERE r.status = ?
         ORDER BY r.published_at DESC
       `).all(status) as any[];
     } else {
       rows = db.prepare(`
-        SELECT r.* FROM tv_releases r
+        SELECT r.*, rss.id as rss_item_id
+        FROM tv_releases r
         INNER JOIN rss_feed_items rss ON r.guid = rss.guid
         ORDER BY r.published_at DESC
       `).all() as any[];
